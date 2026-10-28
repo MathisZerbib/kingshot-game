@@ -882,6 +882,41 @@ def all_sprites():
         clear_models()
         prop(HEX + "decoration/nature/rock_single_E.gltf", 3.6, rot_z=math.radians(200))
         static_sprite("rock1", 300, 96, center=(0, 0, 0.3))
+    # ---- Age 2/3 fortifications and buildings (hexagon pack)
+    WS = 1.4  # wall scale: one segment = 2.8 m = 90 units
+    for suffix, rot in (("", 0.0), ("_v", math.pi / 2)):
+        if want("wall_stone" + suffix):
+            clear_models()
+            prop(HEX + "buildings/neutral/wall_straight.gltf", WS, rot_z=rot)
+            static_sprite("wall_stone" + suffix, 400, 96, center=(0, 0, 0.7))
+        for state in ("closed", "open"):
+            if want("gate_%s%s" % (state, suffix)):
+                clear_models()
+                root = prop(HEX + "buildings/neutral/wall_straight_gate.gltf", WS, rot_z=rot)
+                for o in list(COLL.objects):
+                    if "door_left" in o.name or "door_right" in o.name:
+                        sx = 1 if "left" in o.name else -1
+                        hinge = empty("hinge", (sx * 0.675, 0, 0), root)
+                        o.parent = hinge
+                        o.location = (sx * 0.45 - sx * 0.675, 0, 0)
+                        if state == "open":
+                            hinge.rotation_euler.z = sx * math.radians(105)
+                static_sprite("gate_%s%s" % (state, suffix), 400, 96, center=(0, 0, 0.8))
+    if want("tower_stone"):
+        clear_models()
+        prop(HEX + "buildings/blue/building_tower_base_blue.gltf", 1.75, rot_z=math.radians(15))
+        static_sprite("tower_stone", 600, 96, center=(0, 0, 1.4))
+    if want("tower_royal"):
+        clear_models()
+        prop(HEX + "buildings/blue/building_tower_base_blue.gltf", (2.0, 2.0, 2.1), rot_z=math.radians(15))
+        cyl((-0.7, 0.6, 3.9), 0.035, 0.03, 1.6, M["wood_dark"], seg=8)
+        box((-0.35, 0.6, 4.45), (0.65, 0.025, 0.36), M["flag"])
+        torus((0, 0, 3.02), 0.98, 0.05, M["gold"], seg=32)
+        static_sprite("tower_royal", 700, 96, center=(0, 0, 1.8))
+    if want("castle_royal"):
+        clear_models()
+        prop(HEX + "buildings/blue/building_castle_blue.gltf", 3.0)
+        static_sprite("castle_royal", 1000, 64, center=(0, 0, 5.0))
     # ---- Coins: 8 spin frames of a standing coin, and one flat coin
     if want("coin_spin"):
         clear_models()
@@ -927,7 +962,8 @@ def pack():
         existing[camel(name)] = "%d, %d, %sf, %sf, %sf, %d, %d" % (
             info["w"], info["h"], round(info["ax"], 1), round(info["ay"], 1), round(info["ppu"], 3), info["cols"], info["rows"])
     order = ["archer", "knight", "boss", "king", "castle", "house", "tower", "stake", "pine0", "pine1", "roundtree",
-             "rock0", "rock1", "coinSpin", "coinFlat"]
+             "rock0", "rock1", "coinSpin", "coinFlat", "wallStone", "wallStoneV", "gateClosed", "gateOpen", "gateClosedV",
+             "gateOpenV", "towerStone", "towerRoyal", "castleRoyal"]
     names = [n for n in order if n in existing] + [n for n in existing if n not in order]
     lines = [
         "package fr.kingshot.game",

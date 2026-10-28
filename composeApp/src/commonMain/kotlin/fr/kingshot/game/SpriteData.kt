@@ -21,4 +21,13 @@ object SpriteData {
     val rock1 = SpriteInfo(193, 108, 81.0f, 62.4f, 3.0f, 1, 1)
     val coinSpin = SpriteInfo(90, 90, 45f, 78f, 3.0f, 8, 1)
     val coinFlat = SpriteInfo(90, 70, 45f, 40f, 3.0f, 1, 1)
+    val wallStone = SpriteInfo(336, 170, 136.0f, 124.5f, 3.0f, 1, 1)
+    val wallStoneV = SpriteInfo(216, 287, 55.0f, 190.5f, 3.0f, 1, 1)
+    val gateClosed = SpriteInfo(336, 213, 136.0f, 143.3f, 3.0f, 1, 1)
+    val gateOpen = SpriteInfo(338, 217, 138.0f, 143.3f, 3.0f, 1, 1)
+    val gateClosedV = SpriteInfo(279, 287, 87.0f, 191.3f, 3.0f, 1, 1)
+    val gateOpenV = SpriteInfo(260, 293, 68.0f, 191.3f, 3.0f, 1, 1)
+    val towerStone = SpriteInfo(360, 313, 87.0f, 240.0f, 3.0f, 1, 1)
+    val towerRoyal = SpriteInfo(422, 446, 99.0f, 362.2f, 3.0f, 1, 1)
+    val castleRoyal = SpriteInfo(691, 727, 191.0f, 563.3f, 2.0f, 1, 1)
 }
