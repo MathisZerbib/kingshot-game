@@ -7,6 +7,9 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageShader
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -44,6 +47,7 @@ private const val K_ENEMY = 6
 private const val K_ARCHER = 7
 private const val K_KING = 8
 private const val K_COIN = 9
+private const val K_PROP = 10
 
 // One palette per level, cycling: spring, autumn, winter (grass, dark patch, light patch, cliff top, cliff top light)
 private val SEASONS = arrayOf(
@@ -131,6 +135,26 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private val roadCenterStroke = Stroke(width = 34f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     private val bowStroke = Stroke(width = 3f, cap = StrokeCap.Round)
     private val roads = ArrayList<Path>()
+    private val roads2 = ArrayList<Path>()
+    private val roadEdge2 = Stroke(width = 212f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val road2 = Stroke(width = 176f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val roadCenter2 = Stroke(width = 68f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    // tiled ground textures, created once the sprites are loaded
+    private var tilesOf: Sprites? = null
+    private var grassBrush: ShaderBrush? = null
+    private var roadBrush: ShaderBrush? = null
+    private var cliffBrush: ShaderBrush? = null
+    private val autumnTint = ColorFilter.tint(Color(0xFFF2CF86), BlendMode.Modulate)
+    private val winterTint = ColorFilter.tint(Color(0xFFDDE6EA), BlendMode.Modulate)
+
+    private fun syncTiles() {
+        val sp = sprites ?: return
+        if (tilesOf === sp) return
+        tilesOf = sp
+        grassBrush = ShaderBrush(ImageShader(sp.grassTile, TileMode.Repeated, TileMode.Repeated))
+        roadBrush = ShaderBrush(ImageShader(sp.roadTile, TileMode.Repeated, TileMode.Repeated))
+        cliffBrush = ShaderBrush(ImageShader(sp.cliffTile, TileMode.Repeated, TileMode.Repeated))
+    }
 
     private val keys = LongArray(2048)
     private val flashFilter = ColorFilter.tint(Color(0xD0FFFFFF), BlendMode.SrcAtop)
@@ -158,6 +182,13 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (r in World.decoRoads) {
             val n = r.size / 2
             roads.add(polyPath(FloatArray(n) { r[it * 2] }, FloatArray(n) { r[it * 2 + 1] }))
+        }
+        // same roads at 2x: tiles are drawn under scale(0.5) so a 512 px texture covers 256 world units at full detail
+        roads2.clear()
+        for (p in World.paths) roads2.add(polyPath(FloatArray(p.n) { p.xs[it] * 2f }, FloatArray(p.n) { p.ys[it] * 2f }))
+        for (r in World.decoRoads) {
+            val n = r.size / 2
+            roads2.add(polyPath(FloatArray(n) { r[it * 2] * 2f }, FloatArray(n) { r[it * 2 + 1] * 2f }))
         }
     }
 
@@ -221,6 +252,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val vb = cy + halfH + 260f
 
         syncRoads()
+        syncTiles()
         season = SEASONS[(g.level - 1) % SEASONS.size]
         drawRect(season[0])
         withTransform({
@@ -266,34 +298,35 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     }
 
     private fun DrawScope.drawGround(vl: Float, vt: Float, vr: Float, vb: Float) {
+        val winter = season === SEASONS[2]
+        val gb = grassBrush
+        val rb = roadBrush
+        val tint = if (season === SEASONS[1]) autumnTint else if (winter) winterTint else null
+        withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
+            if (gb != null) drawRect(gb, Offset(vl * 2f, vt * 2f), Size((vr - vl) * 2f, (vb - vt) * 2f), alpha = if (winter) 0.22f else 1f, colorFilter = tint)
+        }
         val gp = World.grassPatches
         var i = 0
         while (i < gp.size) {
             val x = gp[i]; val y = gp[i + 1]; val r = gp[i + 2]
             if (x + r > vl && x - r < vr && y + r > vt && y - r < vb) {
                 val c = if (gp[i + 3] > 0.5f) season[1] else season[2]
-                drawOval(c, Offset(x - r * 1.15f, y - r * 0.69f), Size(r * 2.3f, r * 1.38f), alpha = 0.5f) // soft edge
-                oval(c, x - r, y - r * 0.6f, r * 2f, r * 1.2f)
+                drawOval(c, Offset(x - r * 1.15f, y - r * 0.69f), Size(r * 2.3f, r * 1.38f), alpha = if (gb != null) 0.18f else 0.5f) // soft edge
+                drawOval(c, Offset(x - r, y - r * 0.6f), Size(r * 2f, r * 1.2f), alpha = if (gb != null) 0.3f else 1f)
             }
             i += 4
         }
-        // grass tufts (three blades), culled to the view
-        val tuftCol = season[5]
-        val tf = World.tufts
-        i = 0
-        while (i < tf.size) {
-            val x = tf[i]; val y = tf[i + 1]
-            if (x > vl && x < vr && y > vt && y < vb) {
-                val k = tf[i + 2]
-                line(tuftCol, x, y, x - 5f * k, y - 10f * k, 2.6f)
-                line(tuftCol, x, y, x, y - 13f * k, 2.6f)
-                line(tuftCol, x, y, x + 5f * k, y - 10f * k, 2.6f)
+        if (rb != null) {
+            withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
+                for (r in roads2) drawPath(r, DIRT_EDGE, alpha = 0.55f, style = roadEdge2) // soft border
+                for (r in roads2) drawPath(r, rb, style = road2, colorFilter = if (winter) winterTint else null)
+                for (r in roads2) drawPath(r, DIRT_LIGHT, alpha = 0.25f, style = roadCenter2) // worn middle of the track
             }
-            i += 3
+        } else {
+            for (r in roads) drawPath(r, DIRT_EDGE, style = roadStrokeEdge)
+            for (r in roads) drawPath(r, DIRT, style = roadStroke)
+            for (r in roads) drawPath(r, DIRT_LIGHT, style = roadCenterStroke)
         }
-        for (r in roads) drawPath(r, DIRT_EDGE, style = roadStrokeEdge)
-        for (r in roads) drawPath(r, DIRT, style = roadStroke)
-        for (r in roads) drawPath(r, DIRT_LIGHT, style = roadCenterStroke) // worn middle of the track
         val pb = World.pebbles
         i = 0
         while (i < pb.size) {
@@ -304,17 +337,28 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             }
             i += 3
         }
-        // flowers (not in winter)
-        if (season !== SEASONS[2]) {
+        // flat decor, no depth sort: grass tufts (every 5th spot) and flowers, not in winter
+        val sp = sprites
+        if (sp != null && !winter) {
+            val tf = World.tufts
+            i = 0
+            while (i < tf.size) {
+                val x = tf[i]; val y = tf[i + 1]
+                if (x > vl && x < vr && y > vt && y < vb) {
+                    if ((i / 3) % 2 == 0) sprite(sp.tuft0, SpriteData.tuft0, 0, 0, x, y, tf[i + 2])
+                    else sprite(sp.tuft1, SpriteData.tuft1, 0, 0, x, y, tf[i + 2])
+                }
+                i += 15
+            }
             val fl = World.flowers
             i = 0
             while (i < fl.size) {
                 val x = fl[i]; val y = fl[i + 1]
                 if (x > vl && x < vr && y > vt && y < vb) {
-                    circ(FLOWERS[fl[i + 2].toInt()], x, y, 4f)
-                    circ(FLOWER_HEART, x, y, 1.6f)
+                    if (fl[i + 2] < 1f) sprite(sp.flower0, SpriteData.flower0, 0, 0, x, y, 1f)
+                    else sprite(sp.flower1, SpriteData.flower1, 0, 0, x, y, 1f)
                 }
-                i += 3
+                i += 6
             }
         }
         // three passes so touching cliff blocks merge into one plateau: cast shadows, rock faces, grass tops
@@ -329,7 +373,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
             if (x > vr || x + cw < vl || y - ht > vb || y + d < vt) continue
             val fy = y + d - ht
-            rr(CLIFF_FACE, x, fy, cw, ht, 18f)
+            val cb = cliffBrush
+            if (cb != null) withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
+                drawRoundRect(cb, Offset(x * 2f, fy * 2f), Size(cw * 2f, ht * 2f), CornerRadius(36f, 36f))
+            } else rr(CLIFF_FACE, x, fy, cw, ht, 18f)
             // rock strata and a darker base give the face some depth
             rect(CLIFF_FACE_DARK, x + 6f, fy + ht * 0.42f, cw - 12f, 6f)
             rect(CLIFF_FACE_DARK, x + 6f, fy + ht * 0.68f, cw - 12f, 5f)
@@ -339,8 +386,17 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
             if (x > vr || x + cw < vl || y - ht > vb || y + d < vt) continue
             rr(CLIFF_LIP, x - 4f, y - ht + d - 4f, cw + 8f, 26f, 13f) // shade under the grass overhang
-            rr(season[2], x - 6f, y - ht, cw + 12f, d + 4f, 26f) // sunlit plateau, lighter than the ground below
-            rr(season[4], x + 12f, y - ht + 12f, cw * 0.55f, d * 0.45f, 30f)
+            val gb = grassBrush
+            if (gb != null) {
+                withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
+                    drawRoundRect(gb, Offset((x - 6f) * 2f, (y - ht) * 2f), Size((cw + 12f) * 2f, (d + 4f) * 2f), CornerRadius(52f, 52f),
+                        colorFilter = if (season === SEASONS[1]) autumnTint else if (season === SEASONS[2]) winterTint else null)
+                }
+                drawRoundRect(season[4], Offset(x - 6f, y - ht), Size(cw + 12f, d + 4f), CornerRadius(26f, 26f), alpha = 0.3f) // sunlit plateau
+            } else {
+                rr(season[2], x - 6f, y - ht, cw + 12f, d + 4f, 26f) // sunlit plateau, lighter than the ground below
+                rr(season[4], x + 12f, y - ht + 12f, cw * 0.55f, d * 0.45f, 30f)
+            }
         }
     }
 
@@ -391,6 +447,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val r = World.rocks
         i = 0
         while (i < r.size) { if (vis(r[i], r[i + 1])) n = push(n, r[i + 1], K_ROCK, i); i += 3 }
+        val pr = World.props
+        i = 0
+        while (i < pr.size) { if (vis(pr[i], pr[i + 1])) n = push(n, pr[i + 1], K_PROP, i); i += 3 }
         n = push(n, World.HOUSE_Y, K_HOUSE, 0)
         n = push(n, World.CASTLE_Y, K_CASTLE, 0)
         for (k in g.towers.indices) if (g.towers[k].built) n = push(n, g.towers[k].y, K_TOWER, k)
@@ -407,6 +466,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             when (kind) {
                 K_TREE -> drawTree(t[idx], t[idx + 1], t[idx + 2], idx / 3)
                 K_ROCK -> drawRock(r[idx], r[idx + 1], r[idx + 2], idx / 3)
+                K_PROP -> drawProp(pr[idx], pr[idx + 1], pr[idx + 2])
                 K_HOUSE -> drawHouse(World.HOUSE_X, World.HOUSE_Y)
                 K_CASTLE -> drawCastle(g)
                 K_TOWER -> drawTower(g.towers[idx], g.age)
@@ -451,6 +511,20 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val sp = sprites ?: return
         if (idx % 2 == 0) sprite(sp.rock0, SpriteData.rock0, 0, 0, x, y, s)
         else sprite(sp.rock1, SpriteData.rock1, 0, 0, x, y, s)
+    }
+
+    private fun DrawScope.drawProp(x: Float, y: Float, kind: Float) {
+        val sp = sprites ?: return
+        when (kind) {
+            PROP_TENT -> sprite(sp.tent, SpriteData.tent, 0, 0, x, y, 1f)
+            PROP_BARREL -> sprite(sp.barrel, SpriteData.barrel, 0, 0, x, y, 1f)
+            PROP_CRATE -> sprite(sp.crate, SpriteData.crate, 0, 0, x, y, 1f)
+            PROP_WHEELBARROW -> sprite(sp.wheelbarrow, SpriteData.wheelbarrow, 0, 0, x, y, 1f)
+            PROP_LUMBER -> sprite(sp.lumber, SpriteData.lumber, 0, 0, x, y, 1f)
+            PROP_WEAPONRACK -> sprite(sp.weaponrack, SpriteData.weaponrack, 0, 0, x, y, 1f)
+            PROP_STUMP -> sprite(sp.stump, SpriteData.stump, 0, 0, x, y, 1f)
+            else -> sprite(sp.bush, SpriteData.bush, 0, 0, x, y, 1f)
+        }
     }
 
     private fun DrawScope.drawHouse(x: Float, y: Float) {

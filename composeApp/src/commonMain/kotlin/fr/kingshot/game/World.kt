@@ -8,6 +8,15 @@ import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
 
+const val PROP_TENT = 0f
+const val PROP_BARREL = 1f
+const val PROP_CRATE = 2f
+const val PROP_WHEELBARROW = 3f
+const val PROP_LUMBER = 4f
+const val PROP_WEAPONRACK = 5f
+const val PROP_STUMP = 6f
+const val PROP_BUSH = 7f
+
 /** Mutable 2D vector reused to avoid allocations in the game loop. */
 class Vec {
     var x = 0f
@@ -111,6 +120,8 @@ object World {
     var tufts = FloatArray(0); private set
     var flowers = FloatArray(0); private set
     var pebbles = FloatArray(0); private set
+    /** Props in the depth sort (x, y, kind): see PROP_* ; camp clutter near the base plus bushes and stumps. */
+    var props = FloatArray(0); private set
 
     /** Extra road directions seen from the castle (degrees, 0 = east, -90 = north), between the level-1 roads and clear of the base pads. */
     private val extraAngles = floatArrayOf(-100f, -42f, 75f)
@@ -270,6 +281,35 @@ object World {
             }
         }
         pebbles = pb.toFloatArray()
+        val pr = ArrayList<Float>()
+        // camp clutter around the archer house and the keep, dropped where a road or pad would cover it
+        val camp = floatArrayOf(
+            470f, 1430f, PROP_TENT, 540f, 1505f, PROP_BARREL, 563f, 1520f, PROP_BARREL, 515f, 1530f, PROP_CRATE,
+            785f, 1370f, PROP_LUMBER, 850f, 1405f, PROP_WHEELBARROW, 800f, 1480f, PROP_WEAPONRACK,
+            1200f, 1705f, PROP_CRATE, 1228f, 1690f, PROP_BARREL, 860f, 1850f, PROP_LUMBER, 1250f, 1960f, PROP_TENT,
+            880f, 1560f, PROP_BARREL,
+        )
+        val pads = floatArrayOf(720f, 1600f, 560f, 1640f, 1170f, 1800f, KING_START_X, KING_START_Y)
+        var j = 0
+        while (j < camp.size) {
+            val x = camp[j]; val y = camp[j + 1]
+            var ok = distToRoads(x, y) > 75f && hypot(x - CASTLE_X, y - CASTLE_Y) > 150f && !nearDecoRoad(x, y, 60f)
+            var q = 0
+            while (q < pads.size) { if (hypot(x - pads[q], y - pads[q + 1]) < 85f) ok = false; q += 2 }
+            if (ok) { pr.add(x); pr.add(y); pr.add(camp[j + 2]) }
+            j += 3
+        }
+        tries = 0
+        var nb = 0
+        while (nb < 34 && tries < 2000) {
+            tries++
+            val x = rnd.nextFloat() * W
+            val y = rnd.nextFloat() * H
+            if (!isFreeForDecor(x, y, 90f)) continue
+            pr.add(x); pr.add(y); pr.add(if (nb % 4 == 3) PROP_STUMP else PROP_BUSH)
+            nb++
+        }
+        props = pr.toFloatArray()
     }
 
     fun insideCliff(x: Float, y: Float, margin: Float): Boolean {
