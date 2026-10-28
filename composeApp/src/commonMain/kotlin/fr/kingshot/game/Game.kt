@@ -27,7 +27,7 @@ const val PAD_WALL = 5
 const val MAX_SQUAD = 30
 
 /** Coins drawn on the king's head (tall enough to leave the screen); the HUD counter shows the real total. */
-const val MAX_STACK = 400
+const val MAX_STACK = 360 // ~1.3 screen heights of coins; more would not be visible
 
 /** Sprite direction (0 = facing the camera/south, 2 = east, 4 = north, 6 = west) for a vector. */
 fun dirIndex(dx: Float, dy: Float): Int {
@@ -274,6 +274,10 @@ class Game {
     private var levelUpPending = false
     private var waveCleared = true
     var kBoost = 0f // seconds of king speed boost left (after clearing a wave)
+    private var rainLeft = 0 // boss coins still to drop
+    private var rainX = 0f
+    private var rainY = 0f
+    private var rainRate = 0f
     var newRecord = false
 
     // Camera
@@ -344,6 +348,7 @@ class Game {
 
     fun reset() {
         if (level != 1) { level = 1; World.load(1); buildMap() }
+        rainLeft = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
         castleMaxHp = 600f
         kx = World.KING_START_X; ky = World.KING_START_Y
@@ -379,6 +384,7 @@ class Game {
         levelUpPending = false
         level++
         levelBanner = 3.5f
+        coins += rainLeft; rainLeft = 0
         for (c in coinsOnGround) if (c.active) { c.active = false; coins++ }
         for (f in flyCoins) if (f.active) { f.active = false; coins++ }
         for (e in enemies) e.active = false
@@ -436,6 +442,7 @@ class Game {
             updatePads(dt)
         }
         updateArrows(dt)
+        updateRain(dt)
         updateCoins(dt)
         updateFlyCoins(dt)
         updateParticles(dt)
@@ -673,17 +680,25 @@ class Game {
         kills++
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
-        repeat(e.coins) { dropCoin(e.x, e.y) }
+        if (e.kind == 2) { rainLeft += e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
+        else repeat(e.coins) { dropCoin(e.x, e.y) }
         if (e.kind == 2) shake = 14f
     }
 
-    private fun dropCoin(x: Float, y: Float) {
+    private fun updateRain(dt: Float) {
+        if (rainLeft <= 0) return
+        var n = min(rainLeft, (rainRate * dt).toInt() + 1)
+        rainLeft -= n
+        while (n-- > 0) dropCoin(rainX, rainY, 1.7f)
+    }
+
+    private fun dropCoin(x: Float, y: Float, spread: Float = 1f) {
         val c = coinsOnGround.firstOrNull { !it.active }
         if (c == null) { coins++; return }
         c.active = true
         c.x = x; c.y = y; c.z = 20f
         val a = rnd.nextFloat() * 2f * PI.toFloat()
-        val sp = 40f + rnd.nextFloat() * 110f
+        val sp = (40f + rnd.nextFloat() * 110f) * spread
         c.vx = cos(a) * sp; c.vy = sin(a) * sp * 0.7f
         c.vz = 260f + rnd.nextFloat() * 180f
         c.state = 0; c.t = 0f
@@ -919,7 +934,7 @@ class Game {
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.4f) 3 else 2 }
             1 -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
-            else -> { e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 100 + wave * 4 }
+            else -> { e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 120 + 40 * (level - 1) + 10 * wave / 5 }
         }
         e.hp = e.maxHp
         e.atkCd = 0.5f
