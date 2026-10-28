@@ -453,7 +453,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val bob = if (moving) abs(sin(g.kWalk * 2f)) * 2f else 0f
         val base = y - 70f - bob + g.stackBump * 3f
         for (i in 0 until n) {
-            val cx = x + g.sway * i * i * 0.016f
+            val cx = x + g.sway * i * min(i, 40) * 0.016f // bend grows linearly past 40 so tall stacks stay near the king
             sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, cx, base - i * 4.5f, 1f)
         }
         if (g.kHp < g.kMaxHp) hpBar(x, base - n * 4.5f - 26f, 50f, g.kHp / g.kMaxHp, HP_GREEN)

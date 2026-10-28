@@ -26,8 +26,8 @@ const val PAD_WALL = 5
 
 const val MAX_SQUAD = 30
 
-/** Coins drawn on the king's head; the HUD counter shows the real total. */
-const val MAX_STACK = 24
+/** Coins drawn on the king's head (tall enough to leave the screen); the HUD counter shows the real total. */
+const val MAX_STACK = 400
 
 /** Sprite direction (0 = facing the camera/south, 2 = east, 4 = north, 6 = west) for a vector. */
 fun dirIndex(dx: Float, dy: Float): Int {
@@ -919,7 +919,7 @@ class Game {
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.4f) 3 else 2 }
             1 -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
-            else -> { e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 40 }
+            else -> { e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 100 + wave * 4 }
         }
         e.hp = e.maxHp
         e.atkCd = 0.5f
