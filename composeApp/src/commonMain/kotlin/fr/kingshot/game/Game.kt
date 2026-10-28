@@ -631,7 +631,7 @@ class Game {
     }
 
     private fun updateCoins(dt: Float) {
-        val magnet = 120f
+        val magnet = 320f
         for (c in coinsOnGround) {
             if (!c.active) continue
             c.t += dt
@@ -654,13 +654,13 @@ class Game {
                 }
                 2 -> {
                     if (kDead) { c.state = 1; c.z = 0f; continue }
-                    c.vx += dt * 2600f // used as speed
+                    c.vx += dt * 3200f // used as speed
                     val tz = 95f + min(coins, 60) * 4.5f
                     val dx = kx - c.x
                     val dy = ky - c.y
                     val dz = tz - c.z
                     val d = sqrt(dx * dx + dy * dy + dz * dz)
-                    val step = (300f + c.vx) * dt
+                    val step = (420f + c.vx) * dt
                     if (d <= step) {
                         c.active = false
                         coins++

@@ -17,8 +17,8 @@ renderer.toneMappingExposure = 1.15;
 renderer.setClearColor(0x000000, 0);
 
 const scene = new THREE.Scene();
-scene.add(new THREE.HemisphereLight(0xfff8ee, 0x6f8f4a, 1.35));
-const sun = new THREE.DirectionalLight(0xfff1dc, 2.3);
+scene.add(new THREE.HemisphereLight(0xfff8ee, 0x8fae60, 1.1));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.6);
 sun.position.set(-260, 520, 300);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -28,7 +28,7 @@ sun.shadow.normalBias = 0.6;
 sun.shadow.radius = 3;
 scene.add(sun);
 scene.add(sun.target);
-const fill = new THREE.DirectionalLight(0xc8dcff, 0.45);
+const fill = new THREE.DirectionalLight(0xc8dcff, 0.3);
 fill.position.set(300, 200, -200);
 scene.add(fill);
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.ShadowMaterial({ opacity: 0.3 }));
@@ -49,10 +49,11 @@ function frameCamera(w, h, ppu, ax, ay) {
 }
 
 let current = null;
-function setModel(obj, scale = 1, shadow = true) {
+function setModel(obj, scale = 1, shadow = true, ink = 0.9) {
   if (current) scene.remove(current);
   current = new THREE.Group();
   current.add(obj);
+  if (ink > 0) M.addOutlines(obj, ink / scale);
   current.scale.setScalar(scale);
   scene.add(current);
   ground.visible = shadow;
@@ -73,7 +74,7 @@ const makers = {
 /** Animated unit atlas: rows = 8 directions, columns = frames [{mode,t}]. */
 window.renderUnit = (name, { w, h, ppu, ax, ay, scale = 1, frames }) => {
   const { rig, pose } = makers[name]();
-  setModel(rig.root, scale);
+  setModel(rig.root, scale, true, 0.8);
   frameCamera(w, h, ppu, ax, ay);
   const canvas = document.createElement('canvas');
   canvas.width = w * frames.length; canvas.height = h * 8;
@@ -94,7 +95,7 @@ const statics = {
 
 /** Static object rendered in a big cell, then auto-cropped. Returns {url, w, h, ax, ay}. */
 window.renderStatic = (name, { ppu, size = 900, rotY = 0, shadow = true }) => {
-  setModel(statics[name](), 1, shadow);
+  setModel(statics[name](), 1, shadow, 1.4);
   current.rotation.y = rotY;
   const ax = size / 2, ay = size * 0.72;
   frameCamera(size, size, ppu, ax, ay);
@@ -110,16 +111,16 @@ window.renderStatic = (name, { ppu, size = 900, rotY = 0, shadow = true }) => {
 window.renderCoins = () => {
   const out = {};
   const spin = M.makeCoin(false);
-  setModel(spin.root, 1, true);
-  const w = 40, h = 44, ppu = 1.6, ax = 20, ay = 38;
+  setModel(spin.root, 1, true, 0.7);
+  const w = 56, h = 60, ppu = 2.2, ax = 28, ay = 52;
   frameCamera(w, h, ppu, ax, ay);
   let c = document.createElement('canvas'); c.width = w * 8; c.height = h;
   let ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
   for (let i = 0; i < 8; i++) { current.rotation.y = i * Math.PI / 8; snap(ctx, i * w, 0, w, h); }
   out.spin = { url: c.toDataURL('image/png'), w, h, ax, ay };
   const flat = M.makeCoin(true);
-  setModel(flat.root, 1, false);
-  const fw = 40, fh = 30, fax = 20, fay = 20;
+  setModel(flat.root, 1, false, 0.7);
+  const fw = 56, fh = 40, fax = 28, fay = 28;
   frameCamera(fw, fh, ppu, fax, fay);
   c = document.createElement('canvas'); c.width = fw; c.height = fh;
   ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';

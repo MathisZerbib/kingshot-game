@@ -33,10 +33,10 @@ const meta = [];
 
 const walk = n => Array.from({ length: n }, (_, i) => ({ mode: 'walk', t: i / n }));
 const units = {
-  archer: { w: 112, h: 128, ppu: 2, ax: 56, ay: 108, frames: [{ mode: 'walk', t: 0 }, ...walk(6), { mode: 'shoot', t: 0.25 }, { mode: 'shoot', t: 0.7 }, { mode: 'shoot', t: 0.95 }] },
-  knight: { w: 128, h: 152, ppu: 2, ax: 64, ay: 128, frames: [...walk(6), { mode: 'attack', t: 0.3 }, { mode: 'attack', t: 0.55 }, { mode: 'attack', t: 0.85 }] },
-  boss: { w: 200, h: 236, ppu: 1.3, ax: 100, ay: 200, scale: 2.2, frames: [...walk(4), { mode: 'attack', t: 0.3 }, { mode: 'attack', t: 0.55 }, { mode: 'attack', t: 0.85 }] },
-  king: { w: 200, h: 200, ppu: 2, ax: 100, ay: 156, frames: [{ mode: 'idle', t: 0 }, ...walk(6)] },
+  archer: { w: 168, h: 192, ppu: 3, ax: 84, ay: 162, frames: [{ mode: 'walk', t: 0 }, ...walk(6), { mode: 'shoot', t: 0.25 }, { mode: 'shoot', t: 0.7 }, { mode: 'shoot', t: 0.95 }] },
+  knight: { w: 192, h: 228, ppu: 3, ax: 96, ay: 192, frames: [...walk(6), { mode: 'attack', t: 0.3 }, { mode: 'attack', t: 0.55 }, { mode: 'attack', t: 0.85 }] },
+  boss: { w: 300, h: 354, ppu: 2, ax: 150, ay: 300, scale: 2.2, frames: [...walk(4), { mode: 'attack', t: 0.3 }, { mode: 'attack', t: 0.55 }, { mode: 'attack', t: 0.85 }] },
+  king: { w: 300, h: 300, ppu: 3, ax: 150, ay: 234, frames: [{ mode: 'idle', t: 0 }, ...walk(6)] },
 };
 for (const [name, spec] of Object.entries(units)) {
   const t0 = Date.now();
@@ -46,9 +46,9 @@ for (const [name, spec] of Object.entries(units)) {
   console.log(name, Date.now() - t0, 'ms');
 }
 const statics = {
-  castle: { ppu: 1.2, size: 1000 }, house: { ppu: 1.4, size: 900, rotY: 0.35 }, tower: { ppu: 1.5, size: 700, rotY: 0.3 },
-  stake: { ppu: 2, size: 300 }, pine0: { ppu: 1.6, size: 500 }, pine1: { ppu: 1.6, size: 500 },
-  roundtree: { ppu: 1.6, size: 500 }, rock0: { ppu: 1.6, size: 300 }, rock1: { ppu: 1.6, size: 300 },
+  castle: { ppu: 1.8, size: 1400 }, house: { ppu: 2.1, size: 1200, rotY: 0.35 }, tower: { ppu: 2.2, size: 1000, rotY: 0.3 },
+  stake: { ppu: 2.6, size: 400 }, pine0: { ppu: 2.4, size: 700 }, pine1: { ppu: 2.4, size: 700 },
+  roundtree: { ppu: 2.4, size: 700 }, rock0: { ppu: 2.4, size: 400 }, rock1: { ppu: 2.4, size: 400 },
 };
 for (const [name, spec] of Object.entries(statics)) {
   const r = await page.evaluate(([n, s]) => window.renderStatic(n, s), [name, spec]);
@@ -58,9 +58,9 @@ for (const [name, spec] of Object.entries(statics)) {
 }
 const coins = await page.evaluate(() => window.renderCoins());
 save('coin_spin', coins.spin.url);
-meta.push({ name: 'coin_spin', w: coins.spin.w, h: coins.spin.h, ax: coins.spin.ax, ay: coins.spin.ay, ppu: 1.6, cols: 8, rows: 1 });
+meta.push({ name: 'coin_spin', w: coins.spin.w, h: coins.spin.h, ax: coins.spin.ax, ay: coins.spin.ay, ppu: 2.2, cols: 8, rows: 1 });
 save('coin_flat', coins.flat.url);
-meta.push({ name: 'coin_flat', w: coins.flat.w, h: coins.flat.h, ax: coins.flat.ax, ay: coins.flat.ay, ppu: 1.6, cols: 1, rows: 1 });
+meta.push({ name: 'coin_flat', w: coins.flat.w, h: coins.flat.h, ax: coins.flat.ax, ay: coins.flat.ay, ppu: 2.2, cols: 1, rows: 1 });
 
 await browser.close();
 server.close();
