@@ -409,7 +409,7 @@ class Game {
     }
 
     // Archers are spent on towers now, so recruiting stays affordable; cheaper from level 2.
-    private fun recruitCost(n: Int): Int = (min(10 + n * 3, 40) * (if (level >= 2) 0.75f else 1f)).toInt()
+    private fun recruitCost(n: Int): Int = (min(4 + n * 2, 20) * (if (level >= 2) 0.75f else 1f)).toInt()
 
     private fun forgeCost(n: Int): Int = 20 + n * 25 + n * n * 5
 
