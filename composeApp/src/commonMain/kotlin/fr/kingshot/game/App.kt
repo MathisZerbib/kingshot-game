@@ -99,7 +99,7 @@ fun App() {
                 awaitEachGesture {
                     val first = awaitFirstDown(requireUnconsumed = false)
                     val id = first.id
-                    game.input.touchStart(first.position.x, first.position.y)
+                    game.input.touchStart(first.position.x, first.position.y, first.position.y < size.height * 0.6f)
                     while (true) {
                         val ev = awaitPointerEvent()
                         val ch = ev.changes.firstOrNull { it.id == id } ?: break

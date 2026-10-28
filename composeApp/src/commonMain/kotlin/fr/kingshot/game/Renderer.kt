@@ -52,9 +52,13 @@ private val DIRT = Color(0xFFDDB57F)
 private val DIRT_EDGE = Color(0xFFCDA36C)
 private val CLIFF_TOP = Color(0xFF86A83F)
 private val CLIFF_TOP_LIGHT = Color(0xFF94B54A)
-private val CLIFF_FACE = Color(0xFF5E5B57)
-private val CLIFF_FACE_DARK = Color(0xFF4D4A47)
+private val CLIFF_FACE = Color(0xFFA39B8E)
+private val CLIFF_FACE_DARK = Color(0xFF8A8276)
+private val CLIFF_FOOT = Color(0xFF746D63)
 private val SHADOW = Color(0x33000000)
+private val KING_RING = Color(0x4DFFFFFF)
+private val ALERT_RED = Color(0xFFFF4A3A)
+private const val MAX_EDGE_ARROWS = 12
 private val WOOD = Color(0xFFA4683A)
 private val WOOD_DARK = Color(0xFF6E4325)
 private val WOOD_STAKE = Color(0xFF7A4A2A)
@@ -124,6 +128,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     /** Pre-rendered 3D sprite atlases; null until loaded. */
     var sprites: Sprites? = null
     private var scale = 1f
+    private var viewOx = 0f // world -> screen offset of the current frame, for the HUD
+    private var viewOy = 0f
+    /** Unit triangle pointing +x, drawn rotated/scaled for off-screen enemy arrows. */
+    private val edgeArrow = Path().apply { moveTo(1f, 0f); lineTo(-0.7f, -0.8f); lineTo(-0.35f, 0f); lineTo(-0.7f, 0.8f); close() }
 
     var topInset = 0f
 
@@ -188,6 +196,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val shy = if (g.shake > 0f) cos(g.time * 71f) * g.shake else 0f
         val ox = w / 2f - cx * scale + shx
         val oy = h / 2f - cy * scale + shy
+        viewOx = ox; viewOy = oy
         val vl = cx - halfW - 160f
         val vr = cx + halfW + 160f
         val vt = cy - halfH - 60f
@@ -252,9 +261,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
             if (x > vr || x + cw < vl || y - ht > vb || y + d < vt) continue
             oval(SHADOW, x - 10f, y + d - 30f, cw + 40f, 70f)
-            rect(CLIFF_FACE, x, y + d - ht, cw, ht)
-            rect(CLIFF_FACE_DARK, x + cw * 0.62f, y + d - ht, cw * 0.38f, ht)
-            rr(CLIFF_TOP, x - 6f, y - ht, cw + 12f, d + 6f, 18f)
+            rr(CLIFF_FACE, x, y + d - ht, cw, ht, 22f)
+            rr(CLIFF_FACE_DARK, x + cw * 0.62f, y + d - ht, cw * 0.38f, ht, 22f)
+            rr(CLIFF_FOOT, x, y + d - ht * 0.22f, cw, ht * 0.22f, 22f)
+            rr(CLIFF_TOP, x - 6f, y - ht, cw + 12f, d + 18f, 26f)
             rr(CLIFF_TOP_LIGHT, x + 10f, y - ht + 10f, cw * 0.5f, d * 0.5f, 30f)
         }
     }
@@ -420,6 +430,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val y = g.ky
         val moving = abs(g.kvx) + abs(g.kvy) > 30f
         val col = if (moving) 1 + walkFrame(g.kWalk, 6) else 0
+        oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
         sprite(sp.king, SpriteData.king, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
         // coin stack on the king's head
         val n = min(g.coins, 70)
@@ -523,6 +534,13 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 label(text.num(g.waveBreak.toInt() + 1), w / 2f, by + 70f * u, 24f * u, GOLD)
             }
         }
+        if (g.state == STATE_PLAY) {
+            drawEdgeArrows(g, w, h, u, top + 90f * u)
+            if (g.castleAlarm > 0f) {
+                val pulse = 0.55f + 0.45f * sin(g.time * 12f)
+                label(text.str("Le donjon est attaqué !"), w / 2f, top + 112f * u, 20f * u * (1f + pulse * 0.06f), ALERT_RED, min(1f, g.castleAlarm) * pulse)
+            }
+        }
         // banners
         if (g.waveBanner > 0f) {
             val k = g.waveBanner / 2.2f
@@ -537,7 +555,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         if (g.state == STATE_PLAY && g.kDead) {
             label(text.str("Le roi est tombé..."), w / 2f, h * 0.45f, 26f * u, WHITE)
         }
-        if (g.state == STATE_PLAY && g.wave <= 1 && g.squad == 0) {
+        if (g.state == STATE_PLAY && g.wave <= 1 && g.squad <= START_SQUAD) {
             label(text.str("Tue les chevaliers, ramasse l'or,"), w / 2f, h - 86f * u, 16f * u, WHITE)
             label(text.str("puis dépose-le sur les chantiers"), w / 2f, h - 64f * u, 16f * u, WHITE)
         }
@@ -554,6 +572,33 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val d = sqrt(dx * dx + dy * dy)
             if (d > r) { dx = dx / d * r; dy = dy / d * r }
             circ(Color(0xCCFFFFFF), inp.ox + dx, inp.oy + dy, r * 0.42f)
+        }
+    }
+
+    /** Red arrows on the screen edge pointing at enemies outside the view (first [MAX_EDGE_ARROWS] found). */
+    private fun DrawScope.drawEdgeArrows(g: Game, w: Float, h: Float, u: Float, topEdge: Float) {
+        val m = 26f * u
+        val cx = w / 2f
+        val cy = h / 2f
+        var n = 0
+        for (e in g.enemies) {
+            if (!e.active || n >= MAX_EDGE_ARROWS) continue
+            val sx = viewOx + e.x * scale
+            val sy = viewOy + (e.y - 40f) * scale
+            if (sx in 0f..w && sy in 0f..h) continue
+            val dx = sx - cx
+            val dy = sy - cy
+            val tx = if (dx > 0f) (w - m - cx) / dx else if (dx < 0f) (m - cx) / dx else Float.MAX_VALUE
+            val ty = if (dy > 0f) (h - m - cy) / dy else if (dy < 0f) (topEdge - cy) / dy else Float.MAX_VALUE
+            val t = min(tx, ty)
+            val deg = kotlin.math.atan2(dy, dx) * (180f / PI.toFloat())
+            val k = if (e.kind == 2) 22f * u else 15f * u
+            withTransform({
+                translate(cx + dx * t, cy + dy * t)
+                rotate(deg, Offset.Zero)
+                scale(k, k, Offset.Zero)
+            }) { drawPath(edgeArrow, ALERT_RED) }
+            n++
         }
     }
 

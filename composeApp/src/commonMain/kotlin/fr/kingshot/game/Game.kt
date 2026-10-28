@@ -21,6 +21,7 @@ const val PAD_FORGE = 1
 const val PAD_REPAIR = 2
 const val PAD_TOWER = 3
 const val PAD_TOWER_ARCHER = 4
+const val START_SQUAD = 2
 const val PAD_WALL = 5
 
 const val MAX_SQUAD = 30
@@ -167,13 +168,16 @@ class Input {
     var cx = 0f
     var cy = 0f
     var radiusPx = 120f
+    var fixedBase = false
 
-    fun touchStart(x: Float, y: Float) {
-        touching = true; ox = x; oy = y; cx = x; cy = y
+    /** [fixed]: keep the base where the finger landed (touches in the upper screen, so it never drifts over the king). */
+    fun touchStart(x: Float, y: Float, fixed: Boolean = false) {
+        touching = true; ox = x; oy = y; cx = x; cy = y; fixedBase = fixed
     }
 
     fun touchMove(x: Float, y: Float) {
         cx = x; cy = y
+        if (fixedBase) return
         // drag the joystick base along when the finger goes too far
         val dx = cx - ox
         val dy = cy - oy
@@ -231,6 +235,7 @@ class Game {
     var castleHp = 600f
     var castleMaxHp = 600f
     var castleFlash = 0f
+    var castleAlarm = 0f // seconds left on the HUD "castle under attack" warning
     var dmgLevel = 0
     val dmgMult get() = 1f + dmgLevel * 0.3f
 
@@ -309,12 +314,14 @@ class Game {
         kx = World.KING_START_X; ky = World.KING_START_Y
         kvx = 0f; kvy = 0f
         kHp = kMaxHp; kDead = false; coins = 0
-        squad = 0
+        squad = START_SQUAD
         castleHp = castleMaxHp
+        castleAlarm = 0f
         dmgLevel = 0
         wave = 0; waveBreak = 6f; toSpawn = 0; bossPending = false
         kills = 0; time = 0f; newRecord = false
         camX = kx; camY = ky
+        for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i]; aDir[i] = 0; aShoot[i] = 0f; acd[i] = 0.3f }
         for (e in enemies) e.active = false
         for (a in arrows) a.active = false
         for (c in coinsOnGround) c.active = false
@@ -324,7 +331,7 @@ class Game {
         for (t in towers) { t.built = false; t.archers = 0 }
         for (w in walls) { w.built = false; w.hp = 0f }
         pads.clear()
-        recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.cost = recruitCost(0) }
+        recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.level = squad; it.cost = recruitCost(squad) }
         forgePad = Pad(PAD_FORGE, 560f, 1640f).also { it.cost = forgeCost(0); it.visible = false }
         repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = 15; it.visible = false }
         pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
@@ -386,6 +393,7 @@ class Game {
         updateTexts(dt)
         if (shake > 0f) shake = max(0f, shake - dt * 30f)
         if (castleFlash > 0f) castleFlash -= dt
+        if (castleAlarm > 0f) castleAlarm -= dt
         if (waveBanner > 0f) waveBanner -= dt
         if (bossBanner > 0f) bossBanner -= dt
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
@@ -921,6 +929,7 @@ class Game {
                     target == 3 && distToGoal < stopDist + 20f -> {
                         castleHp -= e.dmg
                         castleFlash = 0.12f
+                        castleAlarm = 2.5f
                         shake = max(shake, 4f)
                         e.atkCd = 1.1f; e.swing = 1f
                         if (castleHp <= 0f) gameOver()
