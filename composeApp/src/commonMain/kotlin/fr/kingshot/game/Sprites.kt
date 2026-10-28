@@ -19,9 +19,18 @@ import fr.kingshot.game.resources.rock1
 import fr.kingshot.game.resources.roundtree
 import fr.kingshot.game.resources.stake
 import fr.kingshot.game.resources.tower
+import fr.kingshot.game.resources.wall_stone
+import fr.kingshot.game.resources.wall_stone_v
+import fr.kingshot.game.resources.gate_closed
+import fr.kingshot.game.resources.gate_open
+import fr.kingshot.game.resources.gate_closed_v
+import fr.kingshot.game.resources.gate_open_v
+import fr.kingshot.game.resources.tower_stone
+import fr.kingshot.game.resources.tower_royal
+import fr.kingshot.game.resources.castle_royal
 import org.jetbrains.compose.resources.imageResource
 
-/** Sprite atlases pre-rendered from the low-poly 3D models in art/ (see art/render.mjs). */
+/** Sprite atlases pre-rendered in Blender from the KayKit models (see art/blender/render_sprites.py). */
 class Sprites(
     val archer: ImageBitmap,
     val knight: ImageBitmap,
@@ -38,6 +47,15 @@ class Sprites(
     val rock1: ImageBitmap,
     val coinSpin: ImageBitmap,
     val coinFlat: ImageBitmap,
+    val wallStone: ImageBitmap,
+    val wallStoneV: ImageBitmap,
+    val gateClosed: ImageBitmap,
+    val gateOpen: ImageBitmap,
+    val gateClosedV: ImageBitmap,
+    val gateOpenV: ImageBitmap,
+    val towerStone: ImageBitmap,
+    val towerRoyal: ImageBitmap,
+    val castleRoyal: ImageBitmap,
 )
 
 @Composable
@@ -57,7 +75,16 @@ fun rememberSprites(): Sprites {
     val rock1 = imageResource(Res.drawable.rock1)
     val coinSpin = imageResource(Res.drawable.coin_spin)
     val coinFlat = imageResource(Res.drawable.coin_flat)
-    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat) {
-        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat)
+    val wallStone = imageResource(Res.drawable.wall_stone)
+    val wallStoneV = imageResource(Res.drawable.wall_stone_v)
+    val gateClosed = imageResource(Res.drawable.gate_closed)
+    val gateOpen = imageResource(Res.drawable.gate_open)
+    val gateClosedV = imageResource(Res.drawable.gate_closed_v)
+    val gateOpenV = imageResource(Res.drawable.gate_open_v)
+    val towerStone = imageResource(Res.drawable.tower_stone)
+    val towerRoyal = imageResource(Res.drawable.tower_royal)
+    val castleRoyal = imageResource(Res.drawable.castle_royal)
+    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal) {
+        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal)
     }
 }
