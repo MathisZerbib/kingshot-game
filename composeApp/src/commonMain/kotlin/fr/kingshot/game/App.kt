@@ -125,7 +125,7 @@ fun App() {
                     "et dépose-le sur les chantiers : archers, tours, palissades.\n" +
                     "Protège le donjon le plus longtemps possible !",
                 info = if (game.best > 0) "Record : vague ${game.best}" else null,
-                button = "JOUER",
+                button = if (game.hasSave) "CONTINUER" else "JOUER",
             ) { game.start(); focus.requestFocus() }
             STATE_OVER -> Overlay(
                 title = "LE DONJON EST TOMBÉ",

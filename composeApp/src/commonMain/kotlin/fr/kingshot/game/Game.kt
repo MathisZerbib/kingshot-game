@@ -158,7 +158,12 @@ class Wall(val path: Int, val s: Float) {
     var maxHp = 300f
     var hitFlash = 0f
     var bump = 0f
+    var gate = 0f // 0 closed .. 1 open (ramparts, from the stone age)
 }
+
+/** Half length of a stone rampart across its road, and half width of its gate. */
+const val RAMPART_HALF = 140f
+const val GATE_HALF = 40f
 
 class Input {
     var up = false
@@ -318,10 +323,12 @@ class Game {
         state = STATE_MENU
     }
 
-    /** Towers and palisades for the current [World] layout. */
+    /** Towers and palisades for the current [World] layout; existing ones (same index) are kept with their state. */
     private fun buildMap() {
-        towers = Array(World.towerSpots.size / 2) { Tower(World.towerSpots[it * 2], World.towerSpots[it * 2 + 1]) }
-        walls = Array(World.paths.size) { Wall(it, World.paths[it].length * World.wallFractions[it]) }
+        val oldT = towers
+        val oldW = walls
+        towers = Array(World.towerSpots.size / 2) { if (it < oldT.size) oldT[it] else Tower(World.towerSpots[it * 2], World.towerSpots[it * 2 + 1]) }
+        walls = Array(World.paths.size) { if (it < oldW.size) oldW[it] else Wall(it, World.paths[it].length * World.wallFractions[it]) }
         for (w in walls) {
             val p = World.paths[w.path]
             p.sample(w.s, tmp)
@@ -331,23 +338,32 @@ class Game {
         }
     }
 
-    /** Base pads (recruit, forge, repair) followed by the tower and palisade pads of the current map. */
-    private fun buildMapPads() {
-        pads.clear()
-        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
-        for (i in towers.indices) {
+    /** Adds the tower and palisade pads for towers/walls from the given indices (pads of older ones are kept, with what was paid). */
+    private fun addMapPads(fromTower: Int, fromWall: Int) {
+        for (i in fromTower until towers.size) {
             val t = towers[i]
-            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = 25 })
-            pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = false })
+            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = 25; it.visible = !t.built })
+            pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = t.built && t.archers < TOWER_SLOTS })
         }
-        for (i in walls.indices) {
+        for (i in fromWall until walls.size) {
             val w = walls[i]
-            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = 15 })
+            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = 15; it.visible = !w.built })
         }
     }
 
+    /** 1 = wood (levels 1-2), 2 = stone (3-4), 3 = royal (5+). */
+    val age get() = ageOf(level)
+    private fun ageOf(lv: Int) = if (lv >= 5) 3 else if (lv >= 3) 2 else 1
+    var ageChanged = false // the last level-up started a new age (banner)
+    var roadAdded = false // the last level-up added a road (banner)
+
+    private fun wallMaxHp() = (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f)
+
     fun reset() {
-        if (level != 1) { level = 1; World.load(1); buildMap() }
+        level = 1
+        towers = emptyArray(); walls = emptyArray()
+        World.load(1)
+        buildMap()
         rainLeft = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
         castleMaxHp = 600f
@@ -369,33 +385,45 @@ class Game {
         for (p in particles) p.active = false
         for (t in texts) t.active = false
         for (t in towers) { t.built = false; t.archers = 0 }
-        for (w in walls) { w.built = false; w.hp = 0f }
+        for (w in walls) { w.built = false; w.hp = 0f; w.gate = 0f }
         recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.level = squad; it.cost = recruitCost(squad) }
         forgePad = Pad(PAD_FORGE, 560f, 1640f).also { it.cost = forgeCost(0); it.visible = false }
         repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = 15; it.visible = false }
-        buildMapPads()
+        pads.clear()
+        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
+        addMapPads(0, 0)
     }
 
     private fun levelDone(): Boolean =
         towers.all { it.built && it.archers >= TOWER_SLOTS } && walls.all { it.built && it.hp > 0f }
 
-    /** Next level: bank loose coins, clear the field, load a bigger map, keep coins/squad/forge. */
+    /** Next level: bank loose coins, clear the field, grow the map (everything built stays), maybe enter a new age. */
     private fun levelUp() {
         levelUpPending = false
+        val oldAge = age
         level++
         levelBanner = 3.5f
+        ageChanged = age != oldAge
         coins += rainLeft; rainLeft = 0
         for (c in coinsOnGround) if (c.active) { c.active = false; coins++ }
         for (f in flyCoins) if (f.active) { f.active = false; coins++ }
         for (e in enemies) e.active = false
         for (a in arrows) a.active = false
         toSpawn = 0; bossPending = false; waveBreak = 7f; waveCleared = true
-        castleMaxHp *= 1.25f
+        castleMaxHp *= if (ageChanged && age == 3) 1.25f * 1.5f else 1.25f // royal castle: +50 % on top
         castleHp = castleMaxHp
+        val nt = towers.size
+        val nw = walls.size
         World.load(level)
         buildMap()
+        roadAdded = walls.size > nw
+        addMapPads(nt, nw)
+        // everything already built upgrades by itself
+        for (w in walls) if (w.built) { w.maxHp = wallMaxHp(); w.hp = w.maxHp; w.bump = 1f }
+        for (t in towers) if (t.built) t.bump = 1f
         recruitPad.cost = recruitCost(recruitPad.level)
-        buildMapPads()
+        forgePad.cost = forgeCost(forgePad.level)
+        saveGame()
         kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
         camX = kx; camY = ky
         for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
@@ -404,14 +432,72 @@ class Game {
     }
 
     fun start() {
-        reset()
+        val save = Storage.loadGame()
+        if (save == null || !restore(save)) reset()
         state = STATE_PLAY
+    }
+
+    val hasSave get() = Storage.loadGame() != null
+
+    // ---------------------------------------------------------------- save
+    // shortcut: plain "k=v" text, written at each wave start and level-up; a format change just drops old saves.
+
+    private fun saveGame() {
+        val sb = StringBuilder("v1")
+        sb.append(";").append(level).append(";").append(wave).append(";").append(coins + rainLeft).append(";").append(squad)
+        sb.append(";").append(dmgLevel).append(";").append(castleMaxHp).append(";").append(castleHp)
+        sb.append(";").append(recruitPad.level).append(";").append(forgePad.level).append(";").append(if (forgePad.visible) 1 else 0)
+        sb.append(";").append(kills).append(";")
+        for (t in towers) sb.append(if (t.built) t.archers else -1).append(",")
+        sb.append(";")
+        for (w in walls) sb.append(if (w.built) w.hp else -1f).append(",")
+        Storage.saveGame(sb.toString())
+    }
+
+    private fun restore(s: String): Boolean {
+        val f = s.split(";")
+        if (f.size < 14 || f[0] != "v1") return false
+        return try {
+            reset()
+            level = f[1].toInt()
+            World.load(level)
+            buildMap()
+            addMapPads(3, 3)
+            wave = max(0, f[2].toInt() - 1) // the wave in progress is replayed
+            coins = f[3].toInt()
+            squad = f[4].toInt().coerceIn(0, MAX_SQUAD)
+            dmgLevel = f[5].toInt()
+            castleMaxHp = f[6].toFloat(); castleHp = f[7].toFloat()
+            recruitPad.level = f[8].toInt(); recruitPad.cost = recruitCost(recruitPad.level)
+            forgePad.level = f[9].toInt(); forgePad.cost = forgeCost(forgePad.level); forgePad.visible = f[10] == "1"
+            kills = f[11].toInt()
+            val ts = f[12].split(",")
+            for (i in towers.indices) {
+                val a = ts.getOrNull(i)?.toIntOrNull() ?: -1
+                towers[i].built = a >= 0; towers[i].archers = a.coerceIn(0, TOWER_SLOTS)
+            }
+            val ws = f[13].split(",")
+            for (i in walls.indices) {
+                val hp = ws.getOrNull(i)?.toFloatOrNull() ?: -1f
+                walls[i].built = hp > 0f; walls[i].maxHp = wallMaxHp(); walls[i].hp = hp.coerceAtMost(walls[i].maxHp)
+            }
+            for (p in pads) when (p.kind) {
+                PAD_TOWER -> p.visible = !towers[p.ref].built
+                PAD_TOWER_ARCHER -> p.visible = towers[p.ref].built && towers[p.ref].archers < TOWER_SLOTS
+                PAD_WALL -> p.visible = !walls[p.ref].built
+            }
+            for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
+            waveBreak = 5f
+            true
+        } catch (e: NumberFormatException) {
+            reset(); false
+        }
     }
 
     // Archers are spent on towers now, so recruiting stays affordable; cheaper from level 2.
     private fun recruitCost(n: Int): Int = (min(4 + n * 2, 20) * (if (level >= 2) 0.75f else 1f)).toInt()
 
-    private fun forgeCost(n: Int): Int = 20 + n * 25 + n * n * 5
+    private fun forgeCost(n: Int): Int = ((20 + n * 25 + n * n * 5) * (if (age >= 2) 0.7f else 1f)).toInt()
 
     fun bestOrCurrent() = max(best, wave)
 
@@ -457,6 +543,8 @@ class Game {
         if (bossBanner > 0f) bossBanner -= dt
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
         for (w in walls) {
+            val open = w.built && age >= 2 && !kDead && hypot(kx - w.x, ky - w.y) < 110f
+            w.gate = if (open) min(1f, w.gate + dt / 0.25f) else max(0f, w.gate - dt / 0.25f)
             if (w.hitFlash > 0f) w.hitFlash -= dt
             if (w.bump > 0f) w.bump = max(0f, w.bump - dt * 3f)
         }
@@ -526,6 +614,19 @@ class Game {
             nx = World.CASTLE_X + cdx / cd * minD
             ny = World.CASTLE_Y + cdy / cd * minD / 1.6f
         }
+        if (age >= 2) for (w in walls) {
+            if (!w.built) continue
+            val rx = nx - w.x
+            val ry = ny - w.y
+            val along = rx * w.nx + ry * w.ny // along the rampart
+            if (abs(along) > RAMPART_HALF) continue
+            val across = rx * w.ny - ry * w.nx // through it (road direction)
+            if (abs(across) >= 22f) continue
+            if (abs(along) < GATE_HALF && w.gate > 0.6f) continue
+            val side = if ((kx - w.x) * w.ny - (ky - w.y) * w.nx >= 0f) 1f else -1f
+            nx = w.x + w.nx * along + w.ny * 22f * side
+            ny = w.y + w.ny * along - w.nx * 22f * side
+        }
         kx = nx; ky = ny
         val sp = hypot(kvx, kvy)
         if (sp > 10f) {
@@ -590,13 +691,13 @@ class Game {
                 t.cd[a] -= dt
                 if (t.cd[a] <= 0f) {
                     val ox = t.x + (a - 1) * 20f
-                    val target = nearestEnemy(ox, t.y, 380f)
+                    val target = nearestEnemy(ox, t.y, if (age >= 2) 456f else 380f)
                     if (target >= 0) {
-                        fire(ox, t.y, 128f, target, 26f * dmgMult)
+                        fire(ox, t.y, 128f, target, 26f * dmgMult * (if (age >= 3) 1.5f else 1f))
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
                         t.shoot[a] = 0.32f
-                        t.cd[a] = 0.75f + rnd.nextFloat() * 0.15f
+                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f)
                     } else t.cd[a] = 0.1f
                 }
             }
@@ -866,7 +967,7 @@ class Game {
             PAD_WALL -> {
                 val w = walls[p.ref]
                 w.built = true
-                w.maxHp = 300f + wave * 40f
+                w.maxHp = wallMaxHp()
                 w.hp = w.maxHp
                 w.bump = 1f
                 p.visible = false
@@ -900,6 +1001,7 @@ class Game {
         waveBreak -= dt
         if (waveBreak <= 0f) {
             wave++
+            saveGame()
             waveCleared = false
             toSpawn = 3 + wave * 2
             bossPending = wave % 5 == 0
@@ -964,7 +1066,8 @@ class Game {
             if (!kDead && dk < aggro) {
                 tx = kx; ty = ky; target = 1
             } else {
-                val wallBlocks = wall.built && e.s >= wall.s - 30f - e.radius && e.s < wall.s + 10f
+                val slipsThrough = wall.gate > 0.5f && hypot(e.x - wall.x, e.y - wall.y) < 60f + e.radius
+                val wallBlocks = wall.built && !slipsThrough && e.s >= wall.s - 30f - e.radius && e.s < wall.s + 10f
                 path.sample(e.s, tmp)
                 tx = tmp.x + e.offX * 0.6f; ty = tmp.y + e.offY * 0.6f
                 if (wallBlocks) {
@@ -1086,6 +1189,7 @@ class Game {
     }
 
     private fun gameOver() {
+        Storage.saveGame(null)
         castleHp = 0f
         state = STATE_OVER
         shake = 20f

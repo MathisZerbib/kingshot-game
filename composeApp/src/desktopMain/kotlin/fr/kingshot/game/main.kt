@@ -10,6 +10,8 @@ actual object Storage {
     private val prefs = Preferences.userRoot().node("fr/kingshot/game")
     actual fun loadBest(): Int = prefs.getInt("best", 0)
     actual fun saveBest(value: Int) = prefs.putInt("best", value)
+    actual fun loadGame(): String? = prefs.get("game", null)
+    actual fun saveGame(value: String?) = if (value == null) prefs.remove("game") else prefs.put("game", value)
 }
 
 fun main() = application {

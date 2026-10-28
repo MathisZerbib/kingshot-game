@@ -108,80 +108,70 @@ object World {
     var rocks = FloatArray(0); private set
     var grassPatches = FloatArray(0); private set
 
-    /** Road directions seen from the castle (degrees, 0 = east, -90 = north), chosen to stay clear of the base pads. */
-    private val roadAngles = floatArrayOf(-90f, -40f, -2f, 100f, -118f, -64f)
+    /** Extra road directions seen from the castle (degrees, 0 = east, -90 = north), between the level-1 roads and clear of the base pads. */
+    private val extraAngles = floatArrayOf(-100f, -42f, 75f)
 
     init {
         decorate(7)
     }
 
-    /** Builds the map of [level]: (2 + level) roads (max 6), one tower spot and one palisade per road. */
+    /**
+     * The map persists and grows: level N keeps every road, tower spot and palisade of level N-1 and adds one new
+     * road (up to 6) with its own tower spot and palisade. Cliffs on a new road are removed.
+     */
     fun load(level: Int) {
-        if (level <= 1) {
-            paths = paths1; decoRoads = decoRoads1; cliffs = cliffs1; towerSpots = towerSpots1; wallFractions = wallFractions1
-        } else {
-            val rnd = Random(level * 7919)
-            val n = min(2 + level, roadAngles.size)
-            val ps = ArrayList<GamePath>()
-            val spots = ArrayList<Float>()
-            for (k in 0 until n) {
-                val a = (roadAngles[k] + (rnd.nextFloat() - 0.5f) * 14f) * PI.toFloat() / 180f
-                val dx = cos(a); val dy = sin(a)
-                // distance from the castle to the map edge (+80 outside) along the ray
-                val tx = if (dx > 0.001f) (W + 80f - CASTLE_X) / dx else if (dx < -0.001f) (-80f - CASTLE_X) / dx else 1e9f
-                val ty = if (dy > 0.001f) (H + 80f - CASTLE_Y) / dy else if (dy < -0.001f) (-80f - CASTLE_Y) / dy else 1e9f
-                val len = min(tx, ty)
-                val wig = (if (rnd.nextBoolean()) 1f else -1f) * (90f + rnd.nextFloat() * 90f)
-                val pts = FloatArray(10)
-                for (i in 0..4) {
-                    val f = 1f - i / 4f // 1 = edge, 0 = castle
-                    val d = 100f + (len - 100f) * f
-                    val off = if (i == 0 || i == 4) 0f else wig * sin(f * PI.toFloat()) * (if (i == 2) -0.6f else 1f)
-                    pts[i * 2] = (CASTLE_X + dx * d - dy * off).let { if (i == 0) it else it.coerceIn(60f, W - 60f) }
-                    pts[i * 2 + 1] = (CASTLE_Y + dy * d + dx * off).let { if (i == 0) it else it.coerceIn(60f, H - 60f) }
-                }
-                ps.add(GamePath(pts))
+        val extra = min(level - 1, extraAngles.size)
+        paths = paths1; towerSpots = towerSpots1; wallFractions = wallFractions1; decoRoads = decoRoads1; cliffs = cliffs1
+        val v = Vec(); val tg = Vec()
+        for (k in 0 until extra) {
+            val rnd = Random(1000 + k) // per road, so a road looks the same at every later level
+            val a = (extraAngles[k] + (rnd.nextFloat() - 0.5f) * 8f) * PI.toFloat() / 180f
+            val dx = cos(a); val dy = sin(a)
+            // distance from the castle to the map edge (+80 outside) along the ray
+            val tx = if (dx > 0.001f) (W + 80f - CASTLE_X) / dx else if (dx < -0.001f) (-80f - CASTLE_X) / dx else 1e9f
+            val ty = if (dy > 0.001f) (H + 80f - CASTLE_Y) / dy else if (dy < -0.001f) (-80f - CASTLE_Y) / dy else 1e9f
+            val len = min(tx, ty)
+            val wig = (if (rnd.nextBoolean()) 1f else -1f) * (50f + rnd.nextFloat() * 40f)
+            val pts = FloatArray(10)
+            for (i in 0..4) {
+                val f = 1f - i / 4f // 1 = edge, 0 = castle
+                val d = 100f + (len - 100f) * f
+                val off = if (i == 0 || i == 4) 0f else wig * sin(f * PI.toFloat())
+                pts[i * 2] = (CASTLE_X + dx * d - dy * off).let { if (i == 0) it else it.coerceIn(60f, W - 60f) }
+                pts[i * 2 + 1] = (CASTLE_Y + dy * d + dx * off).let { if (i == 0) it else it.coerceIn(60f, H - 60f) }
             }
-            paths = ps.toTypedArray()
-            // one tower beside each road: first spot (along the road, either side) clear of every road and the castle
-            val v = Vec(); val tg = Vec()
-            for ((k, path) in paths.withIndex()) {
-                var bx = 0f; var by = 0f; var found = false
-                for (f in floatArrayOf(0.58f, 0.5f, 0.66f, 0.42f, 0.74f)) {
-                    for (side in floatArrayOf(1f, -1f)) {
-                        if (found) break
-                        path.sample(path.length * f, v); path.tangent(path.length * f, tg)
-                        val sd = if (k % 2 == 0) side else -side
-                        val x = (v.x - tg.y * 150f * sd).coerceIn(120f, W - 120f)
-                        val y = (v.y + tg.x * 150f * sd).coerceIn(160f, H - 120f)
-                        if (hypot(x - CASTLE_X, y - CASTLE_Y) > 260f && distToRoads(x, y) > 115f) { bx = x; by = y; found = true }
-                        if (!found && f == 0.58f && side == 1f) { bx = x; by = y } // fallback
-                    }
+            val path = GamePath(pts)
+            paths = paths + path
+            // tower beside the new road: first spot clear of every road and of the castle
+            var bx = 0f; var by = 0f; var found = false
+            for (f in floatArrayOf(0.58f, 0.5f, 0.66f, 0.42f, 0.74f)) {
+                for (side in floatArrayOf(1f, -1f)) {
                     if (found) break
+                    path.sample(path.length * f, v); path.tangent(path.length * f, tg)
+                    val x = (v.x - tg.y * 150f * side).coerceIn(120f, W - 120f)
+                    val y = (v.y + tg.x * 150f * side).coerceIn(160f, H - 120f)
+                    if (hypot(x - CASTLE_X, y - CASTLE_Y) > 260f && distToRoads(x, y) > 115f && !insideCliff(x, y, 60f)) { bx = x; by = y; found = true }
+                    if (!found && f == 0.58f && side == 1f) { bx = x; by = y } // fallback
                 }
-                spots.add(bx); spots.add(by)
+                if (found) break
             }
-            towerSpots = spots.toFloatArray()
-            wallFractions = FloatArray(n) { 0.45f + rnd.nextFloat() * 0.15f }
-            decoRoads = arrayOf(floatArrayOf(690f, 1500f, 760f, 1640f, 900f, 1680f))
-            cliffs = emptyArray()
-            // cliffs only where they cannot block a road or a tower
-            val cl = ArrayList<FloatArray>()
-            var tries = 0
-            while (cl.size < 5 && tries < 300) {
-                tries++
-                val w = 220f + rnd.nextFloat() * 300f
-                val d = 180f + rnd.nextFloat() * 260f
-                val c = floatArrayOf(-40f + rnd.nextFloat() * (W - w + 80f), -40f + rnd.nextFloat() * (H * 0.75f), w, d, 140f + rnd.nextFloat() * 90f)
-                // stay off the base (castle, house, pads, king start)
-                val nearBase = c[0] < 1400f && c[0] + w > 380f && c[1] + d > 1200f && c[1] - c[4] < 2100f
-                if (nearBase || !rectClear(c, 140f)) continue
-                cl.add(c)
-            }
-            cliffs = cl.toTypedArray()
+            towerSpots = towerSpots + floatArrayOf(bx, by)
+            wallFractions = wallFractions + 0.5f
+            cliffs = cliffs.filter { pathClear(it, path, 60f) }.toTypedArray()
         }
-        decorate(level * 31 + 7)
+        decorate(7)
         version++
+    }
+
+    private fun pathClear(c: FloatArray, p: GamePath, margin: Float): Boolean {
+        val v = Vec()
+        var s = 0f
+        while (s <= p.length) {
+            p.sample(s, v)
+            if (v.x > c[0] - margin && v.x < c[0] + c[2] + margin && v.y > c[1] - c[4] - margin && v.y < c[1] + c[3] + margin) return false
+            s += 30f
+        }
+        return true
     }
 
     private fun distToRoads(x: Float, y: Float): Float {
@@ -196,25 +186,6 @@ object World {
             }
         }
         return best
-    }
-
-    private fun rectClear(c: FloatArray, margin: Float): Boolean {
-        val v = Vec()
-        for (p in paths) {
-            var s = 0f
-            while (s <= p.length) {
-                p.sample(s, v)
-                if (v.x > c[0] - margin && v.x < c[0] + c[2] + margin && v.y > c[1] - c[4] - margin && v.y < c[1] + c[3] + margin) return false
-                s += 40f
-            }
-        }
-        var i = 0
-        while (i < towerSpots.size) {
-            val x = towerSpots[i]; val y = towerSpots[i + 1]
-            if (x > c[0] - 200f && x < c[0] + c[2] + 200f && y > c[1] - c[4] - 200f && y < c[1] + c[3] + 200f) return false
-            i += 2
-        }
-        return true
     }
 
     private fun decorate(seed: Int) {
