@@ -433,7 +433,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
         sprite(sp.king, SpriteData.king, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
         // coin stack on the king's head
-        val n = min(g.coins, 70)
+        val n = min(g.coins, MAX_STACK)
         val bob = if (moving) abs(sin(g.kWalk * 2f)) * 2f else 0f
         val base = y - 70f - bob + g.stackBump * 3f
         for (i in 0 until n) {

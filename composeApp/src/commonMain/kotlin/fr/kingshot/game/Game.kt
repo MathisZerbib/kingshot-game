@@ -26,6 +26,9 @@ const val PAD_WALL = 5
 
 const val MAX_SQUAD = 30
 
+/** Coins drawn on the king's head; the HUD counter shows the real total. */
+const val MAX_STACK = 24
+
 /** Sprite direction (0 = facing the camera/south, 2 = east, 4 = north, 6 = west) for a vector. */
 fun dirIndex(dx: Float, dy: Float): Int {
     val a = atan2(dx, dy)
@@ -663,7 +666,7 @@ class Game {
                 2 -> {
                     if (kDead) { c.state = 1; c.z = 0f; continue }
                     c.vx += dt * 3200f // used as speed
-                    val tz = 95f + min(coins, 60) * 4.5f
+                    val tz = 95f + min(coins, MAX_STACK) * 4.5f
                     val dx = kx - c.x
                     val dy = ky - c.y
                     val dz = tz - c.z
@@ -706,7 +709,7 @@ class Game {
                 if (onPad.paid >= onPad.cost) complete(onPad)
             } else {
                 f.active = true
-                f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, 60) * 4.5f
+                f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, MAX_STACK) * 4.5f
                 f.pad = pads.indexOf(onPad)
                 f.t = 0f
                 onPad.pending++
