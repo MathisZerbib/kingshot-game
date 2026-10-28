@@ -453,10 +453,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val bob = if (moving) abs(sin(g.kWalk * 2f)) * 2f else 0f
         val base = y - 70f - bob + g.stackBump * 3f
         for (i in 0 until n) {
-            val cx = x + g.sway * i * i * 0.016f
+            val cx = x + g.sway * min(i * i * 0.016f, 70f) // bend capped so a tall stack never leaves the screen sideways
             sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, cx, base - i * 4.5f, 1f)
         }
-        if (g.kHp < g.kMaxHp) hpBar(x, base - n * 4.5f - 26f, 50f, g.kHp / g.kMaxHp, HP_GREEN)
+        if (g.kHp < g.kMaxHp) hpBar(x, y + 18f, 50f, g.kHp / g.kMaxHp, HP_GREEN) // under the king: the stack can be taller than the screen
     }
 
     private fun DrawScope.drawEnemy(e: Enemy) {
