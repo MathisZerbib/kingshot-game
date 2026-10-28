@@ -51,6 +51,7 @@ fun App() {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val renderer = remember(measurer, density.density) { Renderer(measurer, density.density) }
+    renderer.sprites = rememberSprites()
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }
     val focus = remember { FocusRequester() }

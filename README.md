@@ -23,3 +23,13 @@ Kotlin Multiplatform + Compose Multiplatform (Canvas). Cibles : Android, iOS, de
   ou ouvrir le projet dans Android Studio.
 - Desktop : `./gradlew :composeApp:run`
 - iOS : `cd iosApp && xcodegen && open iosApp.xcodeproj` (installer XcodeGen avec `brew install xcodegen`).
+
+## Graphismes 3D
+Les modèles low-poly (roi à cheval, archers, chevaliers, boss, château, maison, tour, palissade,
+arbres, rochers, pièces) sont construits en Three.js dans `art/models.js`, puis rendus en atlas de
+sprites isométriques (8 directions, animations) par `art/render.mjs` :
+
+    cd art && npm install && node render.mjs
+
+Le script écrit les PNG dans `composeApp/src/commonMain/composeResources/drawable/` et génère
+`SpriteData.kt`. `node preview.mjs out.png` compose une scène d'aperçu.

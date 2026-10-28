@@ -2,6 +2,8 @@ package fr.kingshot.game
 
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.round
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
@@ -22,6 +24,12 @@ const val PAD_TOWER_ARCHER = 4
 const val PAD_WALL = 5
 
 const val MAX_SQUAD = 30
+
+/** Sprite direction (0 = facing the camera/south, 2 = east, 4 = north, 6 = west) for a vector. */
+fun dirIndex(dx: Float, dy: Float): Int {
+    val a = atan2(dx, dy)
+    return ((round(a / (PI.toFloat() / 4f)).toInt() % 8) + 8) % 8
+}
 const val TOWER_SLOTS = 3
 
 class Enemy {
@@ -45,6 +53,7 @@ class Enemy {
     var hitFlash = 0f
     var walk = 0f
     var faceRight = false
+    var dir = 0
     var coins = 1
 }
 
@@ -130,6 +139,8 @@ class Tower(val x: Float, val y: Float) {
     var archers = 0
     val cd = FloatArray(TOWER_SLOTS)
     val faceRight = BooleanArray(TOWER_SLOTS)
+    val dir = IntArray(TOWER_SLOTS)
+    val shoot = FloatArray(TOWER_SLOTS)
     var bump = 0f
 }
 
@@ -191,6 +202,7 @@ class Game {
     var kvx = 0f
     var kvy = 0f
     var kFaceRight = true
+    var kDir = 0
     var kHp = 150f
     var kMaxHp = 150f
     var kDead = false
@@ -209,6 +221,9 @@ class Game {
     val acd = FloatArray(MAX_SQUAD)
     val aFaceRight = BooleanArray(MAX_SQUAD)
     val aWalk = FloatArray(MAX_SQUAD)
+    val aDir = IntArray(MAX_SQUAD)
+    val aShoot = FloatArray(MAX_SQUAD)
+    var aMoving = BooleanArray(MAX_SQUAD)
     private val slotX = FloatArray(MAX_SQUAD)
     private val slotY = FloatArray(MAX_SQUAD)
 
@@ -449,6 +464,7 @@ class Game {
         if (sp > 10f) {
             kWalk += dt * sp * 0.05f
             if (abs(kvx) > 15f) kFaceRight = kvx > 0f
+            if (sp > 40f) kDir = dirIndex(kvx, kvy)
         }
         sway += (-kvx * 0.0016f - sway) * min(1f, dt * 6f)
 
@@ -461,6 +477,7 @@ class Game {
             if (t >= 0) {
                 fire(kx, ky - 6f, 52f, t, 25f * dmgMult)
                 kFaceRight = enemies[t].x > kx
+                if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
                 kFireCd = 0.5f
             } else kFireCd = 0.1f
         }
@@ -476,9 +493,12 @@ class Game {
             ax[i] += (tx - ax[i]) * f
             ay[i] += (ty - ay[i]) * f
             val moved = hypot(ax[i] - ox, ay[i] - oy)
+            aMoving[i] = moved > 0.25f
+            if (aShoot[i] > 0f) aShoot[i] -= dt
             if (moved > 0.2f) {
                 aWalk[i] += moved * 0.09f
                 if (abs(ax[i] - ox) > 0.3f) aFaceRight[i] = ax[i] > ox
+                if (aShoot[i] <= 0f && moved > 0.6f) aDir[i] = dirIndex(ax[i] - ox, ay[i] - oy)
             }
             if (kDead) continue
             acd[i] -= dt
@@ -487,6 +507,8 @@ class Game {
                 if (t >= 0) {
                     fire(ax[i], ay[i], 30f, t, 20f * dmgMult)
                     aFaceRight[i] = enemies[t].x > ax[i]
+                    aDir[i] = dirIndex(enemies[t].x - ax[i], enemies[t].y - ay[i])
+                    aShoot[i] = 0.32f
                     acd[i] = 0.85f + rnd.nextFloat() * 0.25f
                 } else acd[i] = 0.08f + rnd.nextFloat() * 0.1f
             }
@@ -497,6 +519,7 @@ class Game {
         for (t in towers) {
             if (!t.built) continue
             for (a in 0 until t.archers) {
+                if (t.shoot[a] > 0f) t.shoot[a] -= dt
                 t.cd[a] -= dt
                 if (t.cd[a] <= 0f) {
                     val ox = t.x + (a - 1) * 20f
@@ -504,6 +527,8 @@ class Game {
                     if (target >= 0) {
                         fire(ox, t.y, 128f, target, 26f * dmgMult)
                         t.faceRight[a] = enemies[target].x > ox
+                        t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
+                        t.shoot[a] = 0.32f
                         t.cd[a] = 0.75f + rnd.nextFloat() * 0.15f
                     } else t.cd[a] = 0.1f
                 }
@@ -709,6 +734,7 @@ class Game {
             PAD_RECRUIT -> {
                 if (squad < MAX_SQUAD) {
                     ax[squad] = p.x; ay[squad] = p.y
+                    aDir[squad] = 0; aShoot[squad] = 0f
                     acd[squad] = 0.3f
                     squad++
                     burst(p.x, p.y, 30f, 16, 0xFF6FB7FFL, 200f)
@@ -873,6 +899,7 @@ class Game {
                 e.x += dx / d * step; e.y += dy / d * step
                 moving = true
                 if (abs(dx) > 2f) e.faceRight = dx > 0f
+                if (step > 0.2f) e.dir = dirIndex(dx, dy)
             }
             if (moving) e.walk += dt * e.speed * 0.09f
             // attacks
@@ -881,6 +908,7 @@ class Game {
                     target == 1 && dk < reach + 16f -> {
                         damageKing(e.dmg)
                         e.faceRight = dkx > 0f
+                        e.dir = dirIndex(dkx, dky)
                         e.atkCd = 1.1f; e.swing = 1f
                     }
                     target == 2 && hypot(wall.x - e.x, wall.y - e.y) < 70f + e.radius -> {

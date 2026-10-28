@@ -3,7 +3,10 @@ package fr.kingshot.game
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -17,6 +20,8 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
 import kotlin.math.PI
 import kotlin.math.abs
@@ -25,6 +30,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
 import kotlin.math.sqrt
+
+private const val UNIT_SCALE = 1.5f
 
 private const val K_TREE = 0
 private const val K_ROCK = 1
@@ -109,17 +116,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private val roadStroke = Stroke(width = 88f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     private val bowStroke = Stroke(width = 3f, cap = StrokeCap.Round)
     private val roads = ArrayList<Path>()
-    private val pineDark = Path()
-    private val pineLight = Path()
-    private val rockDark = Path()
-    private val rockLight = Path()
-    private val roof = Path()
-    private val roofSide = Path()
-    private val crown = Path()
-    private val coneRoof = Path()
-    private val flag = Path()
 
     private val keys = LongArray(2048)
+    private val flashFilter = ColorFilter.tint(Color(0xD0FFFFFF), BlendMode.SrcAtop)
+
+    /** Pre-rendered 3D sprite atlases; null until loaded. */
+    var sprites: Sprites? = null
     private var scale = 1f
 
     var topInset = 0f
@@ -130,22 +132,6 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val n = r.size / 2
             roads.add(polyPath(FloatArray(n) { r[it * 2] }, FloatArray(n) { r[it * 2 + 1] }))
         }
-        tri(pineDark, -36f, -18f, 36f, -18f, 0f, -78f)
-        tri(pineDark, -30f, -52f, 30f, -52f, 0f, -108f)
-        tri(pineDark, -22f, -84f, 22f, -84f, 0f, -134f)
-        tri(pineLight, -36f, -18f, 0f, -18f, 0f, -78f)
-        tri(pineLight, -30f, -52f, 0f, -52f, 0f, -108f)
-        tri(pineLight, -22f, -84f, 0f, -84f, 0f, -134f)
-        rockDark.apply { moveTo(-22f, 0f); lineTo(-18f, -16f); lineTo(-4f, -26f); lineTo(16f, -20f); lineTo(24f, 0f); close() }
-        rockLight.apply { moveTo(-18f, -16f); lineTo(-4f, -26f); lineTo(16f, -20f); lineTo(2f, -12f); close() }
-        roof.apply { moveTo(-90f, -58f); lineTo(-62f, -132f); lineTo(62f, -132f); lineTo(90f, -58f); close() }
-        roofSide.apply { moveTo(-90f, -58f); lineTo(-62f, -132f); lineTo(-40f, -132f); lineTo(-62f, -58f); close() }
-        crown.apply {
-            moveTo(-10f, 0f); lineTo(-11f, -13f); lineTo(-5f, -6f); lineTo(0f, -15f)
-            lineTo(5f, -6f); lineTo(11f, -13f); lineTo(10f, 0f); close()
-        }
-        coneRoof.apply { moveTo(-26f, 0f); lineTo(0f, -46f); lineTo(26f, 0f); close() }
-        flag.apply { moveTo(0f, 0f); lineTo(50f, 6f); lineTo(42f, 18f); lineTo(50f, 30f); lineTo(0f, 28f); close() }
     }
 
     private fun polyPath(xs: FloatArray, ys: FloatArray) = Path().apply {
@@ -153,9 +139,6 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (i in 1 until xs.size) lineTo(xs[i], ys[i])
     }
 
-    private fun tri(p: Path, x0: Float, y0: Float, x1: Float, y1: Float, x2: Float, y2: Float) {
-        p.moveTo(x0, y0); p.lineTo(x1, y1); p.lineTo(x2, y2); p.close()
-    }
 
     // ------------------------------------------------------------ helpers
 
@@ -194,7 +177,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val w = size.width
         val h = size.height
         val portrait = h >= w
-        scale = if (portrait) w / 720f else min(w / 1100f, h / 700f)
+        scale = if (portrait) w / 560f else min(w / 1000f, h / 620f)
         val halfW = w / 2f / scale
         val halfH = h / 2f / scale
         val cx = if (halfW * 2 >= World.W) World.W / 2 else g.camX.coerceIn(halfW, World.W - halfW)
@@ -331,131 +314,87 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val kind = ((key shr 16) and 0xFF).toInt()
             val idx = (key and 0xFFFF).toInt()
             when (kind) {
-                K_TREE -> drawTree(t[idx], t[idx + 1], t[idx + 2])
-                K_ROCK -> drawRock(r[idx], r[idx + 1], r[idx + 2])
+                K_TREE -> drawTree(t[idx], t[idx + 1], t[idx + 2], idx / 3)
+                K_ROCK -> drawRock(r[idx], r[idx + 1], r[idx + 2], idx / 3)
                 K_HOUSE -> drawHouse(World.HOUSE_X, World.HOUSE_Y)
                 K_CASTLE -> drawCastle(g)
                 K_TOWER -> drawTower(g.towers[idx])
                 K_WALL -> drawWall(g.walls[idx])
                 K_ENEMY -> drawEnemy(g.enemies[idx])
-                K_ARCHER -> drawArcher(g.ax[idx], g.ay[idx], g.aFaceRight[idx], g.aWalk[idx], true)
+                K_ARCHER -> drawArcher(g, idx)
                 K_KING -> drawKing(g)
                 K_COIN -> drawGroundCoin(g.coinsOnGround[idx])
             }
         }
     }
 
-    private fun DrawScope.drawTree(x: Float, y: Float, s: Float) {
-        oval(SHADOW, x - 34f * s, y - 9f * s, 68f * s, 22f * s)
-        rect(WOOD_DARK, x - 5f * s, y - 26f * s, 10f * s, 26f * s)
-        translate(x, y) {
-            scale(s, s, Offset.Zero) {
-                drawPath(pineDark, Color(0xFF5E9E2E))
-                drawPath(pineLight, Color(0xFF7DBE3C))
-            }
+    // ------------------------------------------------------------ sprites
+
+    /** Draws one atlas cell with its anchor (feet) at world (x, y); [k] scales the model. */
+    private fun DrawScope.sprite(img: ImageBitmap, info: SpriteInfo, col: Int, row: Int, x: Float, y: Float, k: Float, filter: ColorFilter? = null) {
+        if (img.width < info.w * info.cols || img.height < info.h * info.rows) return
+        val s = k / info.ppu
+        withTransform({
+            translate(x - info.ax * s, y - info.ay * s)
+            scale(s, s, Offset.Zero)
+        }) {
+            drawImage(img, IntOffset(col * info.w, row * info.h), IntSize(info.w, info.h), IntOffset.Zero, IntSize(info.w, info.h), colorFilter = filter)
         }
     }
 
-    private fun DrawScope.drawRock(x: Float, y: Float, s: Float) {
-        translate(x, y) {
-            scale(s, s, Offset.Zero) {
-                oval(SHADOW, -26f, -6f, 54f, 14f)
-                drawPath(rockDark, Color(0xFF9A8E8C))
-                drawPath(rockLight, Color(0xFFBDB2AF))
-            }
+    private fun walkFrame(phase: Float, frames: Int): Int {
+        val f = ((phase / (2f * PI.toFloat())) * frames).toInt() % frames
+        return if (f < 0) f + frames else f
+    }
+
+    private fun DrawScope.drawTree(x: Float, y: Float, s: Float, idx: Int) {
+        val sp = sprites ?: return
+        when (idx % 7) {
+            0, 3, 5 -> sprite(sp.pine0, SpriteData.pine0, 0, 0, x, y, s)
+            1, 4 -> sprite(sp.pine1, SpriteData.pine1, 0, 0, x, y, s)
+            else -> sprite(sp.roundtree, SpriteData.roundtree, 0, 0, x, y, s * 1.2f)
         }
+    }
+
+    private fun DrawScope.drawRock(x: Float, y: Float, s: Float, idx: Int) {
+        val sp = sprites ?: return
+        if (idx % 2 == 0) sprite(sp.rock0, SpriteData.rock0, 0, 0, x, y, s)
+        else sprite(sp.rock1, SpriteData.rock1, 0, 0, x, y, s)
     }
 
     private fun DrawScope.drawHouse(x: Float, y: Float) {
-        oval(SHADOW, x - 100f, y - 26f, 200f, 50f)
-        translate(x, y) {
-            rect(STONE, -72f, -70f, 144f, 70f)
-            rect(STONE_DARK, -72f, -18f, 144f, 18f)
-            rr(WOOD_DARK, -16f, -50f, 32f, 50f, 8f)
-            rr(Color(0xFF3A3F4A), -56f, -48f, 22f, 20f, 4f)
-            rr(Color(0xFF3A3F4A), 34f, -48f, 22f, 20f, 4f)
-            drawPath(roof, ROOF)
-            drawPath(roofSide, ROOF_DARK)
-            rect(ROOF_DARK, -92f, -64f, 184f, 8f)
-            line(Color(0xFF5C3A22), -62f, -132f, 62f, -132f, 6f)
-            // bow emblem
-            drawArc(BOW, 100f, 160f, false, Offset(-28f, -122f), Size(40f, 52f), style = Stroke(6f, cap = StrokeCap.Round))
-            line(SILVER, -24f, -78f, 30f, -120f, 4f)
-            line(WHITE, 30f, -120f, 20f, -118f, 4f)
-            line(WHITE, 30f, -120f, 28f, -110f, 4f)
-        }
+        val sp = sprites ?: return
+        sprite(sp.house, SpriteData.house, 0, 0, x, y - 30f, 1f)
     }
 
     private fun DrawScope.drawCastle(g: Game) {
-        val x = World.CASTLE_X
-        val y = World.CASTLE_Y
-        val flash = g.castleFlash > 0f
-        val st = if (flash) Color(0xFFFFE0E0) else STONE
-        val sd = if (flash) Color(0xFFFFB0B0) else STONE_DARK
-        oval(SHADOW, x - 130f, y - 30f, 260f, 64f)
-        // side towers
-        rect(sd, x - 128f, y - 150f, 46f, 150f)
-        rect(sd, x + 82f, y - 150f, 46f, 150f)
-        translate(x - 105f, y - 150f) { drawPath(coneRoof, ROYAL) }
-        translate(x + 105f, y - 150f) { drawPath(coneRoof, ROYAL_DARK) }
-        // keep
-        rect(st, x - 92f, y - 180f, 184f, 180f)
-        rect(sd, x - 92f, y - 34f, 184f, 34f)
-        rect(sd, x + 40f, y - 180f, 52f, 180f)
-        for (k in 0 until 5) rect(st, x - 92f + k * 39.5f, y - 200f, 26f, 22f)
-        line(sd, x - 92f, y - 120f, x + 40f, y - 120f, 3f)
-        line(sd, x - 92f, y - 80f, x + 40f, y - 80f, 3f)
-        rr(WOOD_DARK, x - 28f, y - 78f, 56f, 78f, 26f)
-        line(Color(0xFF4A2C17), x, y - 74f, x, y, 3f)
-        // flag
-        line(Color(0xFF5C3A22), x, y - 200f, x, y - 290f, 5f)
-        val wave = sin(g.time * 5f) * 4f
-        translate(x + 2f, y - 288f + wave * 0.3f) {
-            scale(1f + wave * 0.02f, 1f, Offset.Zero) { drawPath(flag, ROYAL) }
-            translate(10f, 8f) { drawPath(crown, GOLD) }
-        }
+        val sp = sprites ?: return
+        sprite(sp.castle, SpriteData.castle, 0, 0, World.CASTLE_X, World.CASTLE_Y - 30f, 0.9f, if (g.castleFlash > 0f) flashFilter else null)
     }
 
     private fun DrawScope.drawTower(t: Tower) {
-        val x = t.x
-        val y = t.y
+        val sp = sprites ?: return
         val b = 1f + t.bump * 0.15f
-        oval(SHADOW, x - 56f, y - 16f, 112f, 34f)
-        scale(b, 1f / b, Offset(x, y)) {
-            rect(WOOD_DARK, x - 34f, y - 112f, 9f, 104f)
-            rect(WOOD_DARK, x + 25f, y - 112f, 9f, 104f)
-            line(WOOD_DARK, x - 36f, y - 30f, x + 36f, y - 90f, 6f)
-            line(WOOD_DARK, x + 36f, y - 30f, x - 36f, y - 90f, 6f)
-            rect(WOOD, x - 42f, y - 100f, 10f, 100f)
-            rect(WOOD, x + 32f, y - 100f, 10f, 100f)
-            rr(WOOD, x - 50f, y - 132f, 100f, 34f, 5f)
-            rect(WOOD_DARK, x - 50f, y - 100f, 100f, 12f)
-            line(WOOD_DARK, x - 50f, y - 121f, x + 50f, y - 121f, 2f)
-            line(WOOD_DARK, x - 50f, y - 110f, x + 50f, y - 110f, 2f)
-            for (a in 0 until t.archers) {
-                drawArcher(x + (a - 1) * 26f, y - 108f - (a % 2) * 6f, t.faceRight[a], 0f, false)
-            }
+        sprite(sp.tower, SpriteData.tower, 0, 0, t.x, t.y, b)
+        val top = t.y - 80f * b
+        for (a in 0 until t.archers) {
+            val col = if (t.shoot[a] > 0f) 7 + ((0.32f - t.shoot[a]) / 0.32f * 3f).toInt().coerceIn(0, 2) else 0
+            sprite(sp.archer, SpriteData.archer, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE)
         }
     }
 
     private fun DrawScope.drawWall(w: Wall) {
-        val flash = w.hitFlash > 0f
-        val c = if (flash) Color(0xFFFFD0C0) else WOOD_STAKE
-        val cd = if (flash) Color(0xFFE0A090) else WOOD_DARK
+        val sp = sprites ?: return
+        val filter = if (w.hitFlash > 0f) flashFilter else null
         val b = 1f + w.bump * 0.2f
         val stakes = 9
         val reverse = w.ny < 0f
         for (k0 in 0 until stakes) {
             val k = if (reverse) stakes - 1 - k0 else k0
-            val tt = (k - (stakes - 1) / 2f) * 21f
-            val sx = w.x + w.nx * tt
-            val sy = w.y + w.ny * tt
-            val hgt = (44f + ((k * 7) % 3) * 6f) * b
-            oval(SHADOW, sx - 10f, sy - 4f, 20f, 8f)
-            rr(c, sx - 7f, sy - hgt, 14f, hgt, 6f)
-            rect(cd, sx + 2f, sy - hgt + 6f, 5f, hgt - 6f)
+            val tt = (k - (stakes - 1) / 2f) * 20f
+            sprite(sp.stake, SpriteData.stake, 0, 0, w.x + w.nx * tt, w.y + w.ny * tt, b * (0.95f + ((k * 7) % 3) * 0.06f), filter)
         }
-        if (w.hp < w.maxHp) hpBar(w.x, w.y - 74f, 70f, w.hp / w.maxHp, HP_GREEN)
+        if (w.hp < w.maxHp) hpBar(w.x, w.y - 64f, 70f, w.hp / w.maxHp, HP_GREEN)
     }
 
     private fun DrawScope.hpBar(cx: Float, y: Float, width: Float, frac: Float, col: Color) {
@@ -463,109 +402,56 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         rr(col, cx - width / 2f, y, width * frac.coerceIn(0f, 1f), 6f, 3f)
     }
 
-    private fun DrawScope.drawArcher(x: Float, y: Float, faceRight: Boolean, walk: Float, shadow: Boolean) {
-        val f = if (faceRight) 1f else -1f
-        val la = sin(walk) * 3f
-        if (shadow) oval(SHADOW, x - 13f, y - 4f, 26f, 9f)
-        rr(LEG, x - 7f, y - 11f - max(0f, la), 5f, 11f, 2f)
-        rr(LEG, x + 2f, y - 11f - max(0f, -la), 5f, 11f, 2f)
-        rr(ROYAL, x - f * 11f - 4f, y - 32f, 8f, 20f, 3f)
-        rr(SHIRT, x - 10f, y - 31f, 20f, 22f, 6f)
-        rect(WOOD_DARK, x - 10f, y - 17f, 20f, 3f)
-        circ(SKIN, x, y - 40f, 11f)
-        drawArc(HAIR, 180f, 180f, true, Offset(x - 11.5f, y - 52f), Size(23f, 23f))
-        rect(HAIR, x + f * 3f - 1.5f, y - 40f, 3f, 4f)
-        val bx = x + f * 12f
-        drawArc(BOW, if (faceRight) -90f else 90f, 180f, false, Offset(bx - 6f, y - 41f), Size(12f, 30f), style = bowStroke)
-        line(WHITE, bx, y - 40f, bx, y - 12f, 1f)
+    private fun DrawScope.drawArcher(g: Game, i: Int) {
+        val sp = sprites ?: return
+        val col = when {
+            g.aShoot[i] > 0f -> 7 + ((0.32f - g.aShoot[i]) / 0.32f * 3f).toInt().coerceIn(0, 2)
+            g.aMoving[i] -> 1 + walkFrame(g.aWalk[i], 6)
+            else -> 0
+        }
+        sprite(sp.archer, SpriteData.archer, col, g.aDir[i], g.ax[i], g.ay[i], UNIT_SCALE)
     }
 
     private fun DrawScope.drawKing(g: Game) {
+        val sp = sprites ?: return
         val x = g.kx
         val y = g.ky
-        val f = if (g.kFaceRight) 1f else -1f
-        val moving = abs(g.kvx) + abs(g.kvy) > 20f
-        val gait = if (moving) sin(g.kWalk) * 4f else 0f
-        val bob = if (moving) abs(sin(g.kWalk)) * 2f else 0f
-        oval(SHADOW, x - 32f, y - 8f, 64f, 18f)
-        // horse legs
-        rr(HORSE_DARK, x - 20f, y - 18f - max(0f, gait), 6f, 18f, 2f)
-        rr(HORSE_DARK, x - 10f, y - 18f - max(0f, -gait), 6f, 18f, 2f)
-        rr(HORSE_DARK, x + 6f, y - 18f - max(0f, gait), 6f, 18f, 2f)
-        rr(HORSE_DARK, x + 15f, y - 18f - max(0f, -gait), 6f, 18f, 2f)
-        val b = y - bob
-        rr(HORSE_DARK, x - f * 30f - 3f, b - 36f, 7f, 18f, 3f)
-        rr(HORSE, x - 27f, b - 38f, 54f, 22f, 10f)
-        rr(WHITE, x - 10f, b - 26f, 22f, 9f, 4f)
-        rr(HORSE, x + f * 20f - 7f, b - 56f, 15f, 26f, 6f)
-        rr(HORSE_DARK, x + f * 26f - 5f, b - 52f, 11f, 9f, 3f)
-        rr(HORSE_DARK, x + f * 14f - 3f, b - 56f, 6f, 16f, 3f)
-        // rider
-        val rb = b - 30f
-        rr(ROYAL_DARK, x - f * 10f - 5f, rb - 32f, 10f, 34f, 4f)
-        rr(ROYAL, x - 10f, rb - 32f, 20f, 26f, 7f)
-        rr(SILVER, x - 7f, rb - 29f, 14f, 12f, 4f)
-        circ(SKIN, x, rb - 41f, 10f)
-        rect(HAIR, x + f * 3f - 1.5f, rb - 42f, 3f, 4f)
-        translate(x, rb - 47f) { drawPath(crown, GOLD) }
-        rect(GOLD_DARK, x - 10f, rb - 50f, 20f, 3f)
-        // coin stack
+        val moving = abs(g.kvx) + abs(g.kvy) > 30f
+        val col = if (moving) 1 + walkFrame(g.kWalk, 6) else 0
+        sprite(sp.king, SpriteData.king, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
+        // coin stack on the king's head
         val n = min(g.coins, 70)
-        val base = y - 86f - bob + g.stackBump * 3f
+        val bob = if (moving) abs(sin(g.kWalk * 2f)) * 2f else 0f
+        val base = y - 70f - bob + g.stackBump * 3f
         for (i in 0 until n) {
-            val cy = base - i * 4.5f
             val cx = x + g.sway * i * i * 0.016f
-            oval(GOLD_DARK, cx - 11f, cy - 3f, 22f, 9f)
-            oval(GOLD, cx - 11f, cy - 5f, 22f, 8f)
+            sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, cx, base - i * 4.5f, 1f)
         }
-        if (g.kHp < g.kMaxHp) hpBar(x, y - 100f - n * 4.5f, 50f, g.kHp / g.kMaxHp, HP_GREEN)
+        if (g.kHp < g.kMaxHp) hpBar(x, base - n * 4.5f - 26f, 50f, g.kHp / g.kMaxHp, HP_GREEN)
     }
 
     private fun DrawScope.drawEnemy(e: Enemy) {
-        val s = e.scale
-        val x = e.x
-        val y = e.y
-        val f = if (e.faceRight) 1f else -1f
-        val flash = e.hitFlash > 0f
+        val sp = sprites ?: return
         val boss = e.kind == 2
-        val body = if (flash) WHITE else if (boss) BOSS else RED
-        val light = if (flash) WHITE else RED_LIGHT
-        val dark = if (flash) Color(0xFFFFC0C0) else RED_DARK
-        val la = sin(e.walk) * 3f * s
-        oval(SHADOW, x - 15f * s, y - 5f * s, 30f * s, 10f * s)
-        rr(Color(0xFF4A4A52), x - 8f * s, y - 11f * s - max(0f, la), 6f * s, 11f * s, 2f * s)
-        rr(Color(0xFF4A4A52), x + 2f * s, y - 11f * s - max(0f, -la), 6f * s, 11f * s, 2f * s)
-        rr(body, x - 12f * s, y - 33f * s, 24f * s, 24f * s, 6f * s)
-        rr(dark, x + (if (f > 0) 4f else -12f) * s, y - 33f * s, 8f * s, 24f * s, 4f * s)
-        rr(light, x - 12f * s, y - 54f * s, 24f * s, 23f * s, 8f * s)
-        rect(BLACK, x - 7f * s + f * 3f * s, y - 46f * s, 12f * s, 2.5f * s)
-        rect(BLACK, x - 5f * s + f * 3f * s, y - 41f * s, 9f * s, 2f * s)
-        // plume
-        rr(body, x - 3f * s, y - 64f * s, 6f * s, 14f * s, 3f * s)
-        rr(body, x - 3f * s - f * 9f * s - (if (f > 0) 0f else -3f * s), y - 64f * s, 12f * s, 5f * s, 3f * s)
+        val filter = if (e.hitFlash > 0f) flashFilter else null
         if (boss) {
-            rect(GOLD, x - 12f * s, y - 35f * s, 24f * s, 3f * s)
-            rr(dark, x - 17f * s, y - 33f * s, 8f * s, 9f * s, 3f * s)
-            rr(dark, x + 9f * s, y - 33f * s, 8f * s, 9f * s, 3f * s)
+            val col = if (e.swing > 0f) 4 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 4)
+            sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE, filter)
+        } else {
+            val col = if (e.swing > 0f) 6 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 6)
+            sprite(sp.knight, SpriteData.knight, col, e.dir, e.x, e.y, UNIT_SCALE * e.scale, filter)
         }
-        // sword
-        val hx = x + f * 12f * s
-        val hy = y - 22f * s
-        val ang = if (f > 0) 0.35f - e.swing * 2.2f else PI.toFloat() - 0.35f + e.swing * 2.2f
-        val len = 24f * s
-        line(SILVER, hx, hy, hx + cos(ang) * len, hy + sin(ang) * len, 3.5f * s)
         if (boss || e.hp < e.maxHp) {
-            val bw = if (boss) 110f else 36f * s
-            hpBar(x, y - 74f * s - (if (boss) 6f else 0f), bw, e.hp / e.maxHp, HP_RED)
+            val bw = if (boss) 110f else 34f * e.scale
+            val top = if (boss) 150f else 62f * e.scale
+            hpBar(e.x, e.y - top, bw, e.hp / e.maxHp, HP_RED)
         }
     }
 
     private fun DrawScope.drawGroundCoin(c: Coin) {
-        val wdt = 6f + 16f * abs(cos(c.spin))
-        if (c.z < 60f) oval(SHADOW, c.x - 10f, c.y - 3f, 20f, 7f)
-        val y = c.y - c.z - 10f
-        oval(GOLD_DARK, c.x - wdt / 2f, y - 11f, wdt, 22f)
-        oval(GOLD, c.x - wdt / 2f + 1.5f, y - 11f, wdt - 3f, 20f)
+        val sp = sprites ?: return
+        val frame = ((c.spin / PI.toFloat() * 8f).toInt() % 8 + 8) % 8
+        sprite(sp.coinSpin, SpriteData.coinSpin, frame, 0, c.x, c.y - c.z, 1f)
     }
 
     private fun DrawScope.drawArrows(g: Game) {
@@ -584,15 +470,15 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     }
 
     private fun DrawScope.drawFlyCoins(g: Game) {
+        val sp = sprites ?: return
         for (f in g.flyCoins) {
             if (!f.active || f.pad >= g.pads.size) continue
             val p = g.pads[f.pad]
             val t = f.t
             val x = f.sx + (p.x - f.sx) * t
             val y = f.sy + (p.y - f.sy) * t
-            val z = f.sz * (1f - t) + sin(t * PI.toFloat()) * 60f
-            oval(GOLD_DARK, x - 11f, y - z - 3f, 22f, 9f)
-            oval(GOLD, x - 11f, y - z - 5f, 22f, 8f)
+            val z = (f.sz - 25f) * (1f - t) + sin(t * PI.toFloat()) * 60f
+            sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, x, y - z, 1f)
         }
     }
 

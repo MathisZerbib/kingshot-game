@@ -1,0 +1,145 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<script type="module">
+import * as THREE from 'three';
+import * as M from './models.js';
+
+const SS = 2; // supersampling
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.setClearColor(0x000000, 0);
+
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight(0xfff8ee, 0x6f8f4a, 1.35));
+const sun = new THREE.DirectionalLight(0xfff1dc, 2.3);
+sun.position.set(-260, 520, 300);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -420, right: 420, top: 420, bottom: -420, near: 1, far: 2000 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.6;
+sun.shadow.radius = 3;
+scene.add(sun);
+scene.add(sun.target);
+const fill = new THREE.DirectionalLight(0xc8dcff, 0.45);
+fill.position.set(300, 200, -200);
+scene.add(fill);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), new THREE.ShadowMaterial({ opacity: 0.3 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 4000);
+const ELEV = 45 * Math.PI / 180;
+camera.position.set(0, Math.sin(ELEV) * 1500, Math.cos(ELEV) * 1500);
+camera.lookAt(0, 0, 0);
+
+function frameCamera(w, h, ppu, ax, ay) {
+  camera.left = -ax / ppu; camera.right = (w - ax) / ppu;
+  camera.top = ay / ppu; camera.bottom = -(h - ay) / ppu;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w * SS, h * SS, false);
+}
+
+let current = null;
+function setModel(obj, scale = 1, shadow = true) {
+  if (current) scene.remove(current);
+  current = new THREE.Group();
+  current.add(obj);
+  current.scale.setScalar(scale);
+  scene.add(current);
+  ground.visible = shadow;
+}
+
+function snap(ctx, x, y, w, h) {
+  renderer.render(scene, camera);
+  ctx.drawImage(renderer.domElement, 0, 0, w * SS, h * SS, x, y, w, h);
+}
+
+const makers = {
+  archer: () => ({ rig: M.makeArcher(), pose: M.poseArcher }),
+  knight: () => ({ rig: M.makeKnight(false), pose: M.poseKnight }),
+  boss: () => ({ rig: M.makeKnight(true), pose: M.poseKnight }),
+  king: () => ({ rig: M.makeKing(), pose: M.poseKing }),
+};
+
+/** Animated unit atlas: rows = 8 directions, columns = frames [{mode,t}]. */
+window.renderUnit = (name, { w, h, ppu, ax, ay, scale = 1, frames }) => {
+  const { rig, pose } = makers[name]();
+  setModel(rig.root, scale);
+  frameCamera(w, h, ppu, ax, ay);
+  const canvas = document.createElement('canvas');
+  canvas.width = w * frames.length; canvas.height = h * 8;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  for (let d = 0; d < 8; d++) {
+    current.rotation.y = d * Math.PI / 4;
+    frames.forEach((f, i) => { pose(rig, f.mode, f.t); snap(ctx, i * w, d * h, w, h); });
+  }
+  return canvas.toDataURL('image/png');
+};
+
+const statics = {
+  castle: () => M.makeCastle(), house: () => M.makeHouse(), tower: () => M.makeTower(),
+  stake: () => M.makeStake(), pine0: () => M.makePine(0), pine1: () => M.makePine(1),
+  roundtree: () => M.makeRoundTree(), rock0: () => M.makeRock(0), rock1: () => M.makeRock(1),
+};
+
+/** Static object rendered in a big cell, then auto-cropped. Returns {url, w, h, ax, ay}. */
+window.renderStatic = (name, { ppu, size = 900, rotY = 0, shadow = true }) => {
+  setModel(statics[name](), 1, shadow);
+  current.rotation.y = rotY;
+  const ax = size / 2, ay = size * 0.72;
+  frameCamera(size, size, ppu, ax, ay);
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingQuality = 'high';
+  snap(ctx, 0, 0, size, size);
+  return crop(c, ax, ay);
+};
+
+/** Coin frames: spinning (8 frames) and flat; no ground shadow on the flat one. */
+window.renderCoins = () => {
+  const out = {};
+  const spin = M.makeCoin(false);
+  setModel(spin.root, 1, true);
+  const w = 40, h = 44, ppu = 1.6, ax = 20, ay = 38;
+  frameCamera(w, h, ppu, ax, ay);
+  let c = document.createElement('canvas'); c.width = w * 8; c.height = h;
+  let ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+  for (let i = 0; i < 8; i++) { current.rotation.y = i * Math.PI / 8; snap(ctx, i * w, 0, w, h); }
+  out.spin = { url: c.toDataURL('image/png'), w, h, ax, ay };
+  const flat = M.makeCoin(true);
+  setModel(flat.root, 1, false);
+  const fw = 40, fh = 30, fax = 20, fay = 20;
+  frameCamera(fw, fh, ppu, fax, fay);
+  c = document.createElement('canvas'); c.width = fw; c.height = fh;
+  ctx = c.getContext('2d'); ctx.imageSmoothingQuality = 'high';
+  snap(ctx, 0, 0, fw, fh);
+  out.flat = { url: c.toDataURL('image/png'), w: fw, h: fh, ax: fax, ay: fay };
+  return out;
+};
+
+function crop(c, ax, ay) {
+  const ctx = c.getContext('2d');
+  const d = ctx.getImageData(0, 0, c.width, c.height).data;
+  let x0 = c.width, y0 = c.height, x1 = 0, y1 = 0;
+  for (let y = 0; y < c.height; y++) for (let x = 0; x < c.width; x++) {
+    if (d[(y * c.width + x) * 4 + 3] > 4) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  x0 = Math.max(0, x0 - 2); y0 = Math.max(0, y0 - 2); x1 = Math.min(c.width - 1, x1 + 2); y1 = Math.min(c.height - 1, y1 + 2);
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  const o = document.createElement('canvas'); o.width = w; o.height = h;
+  o.getContext('2d').drawImage(c, x0, y0, w, h, 0, 0, w, h);
+  return { url: o.toDataURL('image/png'), w, h, ax: ax - x0, ay: ay - y0 };
+}
+window.ready = true;
+</script></body></html>
