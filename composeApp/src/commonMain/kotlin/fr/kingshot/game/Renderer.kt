@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
@@ -110,7 +111,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     /** Base pixel height of cached text; drawn scaled to the wanted size. */
     private val base = 64f
     private val text = TextCache(measurer, TextStyle(fontSize = (base / density).sp, fontWeight = FontWeight.Black))
-    private val outline = Stroke(width = 12f, join = StrokeJoin.Round)
+    private val outline = Stroke(width = 8f, join = StrokeJoin.Round)
 
     private val roadStrokeEdge = Stroke(width = 104f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     private val roadStroke = Stroke(width = 88f, cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -167,7 +168,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             scale(s, s, Offset.Zero)
         }) {
             if (outlined) drawText(t, color = BLACK, alpha = alpha * 0.85f, drawStyle = outline)
-            drawText(t, color = color, alpha = alpha)
+            // Fill must be explicit: a null drawStyle keeps the previous (stroke) paint style.
+            drawText(t, color = color, alpha = alpha, drawStyle = Fill)
         }
     }
 
