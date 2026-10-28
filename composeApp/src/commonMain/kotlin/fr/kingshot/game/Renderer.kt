@@ -53,9 +53,11 @@ private val SEASONS = arrayOf(
 )
 private val DIRT = Color(0xFFDDB57F)
 private val DIRT_EDGE = Color(0xFFCDA36C)
-private val CLIFF_FACE = Color(0xFFA39B8E)
-private val CLIFF_FACE_DARK = Color(0xFF8A8276)
-private val CLIFF_FOOT = Color(0xFF746D63)
+private val CLIFF_FACE = Color(0xFFB09A80)
+private val CLIFF_FACE_DARK = Color(0x33000000)
+private val CLIFF_FOOT = Color(0x40000000)
+private val CLIFF_LIP = Color(0x55000000)
+private val CLIFF_SHADOW = Color(0x26000000)
 private val SHADOW = Color(0x33000000)
 private val KING_RING = Color(0x4DFFFFFF)
 private val PAD_DIM = Color(0x66000000)
@@ -269,15 +271,30 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
         for (r in roads) drawPath(r, DIRT_EDGE, style = roadStrokeEdge)
         for (r in roads) drawPath(r, DIRT, style = roadStroke)
+        // three passes so touching cliff blocks merge into one plateau: cast shadows, rock faces, grass tops
+        for (c in World.cliffs) {
+            val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
+            if (x > vr + 120f || x + cw < vl || y - ht > vb || y + d + 60f < vt) continue
+            // soft shadow on the ground, falling right like the sprites' baked shadows
+            rr(CLIFF_SHADOW, x + 18f, y + d - 22f, cw + ht * 0.35f, 58f, 29f)
+            rr(CLIFF_SHADOW, x + cw - 20f, y + d - ht, ht * 0.35f + 20f, ht + 30f, 26f)
+        }
         for (c in World.cliffs) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
             if (x > vr || x + cw < vl || y - ht > vb || y + d < vt) continue
-            oval(SHADOW, x - 10f, y + d - 30f, cw + 40f, 70f)
-            rr(CLIFF_FACE, x, y + d - ht, cw, ht, 22f)
-            rr(CLIFF_FACE_DARK, x + cw * 0.62f, y + d - ht, cw * 0.38f, ht, 22f)
-            rr(CLIFF_FOOT, x, y + d - ht * 0.22f, cw, ht * 0.22f, 22f)
-            rr(season[3], x - 6f, y - ht, cw + 12f, d + 18f, 26f)
-            rr(season[4], x + 10f, y - ht + 10f, cw * 0.5f, d * 0.5f, 30f)
+            val fy = y + d - ht
+            rr(CLIFF_FACE, x, fy, cw, ht, 18f)
+            // rock strata and a darker base give the face some depth
+            rect(CLIFF_FACE_DARK, x + 6f, fy + ht * 0.42f, cw - 12f, 6f)
+            rect(CLIFF_FACE_DARK, x + 6f, fy + ht * 0.68f, cw - 12f, 5f)
+            rr(CLIFF_FOOT, x, y + d - ht * 0.2f, cw, ht * 0.2f, 18f)
+        }
+        for (c in World.cliffs) {
+            val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
+            if (x > vr || x + cw < vl || y - ht > vb || y + d < vt) continue
+            rr(CLIFF_LIP, x - 4f, y - ht + d - 4f, cw + 8f, 26f, 13f) // shade under the grass overhang
+            rr(season[2], x - 6f, y - ht, cw + 12f, d + 4f, 26f) // sunlit plateau, lighter than the ground below
+            rr(season[4], x + 12f, y - ht + 12f, cw * 0.55f, d * 0.45f, 30f)
         }
     }
 
