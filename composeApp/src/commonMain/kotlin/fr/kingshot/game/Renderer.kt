@@ -45,18 +45,20 @@ private const val K_ARCHER = 7
 private const val K_KING = 8
 private const val K_COIN = 9
 
-private val GRASS = Color(0xFF8DC24F)
-private val GRASS_DARK = Color(0xFF7DB443)
-private val GRASS_LIGHT = Color(0xFF9CCD5C)
+// One palette per level, cycling: spring, autumn, winter (grass, dark patch, light patch, cliff top, cliff top light)
+private val SEASONS = arrayOf(
+    arrayOf(Color(0xFF8DC24F), Color(0xFF7DB443), Color(0xFF9CCD5C), Color(0xFF86A83F), Color(0xFF94B54A)),
+    arrayOf(Color(0xFFC2B25A), Color(0xFFB2A04C), Color(0xFFD0BF68), Color(0xFFAE9A45), Color(0xFFBCA851)),
+    arrayOf(Color(0xFFE4ECEF), Color(0xFFD2DDE3), Color(0xFFF1F5F7), Color(0xFFD8E2E7), Color(0xFFE8EEF1)),
+)
 private val DIRT = Color(0xFFDDB57F)
 private val DIRT_EDGE = Color(0xFFCDA36C)
-private val CLIFF_TOP = Color(0xFF86A83F)
-private val CLIFF_TOP_LIGHT = Color(0xFF94B54A)
 private val CLIFF_FACE = Color(0xFFA39B8E)
 private val CLIFF_FACE_DARK = Color(0xFF8A8276)
 private val CLIFF_FOOT = Color(0xFF746D63)
 private val SHADOW = Color(0x33000000)
 private val KING_RING = Color(0x4DFFFFFF)
+private val PAD_DIM = Color(0x66000000)
 private val ALERT_RED = Color(0xFFFF4A3A)
 private const val MAX_EDGE_ARROWS = 12
 private val WOOD = Color(0xFFA4683A)
@@ -124,6 +126,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private val keys = LongArray(2048)
     private val flashFilter = ColorFilter.tint(Color(0xD0FFFFFF), BlendMode.SrcAtop)
+    private val dimFilter = ColorFilter.tint(Color(0xB0808080), BlendMode.SrcAtop)
 
     /** Pre-rendered 3D sprite atlases; null until loaded. */
     var sprites: Sprites? = null
@@ -135,7 +138,14 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     var topInset = 0f
 
-    init {
+    private var roadsVersion = -1
+    private var season = SEASONS[0]
+
+    /** Road paths are cached per map; rebuilt only when [World.load] changes the layout. */
+    private fun syncRoads() {
+        if (roadsVersion == World.version) return
+        roadsVersion = World.version
+        roads.clear()
         for (p in World.paths) roads.add(polyPath(p.xs, p.ys))
         for (r in World.decoRoads) {
             val n = r.size / 2
@@ -202,13 +212,15 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val vt = cy - halfH - 60f
         val vb = cy + halfH + 260f
 
-        drawRect(GRASS)
+        syncRoads()
+        season = SEASONS[(g.level - 1) % SEASONS.size]
+        drawRect(season[0])
         withTransform({
             translate(ox, oy)
             scale(scale, scale, Offset.Zero)
         }) {
             drawGround(vl, vt, vr, vb)
-            for (p in g.pads) if (p.visible) drawPad(p)
+            for (p in g.pads) if (p.visible) drawPad(p, p.kind == PAD_TOWER_ARCHER && g.squad == 0)
             drawSorted(g, vl, vt, vr, vb)
             drawArrows(g)
             drawFlyCoins(g)
@@ -241,7 +253,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         PAD_FORGE -> "Forge  +dégâts"
         PAD_REPAIR -> "Réparer le donjon"
         PAD_TOWER -> "Tour"
-        PAD_TOWER_ARCHER -> "Archer sur la tour"
+        PAD_TOWER_ARCHER -> "1 archer → tour"
         else -> "Palissade"
     }
 
@@ -251,7 +263,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         while (i < gp.size) {
             val x = gp[i]; val y = gp[i + 1]; val r = gp[i + 2]
             if (x + r > vl && x - r < vr && y + r > vt && y - r < vb) {
-                oval(if (gp[i + 3] > 0.5f) GRASS_DARK else GRASS_LIGHT, x - r, y - r * 0.6f, r * 2f, r * 1.2f)
+                oval(if (gp[i + 3] > 0.5f) season[1] else season[2], x - r, y - r * 0.6f, r * 2f, r * 1.2f)
             }
             i += 4
         }
@@ -264,12 +276,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             rr(CLIFF_FACE, x, y + d - ht, cw, ht, 22f)
             rr(CLIFF_FACE_DARK, x + cw * 0.62f, y + d - ht, cw * 0.38f, ht, 22f)
             rr(CLIFF_FOOT, x, y + d - ht * 0.22f, cw, ht * 0.22f, 22f)
-            rr(CLIFF_TOP, x - 6f, y - ht, cw + 12f, d + 18f, 26f)
-            rr(CLIFF_TOP_LIGHT, x + 10f, y - ht + 10f, cw * 0.5f, d * 0.5f, 30f)
+            rr(season[3], x - 6f, y - ht, cw + 12f, d + 18f, 26f)
+            rr(season[4], x + 10f, y - ht + 10f, cw * 0.5f, d * 0.5f, 30f)
         }
     }
 
-    private fun DrawScope.drawPad(p: Pad) {
+    private fun DrawScope.drawPad(p: Pad, dim: Boolean) {
         val s = 1f + p.bump * 0.12f
         val hs = Pad.HALF * s
         val x0 = p.x - hs
@@ -284,7 +296,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         line(PAD_LINE, x0 + size - k, y0, x0 + size - 6f, y0, lw); line(PAD_LINE, x0 + size, y0 + 6f, x0 + size, y0 + k, lw)
         line(PAD_LINE, x0, y0 + size - k, x0, y0 + size - 6f, lw); line(PAD_LINE, x0 + 6f, y0 + size, x0 + k, y0 + size, lw)
         line(PAD_LINE, x0 + size - k, y0 + size, x0 + size - 6f, y0 + size, lw); line(PAD_LINE, x0 + size, y0 + size - 6f, x0 + size, y0 + size - k, lw)
-        drawCoinIcon(p.x - 22f, p.y - 4f, 13f)
+        if (p.kind == PAD_TOWER_ARCHER) {
+            val sp = sprites
+            if (sp != null) sprite(sp.archer, SpriteData.archer, 0, 0, p.x - 22f, p.y + 16f, 0.75f, if (dim) dimFilter else null)
+            if (dim) rr(PAD_DIM, x0, y0, size, size, 14f)
+        } else drawCoinIcon(p.x - 22f, p.y - 4f, 13f)
     }
 
     private fun DrawScope.drawCoinIcon(x: Float, y: Float, r: Float) {
@@ -516,10 +532,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val px = w - pw - 10f * u
             rr(HUD_BG, px, top, pw, ph, ph / 2f)
             drawCoinIcon(px + ph / 2f, top + ph / 2f, ph * 0.46f)
-            label(text.num(g.coins), px + pw * 0.62f, top + ph / 2f, 26f * u, WHITE)
+            label(text.num(g.coins), px + pw * 0.62f, top + ph / 2f, 26f * u * (1f + g.stackBump * 0.18f), WHITE)
             // wave
             rr(HUD_BG, 10f * u, top, 120f * u, ph, ph / 2f)
             label(text.str(waveLabel(g.wave)), 70f * u, top + ph / 2f, 18f * u, WHITE, outlined = false)
+            label(text.str(levelLabel(g.level)), 70f * u, top + ph + 12f * u, 13f * u, GOLD)
             // castle hp
             val bw = min(w * 0.5f, 260f * u)
             val bx = w / 2f - bw / 2f
@@ -542,7 +559,14 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             }
         }
         // banners
-        if (g.waveBanner > 0f) {
+        if (g.levelBanner > 0f) {
+            val k = g.levelBanner / 3.5f
+            val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
+            val a = min(1f, g.levelBanner * 2f)
+            label(text.str(levelDoneLabel(g.level - 1)), w / 2f, h * 0.27f, 36f * u * pop, GOLD, a)
+            label(text.str("Nouvelle carte !"), w / 2f, h * 0.27f + 40f * u, 20f * u, WHITE, a)
+        }
+        if (g.waveBanner > 0f && g.levelBanner <= 0f) {
             val k = g.waveBanner / 2.2f
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             label(text.str(waveLabel(g.wave).uppercase()), w / 2f, h * 0.3f, 46f * u * pop, WHITE, min(1f, k * 3f))
@@ -604,6 +628,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private val waveLabels = HashMap<Int, String>()
     private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { "Vague ${max(n, 1)}" }
+    private val levelLabels = HashMap<Int, String>()
+    private fun levelLabel(n: Int) = levelLabels.getOrPut(n) { "Niveau $n" }
+    private val levelDoneLabels = HashMap<Int, String>()
+    private fun levelDoneLabel(n: Int) = levelDoneLabels.getOrPut(n) { "NIVEAU $n TERMINÉ !" }
     private val fpsLabels = HashMap<Int, String>()
     private fun fpsLabel(n: Int) = fpsLabels.getOrPut(n) { "$n fps" }
 }

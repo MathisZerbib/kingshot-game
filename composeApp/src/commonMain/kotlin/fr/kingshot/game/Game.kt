@@ -250,8 +250,8 @@ class Game {
     val particles = Array(700) { Particle() }
     val texts = Array(90) { FloatText() }
 
-    val towers = Array(World.towerSpots.size / 2) { Tower(World.towerSpots[it * 2], World.towerSpots[it * 2 + 1]) }
-    val walls = Array(World.paths.size) { Wall(it, World.paths[it].length * World.wallFractions[it]) }
+    var towers = emptyArray<Tower>(); private set
+    var walls = emptyArray<Wall>(); private set
     val pads = ArrayList<Pad>()
     lateinit var recruitPad: Pad
     lateinit var forgePad: Pad
@@ -267,6 +267,13 @@ class Game {
     var bossBanner = 0f
     var kills = 0
     var best = 0
+
+    // Levels: finishing every tower, tower archer and palisade loads a bigger map
+    var level = 1
+    var levelBanner = 0f // seconds left on the "level complete" banner
+    private var levelUpPending = false
+    private var waveCleared = true
+    var kBoost = 0f // seconds of king speed boost left (after clearing a wave)
     var newRecord = false
 
     // Camera
@@ -301,6 +308,16 @@ class Game {
             }
             ring++
         }
+        buildMap()
+        best = Storage.loadBest()
+        reset()
+        state = STATE_MENU
+    }
+
+    /** Towers and palisades for the current [World] layout. */
+    private fun buildMap() {
+        towers = Array(World.towerSpots.size / 2) { Tower(World.towerSpots[it * 2], World.towerSpots[it * 2 + 1]) }
+        walls = Array(World.paths.size) { Wall(it, World.paths[it].length * World.wallFractions[it]) }
         for (w in walls) {
             val p = World.paths[w.path]
             p.sample(w.s, tmp)
@@ -308,12 +325,27 @@ class Game {
             w.x = tmp.x; w.y = tmp.y
             w.nx = -tmp2.y; w.ny = tmp2.x
         }
-        best = Storage.loadBest()
-        reset()
-        state = STATE_MENU
+    }
+
+    /** Base pads (recruit, forge, repair) followed by the tower and palisade pads of the current map. */
+    private fun buildMapPads() {
+        pads.clear()
+        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
+        for (i in towers.indices) {
+            val t = towers[i]
+            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = 25 })
+            pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = false })
+        }
+        for (i in walls.indices) {
+            val w = walls[i]
+            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = 15 })
+        }
     }
 
     fun reset() {
+        if (level != 1) { level = 1; World.load(1); buildMap() }
+        levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
+        castleMaxHp = 600f
         kx = World.KING_START_X; ky = World.KING_START_Y
         kvx = 0f; kvy = 0f
         kHp = kMaxHp; kDead = false; coins = 0
@@ -333,20 +365,36 @@ class Game {
         for (t in texts) t.active = false
         for (t in towers) { t.built = false; t.archers = 0 }
         for (w in walls) { w.built = false; w.hp = 0f }
-        pads.clear()
         recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.level = squad; it.cost = recruitCost(squad) }
         forgePad = Pad(PAD_FORGE, 560f, 1640f).also { it.cost = forgeCost(0); it.visible = false }
         repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = 15; it.visible = false }
-        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
-        for (i in towers.indices) {
-            val t = towers[i]
-            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = 25 })
-            pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 12; it.visible = false })
-        }
-        for (i in walls.indices) {
-            val w = walls[i]
-            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = 15 })
-        }
+        buildMapPads()
+    }
+
+    private fun levelDone(): Boolean =
+        towers.all { it.built && it.archers >= TOWER_SLOTS } && walls.all { it.built && it.hp > 0f }
+
+    /** Next level: bank loose coins, clear the field, load a bigger map, keep coins/squad/forge. */
+    private fun levelUp() {
+        levelUpPending = false
+        level++
+        levelBanner = 3.5f
+        for (c in coinsOnGround) if (c.active) { c.active = false; coins++ }
+        for (f in flyCoins) if (f.active) { f.active = false; coins++ }
+        for (e in enemies) e.active = false
+        for (a in arrows) a.active = false
+        toSpawn = 0; bossPending = false; waveBreak = 7f; waveCleared = true
+        castleMaxHp *= 1.25f
+        castleHp = castleMaxHp
+        World.load(level)
+        buildMap()
+        recruitPad.cost = recruitCost(recruitPad.level)
+        buildMapPads()
+        kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
+        camX = kx; camY = ky
+        for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
+        burst(kx, ky, 40f, 70, 0xFFFFD84AL, 420f)
+        shake = 8f
     }
 
     fun start() {
@@ -354,10 +402,8 @@ class Game {
         state = STATE_PLAY
     }
 
-    private fun recruitCost(n: Int): Int = when (n) {
-        0 -> 6; 1 -> 16; 2 -> 30; 3 -> 45; 4 -> 60
-        else -> 60 + (n - 4) * 20
-    }
+    // Archers are spent on towers now, so recruiting stays affordable; cheaper from level 2.
+    private fun recruitCost(n: Int): Int = (min(10 + n * 3, 40) * (if (level >= 2) 0.75f else 1f)).toInt()
 
     private fun forgeCost(n: Int): Int = 20 + n * 25 + n * n * 5
 
@@ -397,6 +443,9 @@ class Game {
         if (shake > 0f) shake = max(0f, shake - dt * 30f)
         if (castleFlash > 0f) castleFlash -= dt
         if (castleAlarm > 0f) castleAlarm -= dt
+        if (levelBanner > 0f) levelBanner -= dt
+        if (kBoost > 0f) kBoost -= dt
+        if (levelUpPending) levelUp()
         if (waveBanner > 0f) waveBanner -= dt
         if (bossBanner > 0f) bossBanner -= dt
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
@@ -446,7 +495,7 @@ class Game {
             val l = hypot(mx, my)
             if (l > 1f) { mx /= l; my /= l }
         }
-        val speed = 270f
+        val speed = if (kBoost > 0f) 351f else 270f
         val tvx = mx * speed
         val tvy = my * speed
         val acc = min(1f, dt * 14f)
@@ -642,7 +691,7 @@ class Game {
     }
 
     private fun updateCoins(dt: Float) {
-        val magnet = 320f
+        val magnet = 520f
         for (c in coinsOnGround) {
             if (!c.active) continue
             c.t += dt
@@ -651,13 +700,18 @@ class Game {
                 0 -> {
                     c.vz -= 1100f * dt
                     c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt
+                    if (!kDead && state == STATE_PLAY && c.t > 0.1f) {
+                        val dx = kx - c.x
+                        val dy = ky - c.y
+                        if (dx * dx + dy * dy < 200f * 200f) { c.state = 2; c.t = 0f; c.vx = 0f; continue }
+                    }
                     if (c.z <= 0f) {
                         c.z = 0f
                         if (c.vz < -150f) { c.vz = -c.vz * 0.35f; c.vx *= 0.5f; c.vy *= 0.5f } else { c.state = 1; c.t = 0f }
                     }
                 }
                 1 -> {
-                    if (!kDead && state == STATE_PLAY && c.t > 0.15f) {
+                    if (!kDead && state == STATE_PLAY) {
                         val dx = kx - c.x
                         val dy = ky - c.y
                         if (dx * dx + dy * dy < magnet * magnet) { c.state = 2; c.t = 0f; c.vx = 0f }
@@ -665,13 +719,13 @@ class Game {
                 }
                 2 -> {
                     if (kDead) { c.state = 1; c.z = 0f; continue }
-                    c.vx += dt * 3200f // used as speed
+                    c.vx += dt * 4500f // used as speed
                     val tz = 95f + min(coins, MAX_STACK) * 4.5f
                     val dx = kx - c.x
                     val dy = ky - c.y
                     val dz = tz - c.z
                     val d = sqrt(dx * dx + dy * dy + dz * dz)
-                    val step = (420f + c.vx) * dt
+                    val step = (500f + c.vx) * dt
                     if (d <= step) {
                         c.active = false
                         coins++
@@ -694,6 +748,17 @@ class Game {
                 if (!p.visible) continue
                 if (abs(kx - p.x) < Pad.HALF && abs(ky - p.y) < Pad.HALF) { onPad = p; break }
             }
+        }
+        if (onPad != null && onPad.kind == PAD_TOWER_ARCHER) {
+            // paid with squad archers, one every 0.45 s
+            payTimer -= dt
+            if (payTimer <= 0f && squad > 0) {
+                payTimer = 0.45f
+                squad--
+                burst(ax[squad], ay[squad], 30f, 14, 0xFF6FB7FFL, 220f)
+                complete(onPad)
+            }
+            return
         }
         if (onPad == null || coins <= 0 || onPad.paid + onPad.pending >= onPad.cost) {
             payTimer = 0.12f
@@ -779,9 +844,9 @@ class Game {
                 if (t.archers < TOWER_SLOTS) t.archers++
                 t.bump = 0.6f
                 p.level++
-                p.cost = 12 + p.level * 14
                 if (t.archers >= TOWER_SLOTS) p.visible = false
                 burst(t.x, t.y, 120f, 14, 0xFF6FB7FFL, 180f)
+                if (levelDone()) levelUpPending = true
             }
             PAD_WALL -> {
                 val w = walls[p.ref]
@@ -791,6 +856,7 @@ class Game {
                 w.bump = 1f
                 p.visible = false
                 burst(w.x, w.y, 20f, 26, 0xFF7A4A2AL, 280f)
+                if (levelDone()) levelUpPending = true
             }
         }
     }
@@ -815,9 +881,11 @@ class Game {
             return
         }
         if (enemies.any { it.active }) return
+        if (!waveCleared) { waveCleared = true; if (wave > 0) kBoost = 2f }
         waveBreak -= dt
         if (waveBreak <= 0f) {
             wave++
+            waveCleared = false
             toSpawn = 3 + wave * 2
             bossPending = wave % 5 == 0
             spawnTimer = 0.5f
@@ -836,7 +904,7 @@ class Game {
         val paths = when {
             wave <= 1 -> 1
             wave <= 3 -> 2
-            else -> 3
+            else -> World.paths.size
         }
         e.active = true
         e.gen++
