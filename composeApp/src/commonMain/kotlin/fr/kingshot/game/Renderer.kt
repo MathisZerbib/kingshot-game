@@ -536,7 +536,6 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             // wave
             rr(HUD_BG, 10f * u, top, 120f * u, ph, ph / 2f)
             label(text.str(waveLabel(g.wave)), 70f * u, top + ph / 2f, 18f * u, WHITE, outlined = false)
-            label(text.str(levelLabel(g.level)), 70f * u, top + ph + 12f * u, 13f * u, GOLD)
             // castle hp
             val bw = min(w * 0.5f, 260f * u)
             val bx = w / 2f - bw / 2f
@@ -545,6 +544,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val frac = (g.castleHp / g.castleMaxHp).coerceIn(0f, 1f)
             rr(if (frac > 0.35f) HP_GREEN else HP_RED, bx, by, bw * frac, 8f * u, 4f * u)
             label(text.str("Donjon"), w / 2f, by + 22f * u, 12f * u, WHITE)
+            label(text.str(levelLabel(g.level)), 70f * u, by + 22f * u, 14f * u, GOLD)
             // wave countdown
             if (g.toSpawn == 0 && !g.bossPending && g.waveBreak < 7f && g.waveBreak > 0f && g.enemies.none { it.active }) {
                 label(text.str("Prochaine vague dans"), w / 2f, by + 46f * u, 14f * u, WHITE)
