@@ -305,9 +305,9 @@ M = {}
 
 
 def build_materials():
-    M["wood"] = noise_mat("wood", (0.2, 0.11, 0.05), (0.34, 0.2, 0.09), scale=3.0, rough=0.7, bump=0.25)
-    M["wood_dark"] = noise_mat("wood_dark", (0.12, 0.065, 0.03), (0.22, 0.12, 0.055), scale=3.0, rough=0.75, bump=0.25)
-    M["wood_cut"] = mat("wood_cut", (0.55, 0.4, 0.22), rough=0.8)
+    M["wood"] = noise_mat("wood", (0.11, 0.055, 0.022), (0.2, 0.11, 0.045), scale=3.0, rough=0.7, bump=0.25)
+    M["wood_dark"] = noise_mat("wood_dark", (0.06, 0.03, 0.013), (0.12, 0.065, 0.028), scale=3.0, rough=0.75, bump=0.25)
+    M["wood_cut"] = mat("wood_cut", (0.32, 0.22, 0.11), rough=0.8)
     M["rope"] = mat("rope", (0.72, 0.6, 0.38), rough=0.9)
     M["gold"] = mat("gold", (1.0, 0.76, 0.22), rough=0.28, metal=1.0)
     M["gold_dark"] = mat("gold_dark", (0.72, 0.5, 0.12), rough=0.35, metal=1.0)
