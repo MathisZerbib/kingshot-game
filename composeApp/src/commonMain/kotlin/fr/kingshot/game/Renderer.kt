@@ -126,9 +126,6 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private val keys = LongArray(2048)
     private val flashFilter = ColorFilter.tint(Color(0xD0FFFFFF), BlendMode.SrcAtop)
-    // placeholders for the stone/royal ages until dedicated sprites land
-    private val stoneFilter = ColorFilter.tint(Color(0xB0A8A49C), BlendMode.SrcAtop)
-    private val royalFilter = ColorFilter.tint(Color(0x50FFD54A), BlendMode.SrcAtop)
     private val dimFilter = ColorFilter.tint(Color(0xB0808080), BlendMode.SrcAtop)
 
     /** Pre-rendered 3D sprite atlases; null until loaded. */
@@ -400,14 +397,20 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private fun DrawScope.drawCastle(g: Game) {
         val sp = sprites ?: return
-        sprite(sp.castle, SpriteData.castle, 0, 0, World.CASTLE_X, World.CASTLE_Y - 30f, 0.9f, if (g.castleFlash > 0f) flashFilter else null)
+        val royal = g.age >= 3
+        sprite(if (royal) sp.castleRoyal else sp.castle, if (royal) SpriteData.castleRoyal else SpriteData.castle, 0, 0,
+            World.CASTLE_X, World.CASTLE_Y - 30f, 0.9f, if (g.castleFlash > 0f) flashFilter else null)
     }
 
     private fun DrawScope.drawTower(t: Tower, age: Int) {
         val sp = sprites ?: return
         val b = 1f + t.bump * 0.15f
-        sprite(sp.tower, SpriteData.tower, 0, 0, t.x, t.y, b, if (age >= 3) royalFilter else if (age == 2) stoneFilter else null)
-        val top = t.y - 80f * b
+        when {
+            age >= 3 -> sprite(sp.towerRoyal, SpriteData.towerRoyal, 0, 0, t.x, t.y, b)
+            age == 2 -> sprite(sp.towerStone, SpriteData.towerStone, 0, 0, t.x, t.y, b)
+            else -> sprite(sp.tower, SpriteData.tower, 0, 0, t.x, t.y, b)
+        }
+        val top = t.y - (if (age >= 3) 96f else 80f) * b
         for (a in 0 until t.archers) {
             val col = if (t.shoot[a] > 0f) 7 + ((0.32f - t.shoot[a]) / 0.32f * 3f).toInt().coerceIn(0, 2) else 0
             sprite(sp.archer, SpriteData.archer, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE)
@@ -416,21 +419,31 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private fun DrawScope.drawWall(w: Wall, age: Int) {
         val sp = sprites ?: return
-        val filter = if (w.hitFlash > 0f) flashFilter else if (age >= 2) stoneFilter else null
+        val filter = if (w.hitFlash > 0f) flashFilter else null
         val b = 1f + w.bump * 0.2f
-        // palisade: 9 stakes; stone rampart: 14 stakes (2 x RAMPART_HALF) with a two-leaf gate in the middle
-        val stakes = if (age >= 2) 14 else 9
-        val reverse = w.ny < 0f
-        val slide = w.gate * 38f
-        for (k0 in 0 until stakes) {
-            val k = if (reverse) stakes - 1 - k0 else k0
-            var tt = (k - (stakes - 1) / 2f) * 20f
-            var kk = b * (0.95f + ((k * 7) % 3) * 0.06f)
-            if (stakes == 14) {
-                if (k == 5 || k == 6) tt -= slide else if (k == 7 || k == 8) tt += slide // gate leaves open sideways
-                if (k == 4 || k == 9) kk *= 1.3f // gate posts
+        if (age >= 2) {
+            // stone rampart: segment, gate, segment along the wall line, drawn back to front
+            val vertical = w.ry != 0f
+            val open = w.gate > 0.5f
+            for (i in -1..1) { // left to right / top to bottom = back to front
+                val x = w.x + w.rx * i * 90f
+                val y = w.y + w.ry * i * 90f
+                if (i == 0) {
+                    if (vertical) sprite(if (open) sp.gateOpenV else sp.gateClosedV, if (open) SpriteData.gateOpenV else SpriteData.gateClosedV, 0, 0, x, y, b, filter)
+                    else sprite(if (open) sp.gateOpen else sp.gateClosed, if (open) SpriteData.gateOpen else SpriteData.gateClosed, 0, 0, x, y, b, filter)
+                } else {
+                    if (vertical) sprite(sp.wallStoneV, SpriteData.wallStoneV, 0, 0, x, y, b, filter)
+                    else sprite(sp.wallStone, SpriteData.wallStone, 0, 0, x, y, b, filter)
+                }
             }
-            sprite(sp.stake, SpriteData.stake, 0, 0, w.x + w.nx * tt, w.y + w.ny * tt, kk, filter)
+        } else {
+            val stakes = 9
+            val reverse = w.ny < 0f
+            for (k0 in 0 until stakes) {
+                val k = if (reverse) stakes - 1 - k0 else k0
+                val tt = (k - (stakes - 1) / 2f) * 20f
+                sprite(sp.stake, SpriteData.stake, 0, 0, w.x + w.nx * tt, w.y + w.ny * tt, b * (0.95f + ((k * 7) % 3) * 0.06f), filter)
+            }
         }
         if (w.hp < w.maxHp) hpBar(w.x, w.y - 64f, 70f, w.hp / w.maxHp, HP_GREEN)
     }

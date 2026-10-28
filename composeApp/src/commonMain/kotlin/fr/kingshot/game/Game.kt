@@ -159,10 +159,13 @@ class Wall(val path: Int, val s: Float) {
     var hitFlash = 0f
     var bump = 0f
     var gate = 0f // 0 closed .. 1 open (ramparts, from the stone age)
+    // rampart line snapped to the sprite axes (east-west or north-south), since the stone sprites are axis-aligned
+    var rx = 0f
+    var ry = 0f
 }
 
 /** Half length of a stone rampart across its road, and half width of its gate. */
-const val RAMPART_HALF = 140f
+const val RAMPART_HALF = 135f // gate (90) + one 90-unit stone segment each side
 const val GATE_HALF = 40f
 
 class Input {
@@ -335,6 +338,7 @@ class Game {
             p.tangent(w.s, tmp2)
             w.x = tmp.x; w.y = tmp.y
             w.nx = -tmp2.y; w.ny = tmp2.x
+            if (abs(w.nx) >= abs(w.ny)) { w.rx = 1f; w.ry = 0f } else { w.rx = 0f; w.ry = 1f }
         }
     }
 
@@ -618,14 +622,14 @@ class Game {
             if (!w.built) continue
             val rx = nx - w.x
             val ry = ny - w.y
-            val along = rx * w.nx + ry * w.ny // along the rampart
+            val along = rx * w.rx + ry * w.ry // along the rampart
             if (abs(along) > RAMPART_HALF) continue
-            val across = rx * w.ny - ry * w.nx // through it (road direction)
+            val across = rx * w.ry - ry * w.rx // through it
             if (abs(across) >= 22f) continue
             if (abs(along) < GATE_HALF && w.gate > 0.6f) continue
-            val side = if ((kx - w.x) * w.ny - (ky - w.y) * w.nx >= 0f) 1f else -1f
-            nx = w.x + w.nx * along + w.ny * 22f * side
-            ny = w.y + w.ny * along - w.nx * 22f * side
+            val side = if ((kx - w.x) * w.ry - (ky - w.y) * w.rx >= 0f) 1f else -1f
+            nx = w.x + w.rx * along + w.ry * 22f * side
+            ny = w.y + w.ry * along - w.rx * 22f * side
         }
         kx = nx; ky = ny
         val sp = hypot(kvx, kvy)
