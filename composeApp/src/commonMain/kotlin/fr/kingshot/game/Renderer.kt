@@ -365,9 +365,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (c in World.cliffs) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
             if (x > vr + 120f || x + cw < vl || y - ht > vb || y + d + 60f < vt) continue
-            // soft shadow on the ground, falling right like the sprites' baked shadows
-            rr(CLIFF_SHADOW, x + 18f, y + d - 22f, cw + ht * 0.35f, 58f, 29f)
-            rr(CLIFF_SHADOW, x + cw - 20f, y + d - ht, ht * 0.35f + 20f, ht + 30f, 26f)
+            // short soft shadow (~0.4 x height) down-right, matching the sprites' baked shadows
+            val sh = ht * 0.4f
+            rr(CLIFF_SHADOW, x + 8f, y + d - 14f, cw + sh * 0.5f, sh * 0.5f + 14f, sh * 0.3f + 7f)
+            rr(CLIFF_SHADOW, x + cw - 12f, y + d - ht * 0.6f, sh * 0.5f + 12f, ht * 0.6f + sh * 0.3f, sh * 0.3f + 6f)
         }
         for (c in World.cliffs) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
