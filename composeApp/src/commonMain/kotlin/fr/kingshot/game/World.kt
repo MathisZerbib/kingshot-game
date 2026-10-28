@@ -107,6 +107,10 @@ object World {
     var trees = FloatArray(0); private set
     var rocks = FloatArray(0); private set
     var grassPatches = FloatArray(0); private set
+    /** Ground details: grass tufts (x, y, size), flowers (x, y, colour 0..2), pebbles along road edges (x, y, radius). */
+    var tufts = FloatArray(0); private set
+    var flowers = FloatArray(0); private set
+    var pebbles = FloatArray(0); private set
 
     /** Extra road directions seen from the castle (degrees, 0 = east, -90 = north), between the level-1 roads and clear of the base pads. */
     private val extraAngles = floatArrayOf(-100f, -42f, 75f)
@@ -174,6 +178,23 @@ object World {
         return true
     }
 
+    private fun nearDecoRoad(x: Float, y: Float, d: Float): Boolean {
+        for (road in decoRoads) {
+            var i = 0
+            while (i + 3 < road.size) {
+                // distance to each segment, sampled every 20 units
+                val x0 = road[i]; val y0 = road[i + 1]; val x1 = road[i + 2]; val y1 = road[i + 3]
+                val n = (hypot(x1 - x0, y1 - y0) / 20f).toInt() + 1
+                for (k in 0..n) {
+                    val t = k.toFloat() / n
+                    if (hypot(x - (x0 + (x1 - x0) * t), y - (y0 + (y1 - y0) * t)) < d) return true
+                }
+                i += 2
+            }
+        }
+        return false
+    }
+
     private fun distToRoads(x: Float, y: Float): Float {
         val v = Vec()
         var best = Float.MAX_VALUE
@@ -215,6 +236,40 @@ object World {
             g.add(rnd.nextFloat() * W); g.add(rnd.nextFloat() * H); g.add(60f + rnd.nextFloat() * 140f); g.add(rnd.nextFloat())
         }
         grassPatches = g.toFloatArray()
+        val tf = ArrayList<Float>()
+        tries = 0
+        while (tf.size < 900 * 3 && tries < 6000) {
+            tries++
+            val x = rnd.nextFloat() * W
+            val y = rnd.nextFloat() * H
+            if (insideCliff(x, y, 10f) || distToRoads(x, y) < 62f) continue
+            tf.add(x); tf.add(y); tf.add(0.7f + rnd.nextFloat() * 0.7f)
+        }
+        tufts = tf.toFloatArray()
+        val fl = ArrayList<Float>()
+        tries = 0
+        while (fl.size < 70 * 3 * 5 && tries < 3000) { // clusters of 5
+            tries++
+            val cx = rnd.nextFloat() * W
+            val cy = rnd.nextFloat() * H
+            if (insideCliff(cx, cy, 30f) || distToRoads(cx, cy) < 90f || hypot(cx - CASTLE_X, cy - CASTLE_Y) < 220f || nearDecoRoad(cx, cy, 80f)) continue
+            val col = rnd.nextInt(3).toFloat()
+            repeat(5) { fl.add(cx + (rnd.nextFloat() - 0.5f) * 50f); fl.add(cy + (rnd.nextFloat() - 0.5f) * 30f); fl.add(col) }
+        }
+        flowers = fl.toFloatArray()
+        val pb = ArrayList<Float>()
+        val v = Vec(); val tg = Vec()
+        for (p in paths) {
+            var s = 30f
+            while (s < p.length - 120f) {
+                p.sample(s, v); p.tangent(s, tg)
+                val side = if (rnd.nextBoolean()) 1f else -1f
+                val off = 46f + rnd.nextFloat() * 10f
+                pb.add(v.x - tg.y * off * side); pb.add(v.y + tg.x * off * side); pb.add(3f + rnd.nextFloat() * 4f)
+                s += 35f + rnd.nextFloat() * 50f
+            }
+        }
+        pebbles = pb.toFloatArray()
     }
 
     fun insideCliff(x: Float, y: Float, margin: Float): Boolean {

@@ -47,10 +47,15 @@ private const val K_COIN = 9
 
 // One palette per level, cycling: spring, autumn, winter (grass, dark patch, light patch, cliff top, cliff top light)
 private val SEASONS = arrayOf(
-    arrayOf(Color(0xFF8DC24F), Color(0xFF7DB443), Color(0xFF9CCD5C), Color(0xFF86A83F), Color(0xFF94B54A)),
-    arrayOf(Color(0xFFC2B25A), Color(0xFFB2A04C), Color(0xFFD0BF68), Color(0xFFAE9A45), Color(0xFFBCA851)),
-    arrayOf(Color(0xFFE4ECEF), Color(0xFFD2DDE3), Color(0xFFF1F5F7), Color(0xFFD8E2E7), Color(0xFFE8EEF1)),
+    arrayOf(Color(0xFF8DC24F), Color(0xFF7DB443), Color(0xFF9CCD5C), Color(0xFF86A83F), Color(0xFF94B54A), Color(0xFF5E9A2E)),
+    arrayOf(Color(0xFFC2B25A), Color(0xFFB2A04C), Color(0xFFD0BF68), Color(0xFFAE9A45), Color(0xFFBCA851), Color(0xFF9A7F33)),
+    arrayOf(Color(0xFFE4ECEF), Color(0xFFD2DDE3), Color(0xFFF1F5F7), Color(0xFFD8E2E7), Color(0xFFE8EEF1), Color(0xFFAFC0CA)),
 )
+private val FLOWERS = arrayOf(Color(0xFFFFFFFF), Color(0xFFFFD84A), Color(0xFFFF8FB4))
+private val FLOWER_HEART = Color(0xFFFFB12B)
+private val DIRT_LIGHT = Color(0xFFE6C493)
+private val PEBBLE = Color(0xFFB9A88F)
+private val PEBBLE_DARK = Color(0x33000000)
 private val DIRT = Color(0xFFDDB57F)
 private val DIRT_EDGE = Color(0xFFCDA36C)
 private val CLIFF_FACE = Color(0xFFB09A80)
@@ -123,6 +128,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private val roadStrokeEdge = Stroke(width = 104f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     private val roadStroke = Stroke(width = 88f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val roadCenterStroke = Stroke(width = 34f, cap = StrokeCap.Round, join = StrokeJoin.Round)
     private val bowStroke = Stroke(width = 3f, cap = StrokeCap.Round)
     private val roads = ArrayList<Path>()
 
@@ -265,12 +271,52 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         while (i < gp.size) {
             val x = gp[i]; val y = gp[i + 1]; val r = gp[i + 2]
             if (x + r > vl && x - r < vr && y + r > vt && y - r < vb) {
-                oval(if (gp[i + 3] > 0.5f) season[1] else season[2], x - r, y - r * 0.6f, r * 2f, r * 1.2f)
+                val c = if (gp[i + 3] > 0.5f) season[1] else season[2]
+                drawOval(c, Offset(x - r * 1.15f, y - r * 0.69f), Size(r * 2.3f, r * 1.38f), alpha = 0.5f) // soft edge
+                oval(c, x - r, y - r * 0.6f, r * 2f, r * 1.2f)
             }
             i += 4
         }
+        // grass tufts (three blades), culled to the view
+        val tuftCol = season[5]
+        val tf = World.tufts
+        i = 0
+        while (i < tf.size) {
+            val x = tf[i]; val y = tf[i + 1]
+            if (x > vl && x < vr && y > vt && y < vb) {
+                val k = tf[i + 2]
+                line(tuftCol, x, y, x - 5f * k, y - 10f * k, 2.6f)
+                line(tuftCol, x, y, x, y - 13f * k, 2.6f)
+                line(tuftCol, x, y, x + 5f * k, y - 10f * k, 2.6f)
+            }
+            i += 3
+        }
         for (r in roads) drawPath(r, DIRT_EDGE, style = roadStrokeEdge)
         for (r in roads) drawPath(r, DIRT, style = roadStroke)
+        for (r in roads) drawPath(r, DIRT_LIGHT, style = roadCenterStroke) // worn middle of the track
+        val pb = World.pebbles
+        i = 0
+        while (i < pb.size) {
+            val x = pb[i]; val y = pb[i + 1]; val r = pb[i + 2]
+            if (x > vl && x < vr && y > vt && y < vb) {
+                oval(PEBBLE_DARK, x - r, y - r * 0.4f, r * 2.2f, r * 1.2f)
+                oval(PEBBLE, x - r, y - r * 0.8f, r * 2f, r * 1.3f)
+            }
+            i += 3
+        }
+        // flowers (not in winter)
+        if (season !== SEASONS[2]) {
+            val fl = World.flowers
+            i = 0
+            while (i < fl.size) {
+                val x = fl[i]; val y = fl[i + 1]
+                if (x > vl && x < vr && y > vt && y < vb) {
+                    circ(FLOWERS[fl[i + 2].toInt()], x, y, 4f)
+                    circ(FLOWER_HEART, x, y, 1.6f)
+                }
+                i += 3
+            }
+        }
         // three passes so touching cliff blocks merge into one plateau: cast shadows, rock faces, grass tops
         for (c in World.cliffs) {
             val x = c[0]; val y = c[1]; val cw = c[2]; val d = c[3]; val ht = c[4]
