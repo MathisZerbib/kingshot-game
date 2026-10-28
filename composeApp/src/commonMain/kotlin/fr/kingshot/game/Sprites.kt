@@ -28,6 +28,21 @@ import fr.kingshot.game.resources.gate_open_v
 import fr.kingshot.game.resources.tower_stone
 import fr.kingshot.game.resources.tower_royal
 import fr.kingshot.game.resources.castle_royal
+import fr.kingshot.game.resources.grass_tile
+import fr.kingshot.game.resources.road_tile
+import fr.kingshot.game.resources.cliff_tile
+import fr.kingshot.game.resources.tuft0
+import fr.kingshot.game.resources.tuft1
+import fr.kingshot.game.resources.flower0
+import fr.kingshot.game.resources.flower1
+import fr.kingshot.game.resources.bush
+import fr.kingshot.game.resources.stump
+import fr.kingshot.game.resources.barrel
+import fr.kingshot.game.resources.crate
+import fr.kingshot.game.resources.tent
+import fr.kingshot.game.resources.wheelbarrow
+import fr.kingshot.game.resources.lumber
+import fr.kingshot.game.resources.weaponrack
 import org.jetbrains.compose.resources.imageResource
 
 /** Sprite atlases pre-rendered in Blender from the KayKit models (see art/blender/render_sprites.py). */
@@ -56,6 +71,21 @@ class Sprites(
     val towerStone: ImageBitmap,
     val towerRoyal: ImageBitmap,
     val castleRoyal: ImageBitmap,
+    val grassTile: ImageBitmap,
+    val roadTile: ImageBitmap,
+    val cliffTile: ImageBitmap,
+    val tuft0: ImageBitmap,
+    val tuft1: ImageBitmap,
+    val flower0: ImageBitmap,
+    val flower1: ImageBitmap,
+    val bush: ImageBitmap,
+    val stump: ImageBitmap,
+    val barrel: ImageBitmap,
+    val crate: ImageBitmap,
+    val tent: ImageBitmap,
+    val wheelbarrow: ImageBitmap,
+    val lumber: ImageBitmap,
+    val weaponrack: ImageBitmap,
 )
 
 @Composable
@@ -84,7 +114,22 @@ fun rememberSprites(): Sprites {
     val towerStone = imageResource(Res.drawable.tower_stone)
     val towerRoyal = imageResource(Res.drawable.tower_royal)
     val castleRoyal = imageResource(Res.drawable.castle_royal)
-    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal) {
-        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal)
+    val grassTile = imageResource(Res.drawable.grass_tile)
+    val roadTile = imageResource(Res.drawable.road_tile)
+    val cliffTile = imageResource(Res.drawable.cliff_tile)
+    val tuft0 = imageResource(Res.drawable.tuft0)
+    val tuft1 = imageResource(Res.drawable.tuft1)
+    val flower0 = imageResource(Res.drawable.flower0)
+    val flower1 = imageResource(Res.drawable.flower1)
+    val bush = imageResource(Res.drawable.bush)
+    val stump = imageResource(Res.drawable.stump)
+    val barrel = imageResource(Res.drawable.barrel)
+    val crate = imageResource(Res.drawable.crate)
+    val tent = imageResource(Res.drawable.tent)
+    val wheelbarrow = imageResource(Res.drawable.wheelbarrow)
+    val lumber = imageResource(Res.drawable.lumber)
+    val weaponrack = imageResource(Res.drawable.weaponrack)
+    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack) {
+        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack)
     }
 }

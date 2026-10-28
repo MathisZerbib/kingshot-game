@@ -91,9 +91,9 @@ def reset_scene():
         o.rotation_euler = rot
         sc.collection.objects.link(o)
 
-    # Warm afternoon sun from the front-left, cool sky fill from the right, rim from behind.
-    sun("key", (math.radians(30), math.radians(-22), math.radians(-30)), 4.4, (1.0, 0.93, 0.8), 9)
-    sun("fill", (math.radians(58), math.radians(32), math.radians(40)), 1.2, (0.72, 0.8, 1.0), 25, shadow=False)
+    # High warm sun from the front-left (short, soft shadows that stay under the model), sky fill, rim from behind.
+    sun("key", (math.radians(17), math.radians(-14), math.radians(-30)), 4.0, (1.0, 0.93, 0.8), 24)
+    sun("fill", (math.radians(58), math.radians(32), math.radians(40)), 1.5, (0.72, 0.8, 1.0), 25, shadow=False)
     sun("rim", (math.radians(-118), 0, math.radians(12)), 1.6, (0.9, 0.95, 1.0), shadow=False)
     coll = bpy.data.collections.new("Models")
     sc.collection.children.link(coll)
@@ -324,6 +324,13 @@ def build_materials():
     M["flag"] = mat("flag", (0.85, 0.12, 0.12), rough=0.8)
     M["coin"] = mat("coin", (1.0, 0.78, 0.2), rough=0.3, metal=1.0)
     M["coin_dark"] = mat("coin_dark", (0.8, 0.55, 0.1), rough=0.35, metal=1.0)
+    M["grass"] = mat("grass", (0.2, 0.42, 0.12), rough=0.9)
+    M["grass_light"] = mat("grass_light", (0.35, 0.58, 0.16), rough=0.9)
+    M["petal_w"] = mat("petal_w", (0.95, 0.95, 0.9), rough=0.6)
+    M["petal_y"] = mat("petal_y", (1.0, 0.8, 0.15), rough=0.6)
+    M["petal_p"] = mat("petal_p", (0.95, 0.35, 0.55), rough=0.6)
+    M["bush"] = mat("bush", (0.16, 0.4, 0.14), rough=0.85)
+    M["bush_light"] = mat("bush_light", (0.3, 0.55, 0.2), rough=0.85)
 
 
 build_materials()
@@ -618,22 +625,28 @@ def pose_horse(body, legs, head, phase, moving):
     if not moving:
         for l in legs:
             l.rotation_euler.x = 0
+            l.location.z = 0.66
         body.location.z = 0
+        body.rotation_euler.x = 0
         head.rotation_euler.x = 0
         return
     s = math.sin(phase)
     for i, l in enumerate(legs):
         sign = 1 if i in (0, 3) else -1
-        l.rotation_euler.x = sign * s * 0.55
-    body.location.z = 0.04 * (1 - math.cos(2 * phase)) / 2
-    head.rotation_euler.x = 0.08 * math.sin(phase + 0.5)
+        l.rotation_euler.x = sign * s * 0.85
+        l.location.z = 0.66 + 0.1 * max(0.0, sign * math.cos(phase))  # lift the leg that swings forward
+    body.location.z = 0.07 * (1 - math.cos(2 * phase)) / 2
+    body.rotation_euler.x = 0.06 * math.sin(2 * phase)
+    head.rotation_euler.x = 0.12 * math.sin(phase + 0.5)
 
 
 def build_king():
     tex = knight_texture("tex_king", (0.98, 0.76, 0.24), (0.8, 0.08, 0.1))
-    c = Char("Knight", {"Knight_ArmLeft", "Knight_ArmRight", "Knight_Body", "Knight_Head", "Knight_Cape",
+    c = Char("Knight", {"Knight_ArmLeft", "Knight_ArmRight", "Knight_Body", "Knight_Head",
                         "Knight_LegLeft", "Knight_LegRight", "1H_Sword"}, tex)
     build_crown(c)
+    # Short red mantle on the shoulders instead of the long cape (which hid the horse from behind)
+    c.attach(sphere((0, 0.12, 1.25), (0.52, 0.3, 0.2), M["velvet"], seg=16), "chest")
     return c
 
 
@@ -711,11 +724,41 @@ def setup_camera(w, h, ax, ay, ppm):
     bpy.context.view_layer.update()
 
 
+def clean_alpha(path):
+    """Removes the faint veil the shadow catcher leaves on the whole cell and lightens the shadows."""
+    im = Image.open(path).convert("RGBA")
+    a = np.asarray(im).astype(np.float32)
+    alpha = a[..., 3]
+    lum = a[..., :3].max(-1)
+    shadow = (lum < 40) & (alpha < 250)
+    alpha = np.where(alpha < 26, 0, (alpha - 26) * (255.0 / 229.0))
+    alpha = np.where(shadow, alpha * 0.78, alpha)
+    a[..., 3] = np.clip(alpha, 0, 255)
+    Image.fromarray(a.astype(np.uint8)).save(path)
+
+
+RESUME = os.environ.get("KINGSHOT_RESUME") == "1"
+
+
+def cell_done(path):
+    """With KINGSHOT_RESUME=1, cells already rendered in TMP are kept (lets an interrupted run continue)."""
+    if not RESUME or not os.path.exists(path):
+        return False
+    try:
+        Image.open(path).verify()
+        return True
+    except Exception:
+        return False
+
+
 def render_cell(name, col, row, w, h, ax, ay, ppm):
     setup_camera(w, h, ax, ay, ppm)
     path = os.path.join(TMP, "%s_%d_%d.png" % (name, row, col))
+    if cell_done(path):
+        return path
     SC.render.filepath = path
     bpy.ops.render.render(write_still=True)
+    clean_alpha(path)
     return path
 
 
@@ -740,11 +783,12 @@ def static_sprite(name, size_px, ppm, center=(0, 0, 0), k=1.0):
     path = os.path.join(TMP, name + "_0_0.png")
     SC.render.filepath = path
     bpy.ops.render.render(write_still=True)
+    clean_alpha(path)
     uv = world_to_camera_view(SC, CAM, Vector((0, 0, 0)))
     ax = uv.x * w
     ay = (1 - uv.y) * h
     im = Image.open(path).convert("RGBA")
-    bbox = im.getchannel("A").point(lambda a: 255 if a > 12 else 0).getbbox() or (0, 0, 1, 1)
+    bbox = im.getchannel("A").point(lambda a: 255 if a > 2 else 0).getbbox() or (0, 0, 1, 1)
     im = im.crop(bbox)
     im.save(path)
     SPRITES[name] = dict(w=im.width, h=im.height, ax=ax - bbox[0], ay=ay - bbox[1], ppu=ppm / UPM * k, cols=1, rows=1,
@@ -937,6 +981,184 @@ def all_sprites():
     print("rendered in %.0fs" % (time.time() - t0))
 
 
+def ground_mat(name, kind):
+    """Top-down ground materials: layered noise for color, bump for relief."""
+    m = bpy.data.materials.new(name)
+    m.use_nodes = True
+    nt = m.node_tree
+    b = nt.nodes["Principled BSDF"]
+    b.inputs["Roughness"].default_value = 0.95
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    big = nt.nodes.new("ShaderNodeTexNoise")
+    big.inputs["Scale"].default_value = 0.6
+    big.inputs["Detail"].default_value = 4
+    nt.links.new(tc.outputs["Object"], big.inputs["Vector"])
+    fine = nt.nodes.new("ShaderNodeTexNoise")
+    fine.inputs["Scale"].default_value = {"grass": 28.0, "road": 14.0, "cliff": 6.0}[kind]
+    fine.inputs["Detail"].default_value = 12
+    fine.inputs["Roughness"].default_value = 0.75
+    nt.links.new(tc.outputs["Object"], fine.inputs["Vector"])
+    vor = nt.nodes.new("ShaderNodeTexVoronoi")
+    vor.inputs["Scale"].default_value = {"grass": 40.0, "road": 70.0, "cliff": 9.0}[kind]
+    nt.links.new(tc.outputs["Object"], vor.inputs["Vector"])
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    if kind == "grass":
+        c1, c2, c3 = (0.06, 0.2, 0.035), (0.14, 0.36, 0.07), (0.3, 0.5, 0.11)
+    elif kind == "road":
+        c1, c2, c3 = (0.2, 0.12, 0.05), (0.36, 0.24, 0.12), (0.52, 0.38, 0.2)
+    else:
+        c1, c2, c3 = (0.1, 0.1, 0.12), (0.24, 0.24, 0.27), (0.42, 0.42, 0.45)
+    ramp.color_ramp.elements[0].color = (*c1, 1)
+    ramp.color_ramp.elements[1].color = (*c3, 1)
+    mid = ramp.color_ramp.elements.new(0.5)
+    mid.color = (*c2, 1)
+    mixf = nt.nodes.new("ShaderNodeMath")
+    mixf.operation = "MULTIPLY_ADD"
+    nt.links.new(big.outputs["Fac"], mixf.inputs[0])
+    mixf.inputs[1].default_value = 0.6
+    nt.links.new(fine.outputs["Fac"], mixf.inputs[2])
+    # Noise Fac only spans ~0.35..0.65: stretch it to the full ramp
+    scale = nt.nodes.new("ShaderNodeMapRange")
+    scale.inputs["From Min"].default_value = 0.62
+    scale.inputs["From Max"].default_value = 0.98
+    nt.links.new(mixf.outputs[0], scale.inputs["Value"])
+    if kind != "grass":
+        # rocks and pebbles also show in the color, not only in the bump
+        vc = nt.nodes.new("ShaderNodeMath")
+        vc.operation = "MULTIPLY_ADD"
+        nt.links.new(vor.outputs["Distance"], vc.inputs[0])
+        vc.inputs[1].default_value = 0.45 if kind == "cliff" else 0.2
+        nt.links.new(scale.outputs["Result"], vc.inputs[2])
+        nt.links.new(vc.outputs[0], ramp.inputs["Fac"])
+    else:
+        nt.links.new(scale.outputs["Result"], ramp.inputs["Fac"])
+    nt.links.new(ramp.outputs["Color"], b.inputs["Base Color"])
+    bmp = nt.nodes.new("ShaderNodeBump")
+    bmp.inputs["Strength"].default_value = 0.9 if kind == "cliff" else 0.35
+    if kind == "grass":
+        nt.links.new(fine.outputs["Fac"], bmp.inputs["Height"])
+    else:
+        mixb = nt.nodes.new("ShaderNodeMath")
+        mixb.operation = "MULTIPLY_ADD"
+        nt.links.new(vor.outputs["Distance"], mixb.inputs[0])
+        mixb.inputs[1].default_value = 0.7 if kind == "cliff" else 0.25
+        nt.links.new(fine.outputs["Fac"], mixb.inputs[2])
+        nt.links.new(mixb.outputs[0], bmp.inputs["Height"])
+    nt.links.new(bmp.outputs["Normal"], b.inputs["Normal"])
+    return m
+
+
+def make_seamless(im):
+    """Offset-and-blend trick: the tile's seams are crossfaded with the opposite edges."""
+    w, h = im.size
+    a = np.asarray(im.convert("RGB")).astype(np.float32)
+    sh = np.roll(np.roll(a, w // 2, axis=1), h // 2, axis=0)
+    yy, xx = np.mgrid[0:h, 0:w]
+    dx = np.minimum(xx, w - 1 - xx) / (w / 2)
+    dy = np.minimum(yy, h - 1 - yy) / (h / 2)
+    wgt = np.clip(np.minimum(dx, dy) * 1.6, 0, 1)[..., None]
+    out = sh * (1 - wgt) + a * wgt
+    return Image.fromarray(out.astype(np.uint8))
+
+
+def ground_tile(name, kind, meters=8.0, px=512):
+    clear_models()
+    for o in list(bpy.data.objects):
+        if o.name == "ground":
+            o.hide_render = True
+    me = bpy.data.meshes.new("tile")
+    r = meters
+    me.from_pydata([(-r, -r, 0), (r, -r, 0), (r, r, 0), (-r, r, 0)], [], [(0, 1, 2, 3)])
+    o = bpy.data.objects.new("tile", me)
+    o.data.materials.append(ground_mat(name, kind))
+    COLL.objects.link(o)
+    SC.render.resolution_x = SC.render.resolution_y = px
+    CAM.data.ortho_scale = meters
+    CAM.location = (0, 0, 30)
+    CAM.rotation_euler = (0, 0, 0)
+    SC.render.film_transparent = False
+    lights = [ob for ob in bpy.data.objects if ob.type == "LIGHT"]
+    saved = [(l, l.data.energy) for l in lights]
+    for l, e in saved:
+        l.data.energy = e * 0.42  # a flat ground seen from above catches the full sun: tone it down
+    path = os.path.join(TMP, name + "_0_0.png")
+    SC.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+    for l, e in saved:
+        l.data.energy = e
+    SC.render.film_transparent = True
+    for ob in list(bpy.data.objects):
+        if ob.name == "ground":
+            ob.hide_render = False
+    im = make_seamless(Image.open(path))
+    im.save(path)
+    SPRITES[name] = dict(w=px, h=px, ax=0, ay=0, ppu=px / (meters * UPM), cols=1, rows=1, cells=[(0, 0, path)])
+
+
+def build_tuft(n, lean, color_blades, flowers=None, seed=0):
+    import random
+    rnd = random.Random(seed)
+    for i in range(n):
+        a = rnd.uniform(0, 2 * math.pi)
+        tilt = rnd.uniform(0.35, 0.75) * lean
+        h = rnd.uniform(0.3, 0.5)
+        cyl((math.cos(a) * 0.05, math.sin(a) * 0.05, h / 2), 0.025, 0.0, h, color_blades,
+            rot=(tilt * math.sin(a), -tilt * math.cos(a), 0), seg=5, smooth=False)
+    if flowers:
+        for i in range(3):
+            a = rnd.uniform(0, 2 * math.pi)
+            x, y = math.cos(a) * 0.09, math.sin(a) * 0.09
+            cyl((x, y, 0.15), 0.012, 0.012, 0.3, M["grass"], seg=5)
+            sphere((x, y, 0.32), 0.05, flowers, seg=10)
+            sphere((x, y, 0.345), 0.02, M["petal_y"] if flowers is not M["petal_y"] else M["petal_w"], seg=8)
+
+
+def build_bush():
+    for i, (x, y, z, r) in enumerate(((0, 0, 0.3, 0.38), (0.3, 0.1, 0.22, 0.3), (-0.28, -0.05, 0.24, 0.3), (0.05, -0.28, 0.2, 0.26), (-0.05, 0.3, 0.2, 0.26))):
+        sphere((x, y, z), r, M["bush"] if i % 2 else M["bush_light"], seg=16, subsurf=1)
+
+
+def build_stump():
+    cyl((0, 0, 0.18), 0.3, 0.27, 0.36, M["wood_dark"], seg=12)
+    cyl((0, 0, 0.365), 0.27, 0.27, 0.01, M["wood_cut"], seg=12)
+    torus((0, 0, 0.37), 0.16, 0.008, M["wood_dark"], seg=20)
+    torus((0, 0, 0.37), 0.08, 0.008, M["wood_dark"], seg=20)
+    for a in (0.4, 2.1, 3.9):
+        cyl((math.cos(a) * 0.3, math.sin(a) * 0.3, 0.05), 0.08, 0.04, 0.3, M["wood_dark"], rot=(math.radians(-80) * math.sin(a), math.radians(80) * math.cos(a), 0), seg=8)
+
+
+def terrain_sprites():
+    if want("grass_tile"):
+        ground_tile("grass_tile", "grass")
+    if want("road_tile"):
+        ground_tile("road_tile", "road")
+    if want("cliff_tile"):
+        ground_tile("cliff_tile", "cliff", meters=6.0)
+    for name, args in (("tuft0", (5, 1.0, "grass", None, 1)), ("tuft1", (7, 0.8, "grass_light", None, 2)),
+                       ("flower0", (4, 0.9, "grass", "petal_w", 3)), ("flower1", (4, 0.9, "grass_light", "petal_p", 4))):
+        if want(name):
+            clear_models()
+            n, lean, blades, fl, seed = args
+            build_tuft(n, lean, M[blades], M[fl] if fl else None, seed)
+            static_sprite(name, 160, 96, center=(0, 0, 0.15))
+    if want("bush"):
+        clear_models()
+        build_bush()
+        static_sprite("bush", 260, 96, center=(0, 0, 0.3))
+    if want("stump"):
+        clear_models()
+        build_stump()
+        static_sprite("stump", 200, 96, center=(0, 0, 0.2))
+    props = (("barrel", "decoration/props/barrel.gltf", 1.6, 0.4), ("crate", "decoration/props/crate_A_big.gltf", 1.6, 0.4),
+             ("tent", "decoration/props/tent.gltf", 2.6, 0.7), ("wheelbarrow", "decoration/props/wheelbarrow.gltf", 1.7, 0.3),
+             ("lumber", "decoration/props/resource_lumber.gltf", 1.7, 0.3), ("weaponrack", "decoration/props/weaponrack.gltf", 1.7, 0.5))
+    for name, path, scale, h in props:
+        if want(name):
+            clear_models()
+            prop(HEX + path, scale, rot_z=math.radians(20))
+            static_sprite(name, 300, 96, center=(0, 0, h))
+
+
 def pack():
     res_dir = os.path.join(ROOT, "composeApp/src/commonMain/composeResources/drawable")
     os.makedirs(res_dir, exist_ok=True)
@@ -963,7 +1185,8 @@ def pack():
             info["w"], info["h"], round(info["ax"], 1), round(info["ay"], 1), round(info["ppu"], 3), info["cols"], info["rows"])
     order = ["archer", "knight", "boss", "king", "castle", "house", "tower", "stake", "pine0", "pine1", "roundtree",
              "rock0", "rock1", "coinSpin", "coinFlat", "wallStone", "wallStoneV", "gateClosed", "gateOpen", "gateClosedV",
-             "gateOpenV", "towerStone", "towerRoyal", "castleRoyal"]
+             "gateOpenV", "towerStone", "towerRoyal", "castleRoyal", "grassTile", "roadTile", "cliffTile", "tuft0", "tuft1",
+             "flower0", "flower1", "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack"]
     names = [n for n in order if n in existing] + [n for n in existing if n not in order]
     lines = [
         "package fr.kingshot.game",
@@ -981,4 +1204,7 @@ def pack():
 
 
 all_sprites()
+if ONLY is not None and any(n in ONLY for n in ("grass_tile", "road_tile", "cliff_tile", "tuft0", "tuft1", "flower0", "flower1",
+                                                  "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack")):
+    terrain_sprites()
 pack()
