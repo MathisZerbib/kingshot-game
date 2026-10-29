@@ -70,6 +70,7 @@ fun App() {
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }
     var pausedUi by remember { mutableStateOf(false) }
+    val track = remember { IntArray(1) { Music.NONE } } // music playing now (changed from the frame loop)
     var picked by remember { mutableIntStateOf(game.savedClass) }
     var metaTick by remember { mutableIntStateOf(0) } // bumps after a purchase so the menu re-reads Meta
     val focus = remember { FocusRequester() }
@@ -87,11 +88,18 @@ fun App() {
                 frame.longValue = now
                 if (game.state != uiState) uiState = game.state
                 if (game.paused != pausedUi) pausedUi = game.paused
+                Audio.time = game.time
+                val want = game.musicTrack
+                if (want != track[0]) { track[0] = want; Audio.music(want) }
             }
         }
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
-    LaunchedEffect(game) { PlatformHooks.onBackground = { game.onBackground() } }
+    LaunchedEffect(game) {
+        PlatformHooks.onBackground = { game.onBackground(); Audio.pause() }
+        PlatformHooks.onForeground = { Audio.resume() }
+    }
+    LaunchedEffect(Unit) { Audio.init() }
     var settingsOpen by remember { mutableStateOf(false) }
 
     Box(
@@ -278,7 +286,7 @@ private fun BigButton(text: String, sub: String?, color: Color, shade: Color, on
             .width(if (small) 220.dp else 260.dp)
             .clip(shape)
             .background(shade) // darker bottom edge gives the chunky mobile-button look
-            .clickable(onClick = onClick)
+            .clickable { Audio.play(Sfx.CLICK); onClick() }
             .padding(bottom = 5.dp),
     ) {
         Column(
@@ -374,8 +382,8 @@ private fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
         ) {
             Label("RÉGLAGES", Color(0xFFFFC531), 28, FontWeight.Black)
             Spacer(Modifier.height(14.dp))
-            Toggle("Sons", !Prefs.sfxOff) { Prefs.sfxOff = !it; tick++ }
-            Toggle("Musique", !Prefs.musicOff) { Prefs.musicOff = !it; tick++ }
+            Toggle("Sons", !Prefs.sfxOff) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
+            Toggle("Musique", !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
             Toggle("Vibrations", !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
             Toggle("Fluidité max (sinon 60 Hz, économise la batterie)", !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
             Spacer(Modifier.height(14.dp))

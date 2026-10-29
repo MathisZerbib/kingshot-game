@@ -43,6 +43,11 @@ class MainActivity : ComponentActivity() {
         setContent { App() }
     }
 
+    override fun onResume() {
+        super.onResume()
+        PlatformHooks.onForeground?.invoke()
+    }
+
     override fun onPause() {
         PlatformHooks.onBackground?.invoke()
         super.onPause()

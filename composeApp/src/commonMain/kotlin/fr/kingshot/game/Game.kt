@@ -454,6 +454,13 @@ class Game {
         }
     }
 
+    /** Music that fits the moment: a live boss gets its own track. */
+    val musicTrack: Int get() = when {
+        state != STATE_PLAY -> Music.MENU
+        enemies.any { it.active && it.kind == KIND_BOSS } -> Music.BOSS
+        else -> Music.BATTLE
+    }
+
     /** 1 = wood (levels 1-2), 2 = stone (3-4), 3 = royal (5+). */
     val age get() = ageOf(level)
     private fun ageOf(lv: Int) = if (lv >= 5) 3 else if (lv >= 3) 2 else 1
@@ -622,6 +629,7 @@ class Game {
         shake = 8f
         // ad-style sequence, see updateTransition
         transition = TRANSITION_TIME
+        Audio.play(Sfx.VICTORY)
         revealRoad = if (roadAdded) walls.size - 1 else -1
         for (k in CONFETTI.indices) burst(kx, ky, 90f, 22, CONFETTI[k], 520f)
     }
@@ -645,6 +653,7 @@ class Game {
         camX += (tx - camX) * min(1f, dt * 8f)
         camY += (ty - camY) * min(1f, dt * 8f)
         // the new road's pads pop in as the road reaches them
+        if (before < 3.0f && t >= 3.0f) Audio.play(Sfx.LEVEL_UP)
         if (before < 3.0f && t >= 3.0f) for (p in pads) if (p.visible && (p.kind == PAD_TOWER || p.kind == PAD_WALL) && p.ref == walls.size - 1) {
             p.bump = 1f; burst(p.x, p.y, 10f, 20, 0xFFFFD84AL, 260f)
         }
@@ -657,6 +666,8 @@ class Game {
         if (state != STATE_PLAY || paused || transition > 0f || kDead || abilityCd > 0f) return false
         abilityCd = abilityTime
         abilityFlash = 0.6f
+        Audio.play(Sfx.ABILITY)
+        Audio.haptic(Haptic.MEDIUM)
         when (heroClass) {
             CLASS_WARRIOR -> {
                 for (i in enemies.indices) {
@@ -918,6 +929,7 @@ class Game {
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
         for (w in walls) {
             val open = w.built && !kDead && hypot(kx - w.x, ky - w.y) < 110f
+            if (open && w.gate == 0f) Audio.play(Sfx.GATE, 0.7f)
             w.gate = if (open) min(1f, w.gate + dt / 0.25f) else max(0f, w.gate - dt / 0.25f)
             if (w.hitFlash > 0f) w.hitFlash -= dt
             if (w.bump > 0f) w.bump = max(0f, w.bump - dt * 3f)
@@ -1051,6 +1063,7 @@ class Game {
                     hit = i
                     kDir = dirIndex(e.x - kx, e.y - ky)
                     burst((kx + e.x) * 0.5f, (ky + e.y) * 0.5f, 30f, 4, 0xFFFFFFFFL, 160f)
+                    Audio.playVaried(Sfx.HIT, 0.8f, 0.1f, rnd)
                     hitEnemy(i, 40f * dmgMult * heroPower)
                 }
                 if (hit >= 0) {
@@ -1061,6 +1074,7 @@ class Game {
                 val t = nearestEnemy(kx, ky, range)
                 if (t >= 0) {
                     fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 24f else 18f) * dmgMult * heroPower)
+                    Audio.playVaried(Sfx.SHOOT, 0.55f, 0.1f, rnd)
                     kFaceRight = enemies[t].x > kx
                     if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
                     kFireCd = if (heroClass == CLASS_RANGER) 0.26f else 0.5f
@@ -1092,6 +1106,7 @@ class Game {
                 val t = nearestEnemy(ax[i], ay[i], 280f)
                 if (t >= 0) {
                     fire(ax[i], ay[i], 30f, t, 20f * dmgMult)
+                    Audio.playVaried(Sfx.SHOOT, 0.35f, 0.1f, rnd)
                     aFaceRight[i] = enemies[t].x > ax[i]
                     aDir[i] = dirIndex(enemies[t].x - ax[i], enemies[t].y - ay[i])
                     aShoot[i] = 0.32f
@@ -1112,6 +1127,7 @@ class Game {
                     val target = nearestEnemy(ox, t.y, if (age >= 2) 456f else 380f)
                     if (target >= 0) {
                         fire(ox, t.y, 128f, target, 26f * dmgMult * (if (age >= 3) 1.5f else 1f))
+                        Audio.playVaried(Sfx.SHOOT, 0.35f, 0.1f, rnd)
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
                         t.shoot[a] = 0.32f
@@ -1199,6 +1215,7 @@ class Game {
 
     private fun hitEnemy(i: Int, dmgIn: Float) {
         val e = enemies[i]
+        Audio.playVaried(Sfx.HIT_FLESH, 0.4f, 0.12f, rnd)
         val crit = rnd.nextFloat() < 0.12f
         val dmg = if (crit) dmgIn * 2f else dmgIn
         e.hp -= dmg
@@ -1221,7 +1238,7 @@ class Game {
         corpses.firstOrNull { !it.active }?.let { c ->
             c.active = true; c.x = e.x; c.y = e.y; c.kind = e.kind; c.dir = e.dir; c.scale = e.scale; c.t = 0f
         }
-        if (e.kind == 2) slowMo = 0.8f // boss down: brief slow motion
+        if (e.kind == 2) { slowMo = 0.8f; Audio.haptic(Haptic.HEAVY) } // boss down: brief slow motion
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
         if (e.kind == 2) { rainLeft += e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
@@ -1290,6 +1307,8 @@ class Game {
                         coins++
                         coinsCollected++
                         stackBump = 1f
+                        Audio.play(Sfx.COIN, 0.45f, 0.9f + min(coins, 60) * 0.006f)
+                        if (coins % 10 == 0) { Audio.play(Sfx.COIN_STACK, 0.6f); Audio.haptic(Haptic.LIGHT) }
                     } else {
                         c.x += dx / d * step; c.y += dy / d * step; c.z += dz / d * step
                     }
@@ -1368,6 +1387,7 @@ class Game {
         burst(p.x, p.y, 10f, 26, 0xFFFFD84AL, 300f)
         when (p.kind) {
             PAD_RECRUIT -> {
+                Audio.play(Sfx.RECRUIT)
                 if (squad < MAX_SQUAD) {
                     ax[squad] = p.x; ay[squad] = p.y
                     aDir[squad] = 0; aShoot[squad] = 0f
@@ -1381,17 +1401,20 @@ class Game {
                 forgePad.visible = true
             }
             PAD_FORGE -> {
+                Audio.play(Sfx.FORGE)
                 dmgLevel++
                 p.level++
                 p.cost = forgeCost(p.level)
             }
             PAD_REPAIR -> {
+                Audio.play(Sfx.REPAIR)
                 castleHp = min(castleMaxHp, castleHp + castleMaxHp * 0.45f)
                 p.level++
                 p.cost = price(15 + p.level * 10)
                 burst(World.CASTLE_X, World.CASTLE_Y, 60f, 30, 0xFF7CFF8AL, 260f)
             }
             PAD_TOWER -> {
+                Audio.play(Sfx.BUILD)
                 val t = towers[p.ref]
                 t.built = true
                 t.bump = 1f
@@ -1400,6 +1423,7 @@ class Game {
                 burst(t.x, t.y, 40f, 30, 0xFFA4683AL, 280f)
             }
             PAD_TOWER_ARCHER -> {
+                Audio.play(Sfx.RECRUIT, 0.8f)
                 val t = towers[p.ref]
                 if (t.archers < TOWER_SLOTS) t.archers++
                 t.bump = 0.6f
@@ -1409,6 +1433,7 @@ class Game {
                 if (levelDone()) levelUpPending = true
             }
             PAD_WALL -> {
+                Audio.play(Sfx.BUILD)
                 val w = walls[p.ref]
                 w.built = true
                 ringDirty = true
@@ -1432,6 +1457,7 @@ class Game {
                     spawnEnemy(KIND_BOSS)
                     bossPending = false
                     bossBanner = 2.2f
+                    Audio.play(Sfx.BOSS_ROAR)
                 } else if (toSpawn > 0) {
                     spawnEnemy(pickKind())
                     toSpawn--
@@ -1453,6 +1479,7 @@ class Game {
         waveBreak -= dt
         if (waveBreak <= 0f) {
             wave++
+            Audio.play(Sfx.WAVE_HORN)
             saveGame()
             waveCleared = false
             toSpawn = 3 + wave * 2
@@ -1678,6 +1705,8 @@ class Game {
     }
 
     private fun breakWall(w: Wall) {
+        Audio.play(Sfx.WALL_BREAK)
+        Audio.haptic(Haptic.HEAVY)
         w.built = false
         ringDirty = true
         w.hp = 0f
@@ -1691,6 +1720,8 @@ class Game {
     private fun damageKing(d: Float) {
         kHp -= d
         text(kx, ky, 90f, d.toInt(), false, 2)
+        Audio.play(Sfx.KING_HURT, 0.7f)
+        Audio.haptic(Haptic.MEDIUM)
         kHurtTimer = 3f
         shake = max(shake, 3f)
         if (kHp <= 0f) {
@@ -1705,6 +1736,7 @@ class Game {
     }
 
     private fun gameOver() {
+        Audio.play(Sfx.DEFEAT)
         Storage.saveGame(null)
         treasureWon = (coins + rainLeft) / 2 // shown on the panel; banked by finishRun()
         castleHp = 0f

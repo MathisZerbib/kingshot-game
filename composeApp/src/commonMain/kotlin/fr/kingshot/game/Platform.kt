@@ -4,6 +4,8 @@ package fr.kingshot.game
 object PlatformHooks {
     /** Set by App: called when the app goes to the background (pause + save). */
     var onBackground: (() -> Unit)? = null
+    /** Set by App: called when the app is back in front. */
+    var onForeground: (() -> Unit)? = null
     /** Set by the platform: applies the frame-rate preference (true = cap at 60 Hz). */
     var applyFrameCap: ((Boolean) -> Unit)? = null
 }
