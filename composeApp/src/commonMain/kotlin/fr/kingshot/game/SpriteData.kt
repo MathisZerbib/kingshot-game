@@ -77,4 +77,13 @@ object SpriteData {
     val watermill = SpriteInfo(254, 214, 85.0f, 118.5f, 2.0f, 1, 1)
     val well = SpriteInfo(147, 137, 49.0f, 97.3f, 2.0f, 1, 1)
     val lumbermill = SpriteInfo(292, 294, 119.0f, 218.5f, 2.0f, 1, 1)
+    val portraitWarriorGold = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitWarriorFrost = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitWarriorShadow = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitRangerGold = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitRangerFrost = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitRangerShadow = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitBuilderGold = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitBuilderFrost = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val portraitBuilderShadow = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
 }
