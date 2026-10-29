@@ -30,13 +30,8 @@ object Sfx {
     )
     /** Minimum seconds between two plays of the same sound (keeps 30 archers from producing white noise). */
     val minGap = floatArrayOf(
-        0.3f, 0.35f, 0.45f, 0.3f, 0.3f, 0.3f, 1f, 4f, 2f, 0.5f,
-        2f, 2f, 0.1f, 2f, 1.5f, 1f, 0.3f, 0.3f, 0.5f,
-    )
-    /** Mix level of each sound: combat/coins stay in the background, only key events stand out. */
-    val mix = floatArrayOf(
-        0.3f, 0.3f, 0.3f, 0.45f, 0.5f, 0.6f, 0.4f, 0.6f, 0.6f, 0.6f,
-        0.7f, 0.7f, 0.4f, 0.6f, 0.5f, 0.6f, 0.5f, 0.5f, 0.5f,
+        0.07f, 0.05f, 0.06f, 0.12f, 0.08f, 0.15f, 0.5f, 2f, 1f, 0.3f,
+        2f, 2f, 0.1f, 2f, 0.4f, 0.5f, 0.2f, 0.2f, 0.2f,
     )
 }
 
@@ -108,7 +103,7 @@ object Audio {
         if (Prefs.sfxOff) return
         if (time - lastPlay[id] < Sfx.minGap[id]) return
         lastPlay[id] = time
-        engine?.play(id, volume * Sfx.mix[id], pitch)
+        engine?.play(id, volume, pitch)
     }
 
     /** Plays with a random pitch around 1 (±[spread]) so repeated effects do not sound mechanical. */
