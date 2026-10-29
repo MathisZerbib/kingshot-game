@@ -137,7 +137,8 @@ fun Modifier.nine(res: DrawableResource, ins: Inset, k: Float = 0.36f): Modifier
 }
 
 @Composable
-fun cinzel() = FontFamily(Font(Res.font.cinzel_bold, FontWeight.Bold))
+// kit v3: Lilita One for titles and buttons (the name stays: it is the « title face »)
+fun cinzel() = FontFamily(Font(Res.font.lilita_one_regular, FontWeight.Bold))
 
 @Composable
 fun nunito() = FontFamily(
@@ -160,7 +161,7 @@ fun GText(
         style = TextStyle(
             color = color, fontSize = size.sp, fontFamily = if (title) cinzel() else nunito(),
             fontWeight = if (title) FontWeight.Bold else weight, textAlign = align,
-            letterSpacing = if (title) (size * 0.04f).sp else 0.sp, lineHeight = (size * 1.25f).sp,
+            letterSpacing = if (title) (size * 0.01f).sp else 0.sp, lineHeight = (size * 1.25f).sp,
             // kit v3: a soft drop shadow (0 / 2 dp, 35 %) instead of the dark engraved look
             shadow = if (shadow) Shadow(Color(0x59000000), Offset(0f, 2f * px), 4f * px) else null,
         ),
@@ -230,7 +231,7 @@ fun Pill(icon: DrawableResource, text: String, modifier: Modifier = Modifier, wi
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(painterResource(icon), null, Modifier.size(26.dp))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { GText(text, 15, Pal.goldLight, weight = FontWeight.Black) }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { GText(text, 15, Color.White, weight = FontWeight.Black) }
     }
 }
 

@@ -239,7 +239,7 @@ private fun HeroChip(c: Int, selected: Boolean, onClick: () -> Unit) {
         Image(painterResource(Shop.skinPortrait(c, Shop.skinLook(c)) ?: PORTRAITS[c]), CLASS_NAMES[c], Modifier.size(50.dp).clip(CircleShape))
         Box(Modifier.size(62.dp).drawBehind {
             val r = ring.value
-            if (r > 0f) drawCircle(Pal.gold, size.minDimension / 2f - 3.dp.toPx(), alpha = r, style = Stroke(2.5.dp.toPx()))
+            if (r > 0f) drawCircle(Color(0xFFFFD65A), size.minDimension / 2f - 3.dp.toPx(), alpha = r, style = Stroke(2.5.dp.toPx()))
             if (r < 1f) drawCircle(Pal.navyDeep, size.minDimension / 2f - 4.dp.toPx(), alpha = 0.4f * (1f - r))
         })
     }
@@ -280,7 +280,7 @@ private fun HeroPlate(picked: Int) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Image(painterResource(CLASS_ICONS[picked]), null, Modifier.size(18.dp))
-                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { GText(ABILITY_NAMES[picked], 13, Pal.goldLight, weight = FontWeight.Black, shadow = false) }
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { GText(ABILITY_NAMES[picked], 13, Color.White, weight = FontWeight.Black, shadow = false) }
                 }
             }
         }
@@ -294,9 +294,9 @@ private fun Ornament(left: Boolean) {
         val y = size.height / 2f
         val d = 4.dp.toPx()
         val tip = if (left) d else size.width - d
-        drawLine(Pal.gold, Offset(if (left) d else 0f, y), Offset(if (left) size.width else size.width - d, y), 1.5.dp.toPx())
-        val path = androidx.compose.ui.graphics.Path().apply { moveTo(tip - d, y); lineTo(tip, y - d); lineTo(tip + d, y); lineTo(tip, y + d); close() }
-        drawPath(path, Pal.goldLight)
+        // kit v3: two thin white strokes (45 %) ending in a small gold dot
+        drawLine(Color.White.copy(alpha = 0.45f), Offset(if (left) d * 2f else 0f, y), Offset(if (left) size.width else size.width - d * 2f, y), 1.5.dp.toPx())
+        drawCircle(Color(0xFFFFD65A), d * 0.75f, Offset(tip, y))
     }
 }
 
@@ -409,7 +409,7 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
                 Modifier.weight(1f).height(40.dp).nine(if (Prefs.difficulty == d) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
                     .clickable { Audio.play(Sfx.CLICK); Prefs.difficulty = d; tick++ },
                 contentAlignment = Alignment.Center,
-            ) { GText(DIFF_NAMES[d], 11, Color.White, title = true) }
+            ) { GText(DIFF_NAMES[d], 13, if (Prefs.difficulty == d) Color.White else Pal.ink, title = true, caps = false, shadow = Prefs.difficulty == d) }
         }
         GText("S'applique à la prochaine partie", 10, Pal.ink, shadow = false)
         KitButton(
@@ -505,7 +505,7 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                 ).forEachIndexed { i, (k, v) ->
                     Row(Modifier.fillMaxWidth().stagger(i).padding(vertical = 2.dp)) {
                         Box(Modifier.weight(1f)) { GText(k, 14, Color(0xFFCCD6F0), align = TextAlign.Start) }
-                        GText(v, 15, Pal.goldLight, weight = FontWeight.Black)
+                        GText(v, 15, Color.White, weight = FontWeight.Black)
                     }
                 }
             }

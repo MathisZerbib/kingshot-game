@@ -167,7 +167,7 @@ private fun CatTab(k: Int, on: Boolean, modifier: Modifier, onClick: () -> Unit)
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Image(painterResource(CAT_ICONS[k]), null, Modifier.size(20.dp))
-        GText(CAT_NAMES[k], 12, if (on) Pal.ink else Color.White, title = true, shadow = !on, caps = false)
+        GText(CAT_NAMES[k], 12, Color.White, title = true, caps = false)
     }
 }
 
@@ -250,7 +250,7 @@ private fun ShopCard(item: ShopItem, selected: Boolean, modifier: Modifier, stag
     Column(
         modifier.graphicsLayer { alpha = inA.value; translationY = (1f - inA.value) * 12.dp.toPx() }
             .drawBehind {
-                if (eq) for (k in 3 downTo 1) drawRoundRect(Pal.gold, Offset(-k * 3.dp.toPx(), -k * 3.dp.toPx()), Size(size.width + k * 6.dp.toPx(), size.height + k * 6.dp.toPx()), CornerRadius(18.dp.toPx()), alpha = 0.12f)
+                if (eq) for (k in 3 downTo 1) drawRoundRect(Color(0xFFFFD65A), Offset(-k * 3.dp.toPx(), -k * 3.dp.toPx()), Size(size.width + k * 6.dp.toPx(), size.height + k * 6.dp.toPx()), CornerRadius(18.dp.toPx()), alpha = 0.12f)
                 if (selected) drawRoundRect(Color.White, cornerRadius = CornerRadius(14.dp.toPx()), style = Stroke(2.dp.toPx()))
             }
             .nine(Res.drawable.ui_card, IN_CARD, 0.32f).clickable(onClick = onClick).padding(start = 6.dp, end = 6.dp, top = 5.dp, bottom = 8.dp),
