@@ -175,7 +175,10 @@ class Wall(val path: Int, val s: Float) {
 
 /** Half length of a stone rampart across its road, and half width of its gate. */
 const val RAMPART_HALF = 135f // gate (90) + one 90-unit stone segment each side
+const val PALISADE_HALF = 85f
 const val GATE_HALF = 40f
+const val RING_MAX = 640 // points of the wall ring linking the palisades/ramparts
+const val RING_STEP = 20f
 
 class Input {
     var up = false
@@ -233,6 +236,16 @@ class Game {
     var abilityCd = 0f // seconds until the ability is ready
     var abilityFlash = 0f // > 0 right after use (visual)
     var paused = false
+
+    // Enclosure: arcs around the castle linking each built wall to the next one (by angle), as points RING_STEP apart.
+    // ringRun[i] = false where point i starts a new arc (no segment from i-1 to i).
+    val ringX = FloatArray(RING_MAX)
+    val ringY = FloatArray(RING_MAX)
+    val ringRun = BooleanArray(RING_MAX)
+    var ringCount = 0
+    private var ringDirty = true
+    private val ringOrder = IntArray(16)
+    private val ringAngle = FloatArray(16)
 
     // Level transition (ad-style): celebrate, zoom out over the grown map revealing the new road, zoom back
     var transition = 0f // seconds left, TRANSITION_TIME .. 0
@@ -410,12 +423,79 @@ class Game {
         for (t in texts) t.active = false
         for (t in towers) { t.built = false; t.archers = 0 }
         for (w in walls) { w.built = false; w.hp = 0f; w.gate = 0f }
+        ringDirty = true
         recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.level = squad; it.cost = recruitCost(squad) }
         forgePad = Pad(PAD_FORGE, 560f, 1640f).also { it.cost = forgeCost(0); it.visible = false }
         repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = price(15); it.visible = false }
         pads.clear()
         pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
         addMapPads(0, 0)
+    }
+
+    /**
+     * Links the built walls into one enclosure: walls sorted by angle around the castle, and from each wall's end to the
+     * next wall's start an arc whose radius blends between the two (so it stays around the base, outside the pads).
+     */
+    private fun rebuildRing() {
+        ringDirty = false
+        ringCount = 0
+        var n = 0
+        for (i in walls.indices) {
+            val w = walls[i]
+            if (!w.built || n >= ringOrder.size) continue
+            ringOrder[n] = i
+            ringAngle[n] = atan2(w.y - World.CASTLE_Y, w.x - World.CASTLE_X)
+            n++
+        }
+        if (n < 2) return
+        // insertion sort by angle (n <= 6)
+        for (i in 1 until n) {
+            var j = i
+            while (j > 0 && ringAngle[j - 1] > ringAngle[j]) {
+                val a = ringAngle[j]; ringAngle[j] = ringAngle[j - 1]; ringAngle[j - 1] = a
+                val o = ringOrder[j]; ringOrder[j] = ringOrder[j - 1]; ringOrder[j - 1] = o
+                j--
+            }
+        }
+        val stone = age >= 2
+        val half = if (stone) RAMPART_HALF else PALISADE_HALF
+        for (k in 0 until n) {
+            val a = walls[ringOrder[k]]
+            val b = walls[ringOrder[(k + 1) % n]]
+            // end of a with the larger angle, end of b with the smaller angle
+            val ax = if (stone) a.rx else a.nx; val ay = if (stone) a.ry else a.ny
+            val bx = if (stone) b.rx else b.nx; val by = if (stone) b.ry else b.ny
+            var p0x = a.x + ax * half; var p0y = a.y + ay * half
+            if (angleFrom(a, a.x - ax * half, a.y - ay * half) > angleFrom(a, p0x, p0y)) { p0x = a.x - ax * half; p0y = a.y - ay * half }
+            var p1x = b.x - bx * half; var p1y = b.y - by * half
+            if (angleFrom(b, b.x + bx * half, b.y + by * half) < angleFrom(b, p1x, p1y)) { p1x = b.x + bx * half; p1y = b.y + by * half }
+            val t0 = atan2(p0y - World.CASTLE_Y, p0x - World.CASTLE_X)
+            var dt = atan2(p1y - World.CASTLE_Y, p1x - World.CASTLE_X) - t0
+            while (dt <= 0f) dt += 2f * PI.toFloat()
+            if (dt > 4.7f) continue // ends overlap (walls very close): the wrap-around would circle the whole map
+            val r0 = hypot(p0x - World.CASTLE_X, p0y - World.CASTLE_Y)
+            val r1 = hypot(p1x - World.CASTLE_X, p1y - World.CASTLE_Y)
+            val steps = max(1, (dt * (r0 + r1) * 0.5f / RING_STEP).toInt())
+            for (s in 0..steps) {
+                if (ringCount >= RING_MAX) return
+                val f = s.toFloat() / steps
+                val ang = t0 + dt * f
+                val r = r0 + (r1 - r0) * f
+                ringX[ringCount] = World.CASTLE_X + cos(ang) * r
+                ringY[ringCount] = World.CASTLE_Y + sin(ang) * r
+                ringRun[ringCount] = s > 0
+                ringCount++
+            }
+        }
+    }
+
+    /** Angle of (x, y) around the castle, unwrapped to stay within pi of the wall's own angle. */
+    private fun angleFrom(w: Wall, x: Float, y: Float): Float {
+        val base = atan2(w.y - World.CASTLE_Y, w.x - World.CASTLE_X)
+        var a = atan2(y - World.CASTLE_Y, x - World.CASTLE_X)
+        while (a - base > PI.toFloat()) a -= 2f * PI.toFloat()
+        while (a - base < -PI.toFloat()) a += 2f * PI.toFloat()
+        return a
     }
 
     /** Share of this level's construction done (towers, their archers, walls): the HUD progress bar. */
@@ -453,6 +533,7 @@ class Game {
         addMapPads(nt, nw)
         // everything already built upgrades by itself
         for (w in walls) if (w.built) { w.maxHp = wallMaxHp(); w.hp = w.maxHp; w.bump = 1f }
+        ringDirty = true
         for (t in towers) if (t.built) t.bump = 1f
         recruitPad.cost = recruitCost(recruitPad.level)
         forgePad.cost = forgeCost(forgePad.level)
@@ -607,6 +688,7 @@ class Game {
             }
             for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
             waveBreak = 5f
+            ringDirty = true
             true
         } catch (e: NumberFormatException) {
             reset(); false
@@ -672,11 +754,12 @@ class Game {
         if (levelBanner > 0f) levelBanner -= dt
         if (kBoost > 0f) kBoost -= dt
         if (levelUpPending) levelUp()
+        if (ringDirty) rebuildRing()
         if (waveBanner > 0f) waveBanner -= dt
         if (bossBanner > 0f) bossBanner -= dt
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
         for (w in walls) {
-            val open = w.built && age >= 2 && !kDead && hypot(kx - w.x, ky - w.y) < 110f
+            val open = w.built && !kDead && hypot(kx - w.x, ky - w.y) < 110f
             w.gate = if (open) min(1f, w.gate + dt / 0.25f) else max(0f, w.gate - dt / 0.25f)
             if (w.hitFlash > 0f) w.hitFlash -= dt
             if (w.bump > 0f) w.bump = max(0f, w.bump - dt * 3f)
@@ -747,18 +830,40 @@ class Game {
             nx = World.CASTLE_X + cdx / cd * minD
             ny = World.CASTLE_Y + cdy / cd * minD / 1.6f
         }
-        if (age >= 2) for (w in walls) {
+        val stone = age >= 2
+        for (w in walls) {
             if (!w.built) continue
+            val lx = if (stone) w.rx else w.nx // wall line direction
+            val ly = if (stone) w.ry else w.ny
             val rx = nx - w.x
             val ry = ny - w.y
-            val along = rx * w.rx + ry * w.ry // along the rampart
-            if (abs(along) > RAMPART_HALF) continue
-            val across = rx * w.ry - ry * w.rx // through it
+            val along = rx * lx + ry * ly
+            if (abs(along) > (if (stone) RAMPART_HALF else PALISADE_HALF)) continue
+            val across = rx * ly - ry * lx // through it
             if (abs(across) >= 22f) continue
             if (abs(along) < GATE_HALF && w.gate > 0.6f) continue
-            val side = if ((kx - w.x) * w.ry - (ky - w.y) * w.rx >= 0f) 1f else -1f
-            nx = w.x + w.rx * along + w.ry * 22f * side
-            ny = w.y + w.ry * along - w.rx * 22f * side
+            val side = if ((kx - w.x) * ly - (ky - w.y) * lx >= 0f) 1f else -1f
+            nx = w.x + lx * along + ly * 22f * side
+            ny = w.y + ly * along - lx * 22f * side
+        }
+        // the enclosure between walls: push out of any ring segment
+        for (i in 1 until ringCount) {
+            if (!ringRun[i]) continue
+            val x0 = ringX[i - 1]; val y0 = ringY[i - 1]
+            val sx = ringX[i] - x0; val sy = ringY[i] - y0
+            val l2 = sx * sx + sy * sy
+            if (l2 < 1f) continue
+            val t = (((nx - x0) * sx + (ny - y0) * sy) / l2).coerceIn(0f, 1f)
+            val cx = x0 + sx * t; val cy = y0 + sy * t
+            val dx = nx - cx; val dy = ny - cy
+            val d2 = dx * dx + dy * dy
+            if (d2 >= 18f * 18f) continue
+            // push to the side the king came from
+            val pside = (kx - x0) * sy - (ky - y0) * sx
+            val l = sqrt(l2)
+            val px = sy / l * (if (pside >= 0f) 1f else -1f)
+            val py = -sx / l * (if (pside >= 0f) 1f else -1f)
+            nx = cx + px * 18f; ny = cy + py * 18f
         }
         kx = nx; ky = ny
         val sp = hypot(kvx, kvy)
@@ -1117,6 +1222,7 @@ class Game {
             PAD_WALL -> {
                 val w = walls[p.ref]
                 w.built = true
+                ringDirty = true
                 w.maxHp = wallMaxHp()
                 w.hp = w.maxHp
                 w.bump = 1f
@@ -1315,6 +1421,7 @@ class Game {
 
     private fun breakWall(w: Wall) {
         w.built = false
+        ringDirty = true
         w.hp = 0f
         burst(w.x, w.y, 25f, 34, 0xFF7A4A2AL, 320f)
         shake = max(shake, 6f)

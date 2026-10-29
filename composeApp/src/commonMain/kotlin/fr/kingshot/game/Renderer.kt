@@ -49,6 +49,7 @@ private const val K_ARCHER = 7
 private const val K_KING = 8
 private const val K_COIN = 9
 private const val K_PROP = 10
+private const val K_RING = 11
 
 // One palette per level, cycling: spring, autumn, winter (grass, dark patch, light patch, cliff top, cliff top light)
 private val SEASONS = arrayOf(
@@ -469,6 +470,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val pr = World.props
         i = 0
         while (i < pr.size) { if (vis(pr[i], pr[i + 1])) n = push(n, pr[i + 1], K_PROP, i); i += 3 }
+        // enclosure: stakes every point (wood), a stone block every 3rd point (stone/royal)
+        val ringStride = if (g.age >= 2) 2 else 1
+        for (k in 0 until g.ringCount) if (k % ringStride == 0 && vis(g.ringX[k], g.ringY[k])) n = push(n, g.ringY[k], K_RING, k)
         n = push(n, World.HOUSE_Y, K_HOUSE, 0)
         n = push(n, World.CASTLE_Y, K_CASTLE, 0)
         for (k in g.towers.indices) if (g.towers[k].built) n = push(n, g.towers[k].y, K_TOWER, k)
@@ -486,6 +490,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_TREE -> drawTree(t[idx], t[idx + 1], t[idx + 2], idx / 3)
                 K_ROCK -> drawRock(r[idx], r[idx + 1], r[idx + 2], idx / 3)
                 K_PROP -> drawProp(pr[idx], pr[idx + 1], pr[idx + 2])
+                K_RING -> drawRingPiece(g, idx)
                 K_HOUSE -> drawHouse(World.HOUSE_X, World.HOUSE_Y)
                 K_CASTLE -> drawCastle(g)
                 K_TOWER -> drawTower(g.towers[idx], g.age)
@@ -530,6 +535,21 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val sp = sprites ?: return
         if (idx % 2 == 0) sprite(sp.rock0, SpriteData.rock0, 0, 0, x, y, s)
         else sprite(sp.rock1, SpriteData.rock1, 0, 0, x, y, s)
+    }
+
+    private fun DrawScope.drawRingPiece(g: Game, k: Int) {
+        val sp = sprites ?: return
+        val x = g.ringX[k]
+        val y = g.ringY[k]
+        if (g.age >= 2) {
+            // stone block oriented by the local direction of the ring
+            val j = if (k + 1 < g.ringCount && g.ringRun[k + 1]) k + 1 else k - 1
+            val vertical = j >= 0 && abs(g.ringY[j] - y) > abs(g.ringX[j] - x)
+            if (vertical) sprite(sp.wallStoneV, SpriteData.wallStoneV, 0, 0, x, y, 0.72f)
+            else sprite(sp.wallStone, SpriteData.wallStone, 0, 0, x, y, 0.72f)
+        } else {
+            sprite(sp.stake, SpriteData.stake, 0, 0, x, y, 0.95f + ((k * 7) % 3) * 0.06f)
+        }
     }
 
     private fun DrawScope.drawProp(x: Float, y: Float, kind: Float) {
@@ -595,9 +615,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         } else {
             val stakes = 9
             val reverse = w.ny < 0f
+            val slide = w.gate * 26f
             for (k0 in 0 until stakes) {
                 val k = if (reverse) stakes - 1 - k0 else k0
-                val tt = (k - (stakes - 1) / 2f) * 20f
+                if (k == 4 && w.gate > 0.5f) continue // the middle stake swings away
+                var tt = (k - (stakes - 1) / 2f) * 20f
+                if (k == 3) tt -= slide else if (k == 5) tt += slide
                 sprite(sp.stake, SpriteData.stake, 0, 0, w.x + w.nx * tt, w.y + w.ny * tt, b * (0.95f + ((k * 7) % 3) * 0.06f), filter)
             }
         }
