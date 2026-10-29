@@ -1,6 +1,22 @@
 package fr.kingshot.game
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOutBack
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.jetbrains.compose.resources.imageResource
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -69,7 +85,7 @@ fun MainMenu(
     val float = rememberInfiniteTransition()
     val bob by float.animateFloat(-4f, 4f, infiniteRepeatable(tween(1500), RepeatMode.Reverse))
     Box(Modifier.fillMaxSize()) {
-        Image(painterResource(Res.drawable.menu_bg), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        MenuBackground(picked)
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x99000000), 0.22f to Color(0x00000000), 0.5f to Color(0x00000000), 1f to Color(0xCC000000))))
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(horizontal = 14.dp, vertical = 8.dp)) {
             // top bar: settings + gift on the left, treasure + hero XP on the right
@@ -102,11 +118,24 @@ fun MainMenu(
             }
             Spacer(Modifier.height(12.dp))
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                KitButton(Res.drawable.ui_button_green, "Jouer", "${CLASS_NAMES[picked]} · nouvelle partie", Res.drawable.ui_icon_play, onClick = onNew)
-                if (hasSave) KitButton(
-                    Res.drawable.ui_button_gold, "Continuer", "Niveau $savedLevel · ${World.levelName(savedLevel)}", null,
-                    width = 220.dp, height = 52.dp, textColor = Pal.ink, onClick = onContinue,
-                )
+                if (hasSave) {
+                    // a run exists: CONTINUER is the big button, a new game needs a second tap (it erases the run)
+                    var confirm by remember { mutableStateOf(false) }
+                    LaunchedEffect(confirm) { if (confirm) { delay(3000); confirm = false } }
+                    KitButton(
+                        Res.drawable.ui_button_gold, "Continuer", "Niveau $savedLevel · ${World.levelName(savedLevel)}", Res.drawable.ui_icon_play,
+                        textColor = Pal.ink, onClick = onContinue,
+                    )
+                    KitButton(
+                        if (confirm) Res.drawable.ui_button_red else Res.drawable.ui_button_green,
+                        if (confirm) "Confirmer ?" else "Nouvelle partie",
+                        if (confirm) "Efface la partie en cours" else "${CLASS_NAMES[picked]} · niveau 1",
+                        width = 220.dp, height = 52.dp,
+                        onClick = { if (confirm) onNew() else confirm = true },
+                    )
+                } else {
+                    KitButton(Res.drawable.ui_button_green, "Jouer", "${CLASS_NAMES[picked]} · nouvelle partie", Res.drawable.ui_icon_play, onClick = onNew)
+                }
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -122,21 +151,75 @@ fun MainMenu(
     }
 }
 
+// shortcut: the three classes share menu_bg with a tint until the per-hero backgrounds land
+private val MENU_BGS = arrayOf(Res.drawable.menu_bg, Res.drawable.menu_bg, Res.drawable.menu_bg)
+private val MENU_TINTS = arrayOf<ColorFilter?>(
+    null,
+    ColorFilter.tint(Color(0x3326C4B0), BlendMode.SrcAtop),
+    ColorFilter.tint(Color(0x38FFA328), BlendMode.SrcAtop),
+)
+
+/** Hero background: 450 ms cross-fade with a 1.04 → 1 zoom on change, then a slow 12 s drift. Animated in draw only. */
+@Composable
+private fun MenuBackground(picked: Int) {
+    val bgs = MENU_BGS.map { imageResource(it) }
+    var from by remember { mutableIntStateOf(picked) }
+    var to by remember { mutableIntStateOf(picked) }
+    val fade = remember { Animatable(1f) }
+    val zoom = remember { Animatable(1f) }
+    LaunchedEffect(picked) {
+        if (picked == to) return@LaunchedEffect
+        from = to; to = picked
+        fade.snapTo(0f); zoom.snapTo(1.04f)
+        launch { zoom.animateTo(1f, tween(450, easing = FastOutSlowInEasing)) }
+        fade.animateTo(1f, tween(450))
+    }
+    val drift = rememberInfiniteTransition().animateFloat(1f, 1.03f, infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Reverse))
+    Canvas(Modifier.fillMaxSize()) {
+        fun cover(i: Int, k: Float, alpha: Float) {
+            val im = bgs[i]
+            val s = maxOf(size.width / im.width, size.height / im.height) * k
+            val w = im.width * s; val h = im.height * s
+            drawImage(
+                im, IntOffset.Zero, IntSize(im.width, im.height),
+                IntOffset(((size.width - w) / 2f).toInt(), ((size.height - h) / 2f).toInt()), IntSize(w.toInt(), h.toInt()),
+                alpha = alpha, colorFilter = MENU_TINTS[i],
+            )
+        }
+        val f = fade.value
+        if (f < 1f) cover(from, drift.value, 1f)
+        cover(to, drift.value * zoom.value, f)
+    }
+}
+
 @Composable
 private fun HeroCard(c: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val sc by animateFloatAsState(if (selected) 1.04f else 1f, tween(160))
+    val sc = remember { Animatable(if (selected) 1.04f else 0.96f) }
+    val tilt = remember { Animatable(0f) }
+    val dim by animateFloatAsState(if (selected) 0f else 0.3f, tween(250))
+    LaunchedEffect(selected) {
+        if (!selected) { sc.animateTo(0.96f, tween(200)); return@LaunchedEffect }
+        if (sc.value >= 1.04f) return@LaunchedEffect // already picked at launch: no bounce
+        launch { sc.animateTo(1.08f, tween(110)); sc.animateTo(1.04f, tween(140, easing = EaseOutBack)) }
+        tilt.animateTo(6f, tween(75)); tilt.animateTo(-6f, tween(150)); tilt.animateTo(0f, tween(75))
+    }
+    val pulse = rememberInfiniteTransition().animateFloat(0.35f, 0.85f, infiniteRepeatable(tween(700), RepeatMode.Reverse))
     Column(
-        modifier.scale(sc).nine(Res.drawable.ui_card, IN_CARD, 0.3f)
-            .clickable { if (!selected) Audio.play(Sfx.RECRUIT); onClick() }
+        modifier.graphicsLayer { scaleX = sc.value; scaleY = sc.value }
+            .drawWithContent { drawContent(); if (dim > 0f) drawRoundRect(Color.Black.copy(alpha = dim), cornerRadius = CornerRadius(10.dp.toPx())) }
+            .nine(Res.drawable.ui_card, IN_CARD, 0.3f)
+            .clickable { if (!selected) { Audio.play(Sfx.RECRUIT); Audio.haptic(Haptic.LIGHT) }; onClick() }
             .padding(horizontal = 6.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.height(22.dp), contentAlignment = Alignment.Center) { GText(CLASS_NAMES[c], 12, Pal.goldLight, title = true) }
         Spacer(Modifier.height(8.dp))
         Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-            if (selected) Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0x66FFD54A)))
-            Image(painterResource(Res.drawable.ui_circle), null, Modifier.size(60.dp))
-            Image(painterResource(PORTRAITS[c]), null, Modifier.size(50.dp).clip(CircleShape))
+            if (selected) Box(Modifier.size(66.dp).graphicsLayer { alpha = pulse.value }.clip(CircleShape).background(Color(0xAAFFD54A)))
+            Box(Modifier.size(60.dp).graphicsLayer { rotationZ = tilt.value }, contentAlignment = Alignment.Center) {
+                Image(painterResource(Res.drawable.ui_circle), null, Modifier.size(60.dp))
+                Image(painterResource(PORTRAITS[c]), null, Modifier.size(50.dp).clip(CircleShape))
+            }
         }
         Row { for (k in 0 until 3) KitIcon(Res.drawable.ui_icon_heart, 14.dp, grey = k >= CLASS_HP[c]) }
         GText(CLASS_ROLE[c], 9, Pal.ink, shadow = false)

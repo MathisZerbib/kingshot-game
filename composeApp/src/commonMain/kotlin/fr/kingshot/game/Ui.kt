@@ -26,6 +26,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
@@ -161,7 +167,9 @@ fun KitButton(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 GText(text, if (height >= 64.dp) 22 else 17, textColor, title = true)
-                if (sub != null) GText(sub, 11, textColor.copy(alpha = 0.92f))
+                if (sub != null) AnimatedContent(sub, transitionSpec = {
+                    (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
+                }) { GText(it, 11, textColor.copy(alpha = 0.92f)) }
             }
         }
     }
