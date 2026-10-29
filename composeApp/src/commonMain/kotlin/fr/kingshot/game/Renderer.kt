@@ -786,6 +786,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (i in 0 until n) {
             val cx = x + g.sway * min(i * i * 0.016f, 70f) // bend capped so a tall stack never leaves the screen sideways
             if (base - i * 4.5f < viewTop) break
+            // above 30 coins draw one in three: coins are 23 units tall, so the column still looks solid
+            if (i >= 30 && i % 3 != 0 && i != n - 1) continue
             sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, cx, base - i * 4.5f, 1f)
         }
         if (g.kHp < g.kMaxHp) hpBar(x, y + 18f, 50f, g.kHp / g.kMaxHp, HP_GREEN) // under the king: the stack can be taller than the screen
