@@ -1,0 +1,62 @@
+{
+ "fx_slash": {
+  "frame": 256,
+  "frames": 8,
+  "blend": "plus"
+ },
+ "fx_ring": {
+  "frame": 256,
+  "frames": 8,
+  "blend": "plus"
+ },
+ "fx_spark": {
+  "frame": 128,
+  "frames": 6,
+  "blend": "plus"
+ },
+ "fx_puff": {
+  "frame": 128,
+  "frames": 8,
+  "blend": "over"
+ },
+ "fx_sparkle": {
+  "frame": 64,
+  "frames": 6,
+  "blend": "plus"
+ },
+ "fx_glow": {
+  "frame": 256,
+  "frames": 1,
+  "blend": "plus"
+ },
+ "fx_shadow": {
+  "frame": 128,
+  "frames": 1,
+  "blend": "over"
+ },
+ "fx_trail": {
+  "frame": 256,
+  "frames": 1,
+  "blend": "plus"
+ },
+ "fx_reticle": {
+  "frame": 256,
+  "frames": 1,
+  "blend": "plus"
+ },
+ "fx_rune": {
+  "frame": 512,
+  "frames": 1,
+  "blend": "plus"
+ },
+ "fx_arrow_stuck": {
+  "frame": 64,
+  "frames": 1,
+  "blend": "over"
+ },
+ "fx_dot": {
+  "frame": 32,
+  "frames": 1,
+  "blend": "over"
+ }
+}
