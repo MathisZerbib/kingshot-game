@@ -87,6 +87,8 @@ fun App() {
     // only the equipped skin of the hero in play is decoded; switching releases the previous one from the composition
     val skinRes = remember(shopV, uiState) { Shop.skinAtlas(game.heroClass) }
     renderer.kingSkin = skinRes?.let { imageResource(it) }
+    val portraitRes = remember(shopV, uiState) { Shop.skinPortrait(game.heroClass, Shop.skinLook(game.heroClass)) }
+    renderer.portraitSkin = portraitRes?.let { imageResource(it) }
     var pausedUi by remember { mutableStateOf(false) }
     var victoryUi by remember { mutableStateOf(false) }
     val track = remember { IntArray(1) { Music.NONE } } // music playing now (changed from the frame loop)

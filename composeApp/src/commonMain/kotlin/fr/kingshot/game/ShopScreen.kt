@@ -204,6 +204,9 @@ private fun ShopAction(item: ShopItem, big: Boolean, onBuy: () -> Unit) {
     val eq = Shop.equipped(item.kind, item.cls)?.id == item.id || (Shop.equipped(item.kind, item.cls) == null && item.price == 0)
     when {
         eq -> KitButton(Res.drawable.ui_button_green, "Équipé", width = w, height = h, titleSize = ts, enabled = false) {}
+        Shop.comingSoon(item) -> Box(Modifier.height(h), contentAlignment = Alignment.Center) {
+            GText(if (big) "Bientôt : les robes arrivent avec le prochain cheval" else "Bientôt", 13, Color(0xFFC8C8DC), shadow = false)
+        }
         Shop.owned(item.id) -> KitButton(Res.drawable.ui_button_blue, "Équiper", width = w, height = h, titleSize = ts) { Shop.equip(item.id) }
         !Shop.unlocked(item.id) -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(h)) {
             Image(painterResource(Res.drawable.ui_icon_lock), null, Modifier.size(18.dp))
@@ -260,8 +263,7 @@ private fun Preview(item: ShopItem, dim: androidx.compose.ui.unit.Dp, locked: Bo
         when (item.kind) {
             SHOP_SKIN -> {
                 val res = Shop.skinPortrait(item.cls, item.look)
-                Image(painterResource(res ?: PORTRAITS[item.cls]), item.name, Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape),
-                    colorFilter = filter ?: if (res == null) Shop.skinFilter(item.look) else null)
+                Image(painterResource(res ?: PORTRAITS[item.cls]), item.name, Modifier.fillMaxSize().clip(androidx.compose.foundation.shape.CircleShape), colorFilter = filter)
             }
             SHOP_BANNER -> {
                 val c = BANNER_COLORS[item.look]

@@ -2,8 +2,6 @@ package fr.kingshot.game
 
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlin.math.abs
 import fr.kingshot.game.resources.Res
@@ -65,7 +63,10 @@ object Shop {
 
     fun owned(id: String): Boolean { val it = item(id) ?: return false; return it.price == 0 || Storage.loadInt("${KEY}own_$id") == 1 }
     fun unlocked(id: String): Boolean = item(id)?.let { met(it.unlock) } ?: false
-    fun canBuy(id: String): Boolean { val it = item(id) ?: return false; return !owned(id) && met(it.unlock) && Meta.treasure >= it.price }
+    fun canBuy(id: String): Boolean { val it = item(id) ?: return false; return !comingSoon(it) && !owned(id) && met(it.unlock) && Meta.treasure >= it.price }
+
+    /** The king's horse is baked into his atlas with white parts shared by the armour: no clean recolour yet, so coats are not sold. */
+    fun comingSoon(it: ShopItem) = it.kind == SHOP_MOUNT && it.price > 0
 
     fun unlockText(cond: Int) = when (cond) {
         UNLOCK_LEVEL10 -> "Atteins le niveau 10"
@@ -135,18 +136,10 @@ object Shop {
     fun skinPortrait(cls: Int, look: Int): DrawableResource? =
         if (look == 0) null else Res.allDrawableResources["portrait_${SKIN_PREFIX[cls]}_${SKIN_KEY[look]}"]
 
-    fun skinFilter(look: Int): ColorFilter? = SKIN_FILTERS[look]
-
-    /** Provisional skin: a colour grade of the class sprite until the recoloured atlases exist. */
-    fun kingFilter(cls: Int): ColorFilter? { if (!loaded) load(); return SKIN_FILTERS[skinLook[cls]] }
 }
 
 val TRAIL_COLORS = arrayOf(Color(0xFFFFD84A), Color(0xFF6FD3FF), Color(0xFF7BD05A), Color(0xFFFF7A2A))
 
-private fun grade(r: Float, g: Float, b: Float, add: Float = 0f) = ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
-    r, 0f, 0f, 0f, add, 0f, g, 0f, 0f, add, 0f, 0f, b, 0f, add, 0f, 0f, 0f, 1f, 0f,
-)))
-private val SKIN_FILTERS = arrayOf(null, grade(1.25f, 1.05f, 0.55f, 12f), grade(0.78f, 0.98f, 1.3f, 10f), grade(0.5f, 0.42f, 0.62f))
 
 /** Banner colour: blue pixels (roofs, banners) of the buildings take the bought colour; everything else is untouched. */
 fun recolorBanner(src: ImageBitmap, look: Int): ImageBitmap {

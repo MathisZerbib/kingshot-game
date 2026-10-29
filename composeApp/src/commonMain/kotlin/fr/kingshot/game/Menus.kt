@@ -236,7 +236,7 @@ private fun HeroChip(c: Int, selected: Boolean, onClick: () -> Unit) {
         Box(Modifier.size(72.dp).graphicsLayer { alpha = halo.value * ring.value }.clip(CircleShape)
             .background(Brush.radialGradient(listOf(Color(0xCCFFD55A), Color.Transparent))))
         Image(painterResource(Res.drawable.ui_circle), null, Modifier.size(62.dp))
-        Image(painterResource(PORTRAITS[c]), CLASS_NAMES[c], Modifier.size(50.dp).clip(CircleShape))
+        Image(painterResource(Shop.skinPortrait(c, Shop.skinLook(c)) ?: PORTRAITS[c]), CLASS_NAMES[c], Modifier.size(50.dp).clip(CircleShape))
         Box(Modifier.size(62.dp).drawBehind {
             val r = ring.value
             if (r > 0f) drawCircle(Pal.gold, size.minDimension / 2f - 3.dp.toPx(), alpha = r, style = Stroke(2.5.dp.toPx()))

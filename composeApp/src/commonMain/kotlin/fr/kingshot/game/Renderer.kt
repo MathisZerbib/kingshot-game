@@ -211,6 +211,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     var hud: HudImages? = null
     /** Atlas of the equipped king skin, loaded on demand by App (only the one in use). */
     var kingSkin: ImageBitmap? = null
+    var portraitSkin: ImageBitmap? = null
     private var scale = 1f
     private val portraitClip = Path()
     private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
@@ -952,7 +953,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val kingImg = skin ?: when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
         val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
         withTransform({ rotate(lean, Offset(x, y)) }) {
-            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else if (skin != null) null else Shop.kingFilter(g.heroClass))
+            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
         }
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)
@@ -1079,7 +1080,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 portraitClip.reset()
                 portraitClip.addOval(androidx.compose.ui.geometry.Rect(pcx - pr, pcy - pr, pcx + pr, pcy + pr))
                 clipPath(portraitClip) {
-                    val img = when (g.heroClass) { CLASS_WARRIOR -> sp.portraitWarrior; CLASS_RANGER -> sp.portraitRanger; else -> sp.portraitBuilder }
+                    val img = portraitSkin ?: when (g.heroClass) { CLASS_WARRIOR -> sp.portraitWarrior; CLASS_RANGER -> sp.portraitRanger; else -> sp.portraitBuilder }
                     drawImage(img, IntOffset.Zero, IntSize(256, 256), IntOffset((pcx - pr * 1.1f).toInt(), (pcy - pr * 1.1f).toInt()), IntSize((pr * 2.2f).toInt(), (pr * 2.2f).toInt()))
                 }
             } else drawClassIcon(g.heroClass, pcx, pcy, pr * 0.62f, u)
