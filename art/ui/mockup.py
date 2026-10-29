@@ -79,7 +79,7 @@ def circle_icon(canvas, cx, cy, icon, size=120, red=False, badge=None):
 
 
 def background(dark_top=0.22, dark_bottom=0.5):
-    bg = img("menu_bg")
+    bg = img("menu_bg_warrior")
     k = max(W / bg.width, H / bg.height)
     bg = bg.resize((int(bg.width * k), int(bg.height * k)), Image.LANCZOS)
     bg = bg.crop(((bg.width - W) // 2, 0, (bg.width - W) // 2 + W, H))

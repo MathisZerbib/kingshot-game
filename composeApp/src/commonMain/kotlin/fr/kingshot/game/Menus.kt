@@ -9,8 +9,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -151,13 +149,7 @@ fun MainMenu(
     }
 }
 
-// shortcut: the three classes share menu_bg with a tint until the per-hero backgrounds land
-private val MENU_BGS = arrayOf(Res.drawable.menu_bg, Res.drawable.menu_bg, Res.drawable.menu_bg)
-private val MENU_TINTS = arrayOf<ColorFilter?>(
-    null,
-    ColorFilter.tint(Color(0x3326C4B0), BlendMode.SrcAtop),
-    ColorFilter.tint(Color(0x38FFA328), BlendMode.SrcAtop),
-)
+private val MENU_BGS = arrayOf(Res.drawable.menu_bg_warrior, Res.drawable.menu_bg_ranger, Res.drawable.menu_bg_builder)
 
 /** Hero background: 450 ms cross-fade with a 1.04 → 1 zoom on change, then a slow 12 s drift. Animated in draw only. */
 @Composable
@@ -183,7 +175,7 @@ private fun MenuBackground(picked: Int) {
             drawImage(
                 im, IntOffset.Zero, IntSize(im.width, im.height),
                 IntOffset(((size.width - w) / 2f).toInt(), ((size.height - h) / 2f).toInt()), IntSize(w.toInt(), h.toInt()),
-                alpha = alpha, colorFilter = MENU_TINTS[i],
+                alpha = alpha
             )
         }
         val f = fade.value
