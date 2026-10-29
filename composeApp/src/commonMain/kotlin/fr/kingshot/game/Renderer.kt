@@ -585,8 +585,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_LANCER -> {
                     val sp = sprites
                     if (sp != null) {
-                        val col = if (g.lSwing[idx] > 0f) 7 + ((1f - g.lSwing[idx]) * 3f).toInt().coerceIn(0, 2) else 0
-                        sprite(sp.archer, SpriteData.archer, col, g.lDir[idx], g.lx[idx], g.ly[idx], UNIT_SCALE * 1.05f, lancerTint)
+                        val col = if (g.lSwing[idx] > 0f) 7 + ((1f - g.lSwing[idx]) * 3f).toInt().coerceIn(0, 2) else if (g.lMoving[idx]) 1 + walkFrame(g.time * 12f, 6) else 0
+                        sprite(sp.lancer, SpriteData.lancer, col, g.lDir[idx], g.lx[idx], g.ly[idx], UNIT_SCALE)
                     }
                 }
                 K_ARCHER -> drawArcher(g, idx)
@@ -617,8 +617,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val tip = min(1f, f * 3f)
         val a = 1f - f * f
         withTransform({ rotate((if (c.dir % 8 < 4) -1f else 1f) * 75f * tip, Offset(c.x, c.y)) }) {
-            if (c.kind == 2) sprite(sp.boss, SpriteData.boss, 0, c.dir, c.x, c.y + f * 12f, UNIT_SCALE, hitTint, a)
-            else sprite(sp.knight, SpriteData.knight, 0, c.dir, c.x, c.y + f * 12f, UNIT_SCALE * c.scale, hitTint, a)
+            val k = UNIT_SCALE * (if (c.kind == KIND_SOLDIER || c.kind == KIND_BRUTE) c.scale else 1f)
+            enemySprite(sp, c.kind, c.bossType, 0f, 0f, c.dir, c.x, c.y + f * 12f, k, hitTint, a)
         }
     }
     private val hitTint = ColorFilter.tint(Color(0x55FFFFFF), BlendMode.SrcAtop)
@@ -656,38 +656,31 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     }
 
     // placeholder looks for the new buildings until their own models land
-    private val farmTint = ColorFilter.tint(Color(0x6670C040), BlendMode.SrcAtop)
-    private val barracksTint = ColorFilter.tint(Color(0x66C04040), BlendMode.SrcAtop)
-    private val lancerTint = ColorFilter.tint(Color(0x884060D0), BlendMode.SrcAtop)
     private val eliteTint = ColorFilter.tint(Color(0x88FFD84A), BlendMode.SrcAtop)
 
-    private val spotTints = arrayOf(
-        ColorFilter.tint(Color(0x668A5A2E), BlendMode.SrcAtop), ColorFilter.tint(Color(0x6640C0E0), BlendMode.SrcAtop),
-        ColorFilter.tint(Color(0x66E0D060), BlendMode.SrcAtop), ColorFilter.tint(Color(0x88FFD84A), BlendMode.SrcAtop),
-        ColorFilter.tint(Color(0x66E07040), BlendMode.SrcAtop),
-    )
 
     private fun DrawScope.drawBuilding(idx: Int, g: Game) {
         val sp = sprites ?: return
         when (idx) {
-            3, 4 -> { // base spot: the last building bought there (placeholder looks: tinted house or tower)
+            3, 4 -> { // base spot: the last building bought there
                 val u = g.lastUnlock(idx - 3)
                 val x = if (idx == 3) World.SPOT_A_X else World.SPOT_B_X
                 val y = if (idx == 3) World.SPOT_A_Y else World.SPOT_B_Y
-                if (u == U_KEEP2 || u == U_KEEP3 || u == U_BANNER) sprite(sp.towerStone, SpriteData.towerStone, 0, 0, x, y, 0.9f, spotTints[u % 5])
-                else sprite(sp.house, SpriteData.house, 0, 0, x, y - 20f, 0.75f, spotTints[u % 5])
+                when (u) {
+                    U_STABLE -> sprite(sp.stable, SpriteData.stable, 0, 0, x, y, 1f)
+                    U_ALTAR -> sprite(sp.church, SpriteData.church, 0, 0, x, y, 1f)
+                    U_MILL -> sprite(sp.watermill, SpriteData.watermill, 0, 0, x, y, 1f)
+                    U_MARKET -> sprite(sp.market, SpriteData.market, 0, 0, x, y, 1f)
+                    U_TREASURY -> sprite(sp.well, SpriteData.well, 0, 0, x, y, 1.2f, eliteTint)
+                    U_GATEWORKS -> sprite(sp.blacksmith, SpriteData.blacksmith, 0, 0, x, y, 1f)
+                    U_STATUE -> sprite(sp.lumbermill, SpriteData.lumbermill, 0, 0, x, y, 1f, eliteTint)
+                    U_KEEP3 -> sprite(sp.towerRoyal, SpriteData.towerRoyal, 0, 0, x, y, 0.9f)
+                    else -> sprite(sp.towerStone, SpriteData.towerStone, 0, 0, x, y, 0.9f) // keep II, banner
+                }
             }
-            0 -> {
-                sprite(sp.house, SpriteData.house, 0, 0, World.FARM_X, World.FARM_Y - 20f, 0.7f, farmTint)
-                for (k in 0 until 4) sprite(sp.tuft0, SpriteData.tuft0, 0, 0, World.FARM_X - 60f + k * 34f, World.FARM_Y + 40f, 1.3f) // crops
-            }
-            1 -> sprite(sp.house, SpriteData.house, 0, 0, World.BARRACKS_X, World.BARRACKS_Y - 20f, 0.8f, barracksTint)
-            else -> {
-                sprite(sp.rock1, SpriteData.rock1, 0, 0, World.MINE_X, World.MINE_Y, 2.4f)
-                sprite(sp.rock0, SpriteData.rock0, 0, 0, World.MINE_X + 40f, World.MINE_Y + 10f, 1.6f)
-                drawCoinIcon(World.MINE_X - 10f, World.MINE_Y - 34f, 12f) // gold vein
-                drawCoinIcon(World.MINE_X + 18f, World.MINE_Y - 22f, 9f)
-            }
+            0 -> sprite(sp.farm, SpriteData.farm, 0, 0, World.FARM_X, World.FARM_Y, 1f)
+            1 -> sprite(sp.barracks, SpriteData.barracks, 0, 0, World.BARRACKS_X, World.BARRACKS_Y, 1f)
+            else -> sprite(sp.mine, SpriteData.mine, 0, 0, World.MINE_X, World.MINE_Y, 1f)
         }
     }
 
@@ -728,12 +721,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val top = t.y - (if (age >= 3) 96f else 80f) * b
         for (a in 0 until t.archers) {
             val col = if (t.shoot[a] > 0f) 7 + ((0.32f - t.shoot[a]) / 0.32f * 3f).toInt().coerceIn(0, 2) else 0
-            sprite(sp.archer, SpriteData.archer, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE, if (t.elite) eliteTint else null)
+            if (t.elite) sprite(sp.archerElite, SpriteData.archerElite, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE)
+            else sprite(sp.archer, SpriteData.archer, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE)
         }
-        if (t.ballista) { // crossbow on the platform (placeholder)
-            line(PLANK_DARK, t.x - 30f, top - 30f, t.x + 30f, top - 30f, 7f)
-            line(PLANK, t.x, top - 44f, t.x, top - 12f, 6f)
-        }
+        if (t.ballista) sprite(sp.ballistaTop, SpriteData.ballistaTop, 0, 0, t.x, top - 6f, 1f)
         if (t.boltT > 0f) line(WHITE, t.x, top - 30f, t.boltX, t.boltY - 30f, 5f * (t.boltT / 0.18f))
     }
 
@@ -800,32 +791,36 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         if (g.kHp < g.kMaxHp) hpBar(x, y + 18f, 50f, g.kHp / g.kMaxHp, HP_GREEN) // under the king: the stack can be taller than the screen
     }
 
-    // placeholder looks for the new enemies until their own models land: tinted knights
-    private val kindTints = arrayOf(
-        null, null, null,
-        ColorFilter.tint(Color(0xB08A5A2E), BlendMode.SrcAtop), // wolf
-        ColorFilter.tint(Color(0x9944A040), BlendMode.SrcAtop), // archer
-        ColorFilter.tint(Color(0xA07A8AA0), BlendMode.SrcAtop), // shield bearer
-        ColorFilter.tint(Color(0xB05A3A20), BlendMode.SrcAtop), // ram
-    )
-    private val bossTints = arrayOf(null, ColorFilter.tint(Color(0x9950A040), BlendMode.SrcAtop), ColorFilter.tint(Color(0xA05A2A90), BlendMode.SrcAtop))
+
+    /** Atlas cell for an enemy: picks the model by kind (and boss type) and the frame from its walk/attack state. */
+    private fun DrawScope.enemySprite(sp: Sprites, kind: Int, bossType: Int, walk: Float, swing: Float, dir: Int, x: Float, y: Float, k: Float, filter: ColorFilter?, alpha: Float = 1f) {
+        fun atk(first: Int, n: Int) = first + ((1f - swing) * n).toInt().coerceIn(0, n - 1)
+        when (kind) {
+            KIND_WOLF -> sprite(sp.wolf, SpriteData.wolf, if (swing > 0f) atk(6, 2) else walkFrame(walk, 6), dir, x, y, k, filter, alpha)
+            KIND_ARCHER -> sprite(sp.enemyArcher, SpriteData.enemyArcher, if (swing > 0f) atk(5, 3) else 1 + walkFrame(walk, 4), dir, x, y, k, filter, alpha)
+            KIND_SHIELD -> sprite(sp.shieldman, SpriteData.shieldman, if (swing > 0f) atk(6, 3) else walkFrame(walk, 6), dir, x, y, k, filter, alpha)
+            KIND_RAM -> sprite(sp.ram, SpriteData.ram, if (swing > 0f) 1 else walkFrame(walk * 1.6f, 4), dir, x, y, k, filter, alpha) // log sways while pushed
+            KIND_BOSS -> when (bossType) {
+                1 -> sprite(sp.ogre, SpriteData.ogre, if (swing > 0f) atk(4, 3) else walkFrame(walk, 4), dir, x, y, k, filter, alpha)
+                2 -> sprite(sp.darkLord, SpriteData.darkLord, if (swing > 0f) atk(4, 3) else walkFrame(walk, 4), dir, x, y, k, filter, alpha)
+                else -> sprite(sp.boss, SpriteData.boss, if (swing > 0f) atk(4, 3) else walkFrame(walk, 4), dir, x, y, k, filter, alpha)
+            }
+            else -> sprite(sp.knight, SpriteData.knight, if (swing > 0f) atk(6, 3) else walkFrame(walk, 6), dir, x, y, k, filter, alpha)
+        }
+    }
 
     private fun DrawScope.drawEnemy(e: Enemy, bigBoss: Boolean) {
         val sp = sprites ?: return
         val boss = e.kind == 2
-        val filter = if (e.hitFlash > 0f) flashFilter else if (boss) bossTints[e.bossType.coerceIn(0, 2)] else if (e.elite) eliteTint else kindTints[e.kind.coerceIn(0, kindTints.size - 1)]
-        if (boss) {
-            val col = if (e.swing > 0f) 4 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 4)
-            if (e.slam > 0f) { // red warning circle, filling up until the slam lands
-                val k = 1f - e.slam / 0.9f
-                drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R, e.y - OGRE_SLAM_R * 0.6f), Size(OGRE_SLAM_R * 2f, OGRE_SLAM_R * 1.2f), alpha = 0.18f + 0.25f * k)
-                drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R * k, e.y - OGRE_SLAM_R * 0.6f * k), Size(OGRE_SLAM_R * 2f * k, OGRE_SLAM_R * 1.2f * k), alpha = 0.35f)
-            }
-            sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE * (if (e.bossType == 1) 1.15f else 1f) * (if (bigBoss) 1.15f else 1f), filter)
-        } else {
-            val col = if (e.swing > 0f) 6 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 6)
-            sprite(sp.knight, SpriteData.knight, col, e.dir, e.x, e.y, UNIT_SCALE * e.scale, filter)
+        val filter = if (e.hitFlash > 0f) flashFilter else if (e.elite) eliteTint else null
+        if (boss && e.slam > 0f) { // red warning circle, filling up until the slam lands
+            val k = 1f - e.slam / 0.9f
+            drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R, e.y - OGRE_SLAM_R * 0.6f), Size(OGRE_SLAM_R * 2f, OGRE_SLAM_R * 1.2f), alpha = 0.18f + 0.25f * k)
+            drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R * k, e.y - OGRE_SLAM_R * 0.6f * k), Size(OGRE_SLAM_R * 2f * k, OGRE_SLAM_R * 1.2f * k), alpha = 0.35f)
         }
+        // new models are made at their own size: only knights (soldier/brute) and the wood-age boss use e.scale
+        val k = UNIT_SCALE * (if (e.kind == KIND_SOLDIER || e.kind == KIND_BRUTE) e.scale else 1f) * (if (boss && bigBoss) 1.15f else 1f)
+        enemySprite(sp, e.kind, e.bossType, e.walk, e.swing, e.dir, e.x, e.y, k, filter)
         if (boss || e.hp < e.maxHp) {
             val bw = if (boss) 110f else 34f * e.scale
             val top = if (boss) 150f else 62f * e.scale

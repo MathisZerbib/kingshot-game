@@ -220,6 +220,7 @@ class Corpse {
     var x = 0f
     var y = 0f
     var kind = 0
+    var bossType = 0
     var dir = 0
     var scale = 1f
     var t = 0f // 0 .. CORPSE_TIME
@@ -418,6 +419,7 @@ class Game {
     val ly = FloatArray(LANCERS)
     val lDir = IntArray(LANCERS)
     val lSwing = FloatArray(LANCERS)
+    val lMoving = BooleanArray(LANCERS)
     private val lCd = FloatArray(LANCERS)
 
     // Waves
@@ -1393,6 +1395,7 @@ class Game {
             val dx = tx - lx[k]
             val dy = ty - ly[k]
             val d = hypot(dx, dy)
+            lMoving[k] = d > 4f
             if (d > 4f) {
                 val step = min(170f * dt, d)
                 lx[k] += dx / d * step; ly[k] += dy / d * step
@@ -1526,7 +1529,7 @@ class Game {
         pendKills++; pendXp++
         if (e.kind == KIND_BOSS) { pendBosses++; pendXp += 20 }
         corpses.firstOrNull { !it.active }?.let { c ->
-            c.active = true; c.x = e.x; c.y = e.y; c.kind = e.kind; c.dir = e.dir; c.scale = e.scale; c.t = 0f
+            c.active = true; c.x = e.x; c.y = e.y; c.kind = e.kind; c.bossType = e.bossType; c.dir = e.dir; c.scale = e.scale; c.t = 0f
         }
         if (e.kind == 2) { slowMo = 0.8f; Audio.haptic(Haptic.HEAVY) } // boss down: brief slow motion
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
