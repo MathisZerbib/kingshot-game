@@ -21,6 +21,10 @@ object Prefs {
     var vibrationOff: Boolean
         get() = Storage.loadInt("vib_off") == 1
         set(v) = Storage.saveInt("vib_off", if (v) 1 else 0)
+    /** 0 Normal, 1 Difficile (default), 2 Cauchemar. Stored +1 so a missing value means Difficile. */
+    var difficulty: Int
+        get() = (Storage.loadInt("difficulty") - 1).let { if (it < 0) 1 else it.coerceIn(0, 2) }
+        set(v) = Storage.saveInt("difficulty", v + 1)
     var cap60: Boolean
         get() = Storage.loadInt("cap60") == 1
         set(v) { Storage.saveInt("cap60", if (v) 1 else 0); PlatformHooks.applyFrameCap?.invoke(v) }

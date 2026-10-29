@@ -496,6 +496,15 @@ private fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
             Toggle("Musique", !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
             Toggle("Vibrations", !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
             Toggle("Fluidité max (sinon 60 Hz, économise la batterie)", !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
+            Row(Modifier.width(280.dp).padding(vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (d in 0..2) Box(
+                    Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                        .background(if (Prefs.difficulty == d) Color(0xFFFFB627) else Color(0x33FFFFFF))
+                        .clickable { Prefs.difficulty = d; tick++ }.padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center,
+                ) { Label(DIFF_NAMES[d], if (Prefs.difficulty == d) Color(0xFF3A2400) else Color.White, 13, FontWeight.Black) }
+            }
+            Label("La difficulté s'applique à la prochaine partie", Color(0xFFCCCCCC), 11)
             Spacer(Modifier.height(14.dp))
             BigButton(
                 if (confirmReset) "CONFIRMER ?" else "Remettre à zéro", if (confirmReset) "Trésor, améliorations, record et partie" else "la progression",

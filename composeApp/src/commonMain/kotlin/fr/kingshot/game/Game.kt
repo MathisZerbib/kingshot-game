@@ -23,6 +23,11 @@ const val PAD_TOWER = 3
 const val PAD_TOWER_ARCHER = 4
 const val START_SQUAD = 2
 const val TRANSITION_TIME = 4.2f
+// difficulty multipliers: Normal (the older, gentler tuning), Difficile (default), Cauchemar
+val DIFF_HP = floatArrayOf(0.7f, 1f, 1.4f)
+val DIFF_DMG = floatArrayOf(0.75f, 1f, 1.4f)
+val DIFF_COUNT = floatArrayOf(0.75f, 1f, 1.2f)
+val DIFF_NAMES = arrayOf("Normal", "Difficile", "Cauchemar")
 const val OGRE_SLAM_R = 160f
 const val PAD_WALL = 5
 const val PAD_FARM = 6 // +1 coin every 2 s, dropped next to the farm
@@ -316,6 +321,7 @@ class Input {
 class Game {
     /** Talent ranks, read once per game (see Progress.kt). Declared first: reset() runs from init. */
     private val tal = IntArray(TALENT_NAMES.size)
+    private var diff = 1 // difficulty, read once per game (Prefs.difficulty)
     val rnd = Random(Random.nextLong())
     val input = Input()
 
@@ -568,6 +574,7 @@ class Game {
         wallLost = false; levelStart = 0f; lastStars = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
         for (t in tal.indices) tal[t] = Talents.level(t)
+        diff = Prefs.difficulty
         castleMaxHp = 600f * (1f + 0.1f * tal[TAL_KEEP_HP])
         flushProgress()
         runTimeFlushed = 0f
@@ -729,7 +736,7 @@ class Game {
         for (a in arrows) a.active = false
         toSpawn = 0; bossPending = false; waveBreak = 7f; waveCleared = true
         val missing = castleMaxHp - castleHp
-        castleMaxHp *= if (ageChanged && age == 3) 1.25f * 1.5f else 1.25f // royal castle: +50 % on top
+        castleMaxHp *= if (ageChanged && age == 3) 1.15f * 1.5f else 1.15f // royal castle: +50 % on top
         castleHp = castleMaxHp - missing * 0.5f // the keep only heals half of its damage between levels
         val nt = towers.size
         val nw = walls.size
@@ -1016,7 +1023,8 @@ class Game {
     }
 
     // Archers are spent on towers now, so recruiting stays affordable; cheaper from level 2.
-    private fun recruitCost(n: Int): Int = price((min(4 + n * 2, 20) * (if (level >= 2) 0.75f else 1f)).toInt())
+    // each archer costs more than the last (6, 10, 14, ... up to 90): a big squad is an investment
+    private fun recruitCost(n: Int): Int = price(min(6 + max(0, n - START_SQUAD) * 4, 90))
 
     /** Builder pays 30 % less for everything. */
     private fun price(c: Int) = max(1, (c * (if (heroClass == CLASS_BUILDER) 0.7f else 1f) * (1f - 0.04f * tal[TAL_PRICES]) + 0.5f).toInt())
@@ -1377,7 +1385,7 @@ class Game {
         }
         if (farm) {
             farmTimer += dt
-            if (farmTimer >= 2f) { farmTimer -= 2f; dropCoin(World.FARM_X + 40f, World.FARM_Y + 10f) }
+            if (farmTimer >= 3f) { farmTimer -= 3f; dropCoin(World.FARM_X + 40f, World.FARM_Y + 10f) }
         }
         if (barracks) updateLancers(dt)
         for (t in towers) {
@@ -1578,7 +1586,7 @@ class Game {
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
         if (e.kind == 2) { rainLeft += if (mine) e.coins * 2 else e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
         else {
-            var n = (if (mine) e.coins * 2 else e.coins) * (if (e.elite) 2 else 1)
+            var n = (if (mine) (e.coins * 3 + 1) / 2 else e.coins) * (if (e.elite) 2 else 1)
             if (unlocked[U_STATUE] && rnd.nextFloat() < 0.25f * n) n++
             repeat(n) { dropCoin(e.x, e.y) }
         }
@@ -1894,7 +1902,7 @@ class Game {
             flushProgress()
             saveGame()
             waveCleared = false
-            toSpawn = 3 + wave * 2 + (level - 1) * 2
+            toSpawn = ((4 + wave * 5 / 2 + (level - 1) * 3) * DIFF_COUNT[diff]).toInt()
             pickWaveRoads()
             // boss on every 5th wave, and on the last wave of a level from level 5
             bossPending = wave % 5 == 0 || (goalWaves in 1..999 && levelWaves == goalWaves - 1)
@@ -1965,7 +1973,7 @@ class Game {
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
         e.special = 0f; e.mdx = 0f; e.mdy = 0f
         e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
-        val hpScale = (1f + (wave - 1) * 0.18f) * (1f + 0.12f * (level - 1)) * (if (e.elite) 2f else 1f)
+        val hpScale = (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < (if (wave <= 3) 0.3f else 0.45f)) 2 else 1 }
             KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
@@ -1981,6 +1989,7 @@ class Game {
         if (kind == KIND_RAM) repeat(2) { k -> // escort
             spawnEnemy(KIND_SOLDIER, e.path, max(0f, s - 30f), e.x + (k * 2 - 1) * 40f, e.y + 20f)
         }
+        e.dmg *= (1f + 0.04f * wave) * DIFF_DMG[diff] // they hit harder as the waves climb
         e.hp = e.maxHp
         e.atkCd = 0.5f
         e.hitFlash = 0f
