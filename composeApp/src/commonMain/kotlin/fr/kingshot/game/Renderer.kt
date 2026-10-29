@@ -209,6 +209,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     var sprites: Sprites? = null
     /** Interface kit images for the HUD (art/ui), set by App. */
     var hud: HudImages? = null
+    /** Atlas of the equipped king skin, loaded on demand by App (only the one in use). */
+    var kingSkin: ImageBitmap? = null
     private var scale = 1f
     private val portraitClip = Path()
     private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
@@ -946,10 +948,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val moving = abs(g.kvx) + abs(g.kvy) > 30f
         val col = if (moving) 1 + walkFrame(g.kWalk, 6) else 0
         oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
-        val kingImg = when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
+        val skin = kingSkin
+        val kingImg = skin ?: when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
         val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
         withTransform({ rotate(lean, Offset(x, y)) }) {
-            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else Shop.kingFilter(g.heroClass))
+            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else if (skin != null) null else Shop.kingFilter(g.heroClass))
         }
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)

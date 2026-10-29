@@ -6,6 +6,9 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import kotlin.math.abs
+import fr.kingshot.game.resources.Res
+import fr.kingshot.game.resources.allDrawableResources
+import org.jetbrains.compose.resources.DrawableResource
 
 const val SHOP_SKIN = 0
 const val SHOP_BANNER = 1
@@ -20,23 +23,27 @@ const val UNLOCK_WAVE50 = 3
 const val UNLOCK_CHAPTER3STARS = 4
 
 /** [cls] is the hero class for a skin, -1 otherwise; [look] indexes the kind's look table (skin tint, banner colour...). */
-class ShopItem(val id: String, val kind: Int, val cls: Int, val name: String, val desc: String, val price: Int, val unlock: Int, val look: Int)
+class ShopItem(val id: String, val kind: Int, val cls: Int, val name: String, val desc: String, val price: Int, val unlock: Int, val look: Int, val short: String = name)
 
 /** Cosmetic shop: bought with the treasure only (no real money, no gems). Equipped looks are cached in memory for the renderer. */
 object Shop {
     private const val KEY = "shop1_" // versioned save keys
+    val SKIN_PREFIX = arrayOf("warrior", "ranger", "builder")
+    val SKIN_KEY = arrayOf("base", "gold", "frost", "shadow")
+    private val SKIN_SHORT = arrayOf("Pourpre", "Givre", "Ombres")
+
 
     val items: List<ShopItem> = buildList {
         val skins = arrayOf(
-            Triple("gold", "Or", "Armure d'apparat dorée"),
-            Triple("frost", "Givre", "Acier bleu glacé"),
-            Triple("shadow", "Ombre", "Plates noires, reflets violets"),
+            Triple("gold", "Roi pourpre et or", "Armure d'or, cape pourpre"),
+            Triple("frost", "Roi de givre", "Armure d'argent et de glace, couronne d'argent"),
+            Triple("shadow", "Roi des ombres", "Armure noire, cape de sang"),
         )
         val skinPrice = intArrayOf(1500, 3000, 6000)
         val skinUnlock = intArrayOf(UNLOCK_NONE, UNLOCK_LEVEL10, UNLOCK_CHAPTER3STARS)
-        val prefix = arrayOf("warrior", "ranger", "builder")
-        for (c in 0..2) for (k in 0..2) {
-            add(ShopItem("${prefix[c]}_${skins[k].first}", SHOP_SKIN, c, "${CLASS_NAMES[c]} ${skins[k].second}", skins[k].third, skinPrice[k], skinUnlock[k], k + 1))
+        for (c in 0..2) {
+            add(ShopItem("${SKIN_PREFIX[c]}_base", SHOP_SKIN, c, "Roi d'origine", "L'armure du premier jour", 0, UNLOCK_NONE, 0, "Origine"))
+            for (k in 0..2) add(ShopItem("${SKIN_PREFIX[c]}_${skins[k].first}", SHOP_SKIN, c, skins[k].second, skins[k].third, skinPrice[k], skinUnlock[k], k + 1, SKIN_SHORT[k]))
         }
         val banners = arrayOf("Bleu royal", "Pourpre", "Émeraude", "Noir et or", "Blanc neige")
         val bannerUnlock = intArrayOf(UNLOCK_NONE, UNLOCK_NONE, UNLOCK_NONE, UNLOCK_BOSS1, UNLOCK_NONE)
@@ -44,13 +51,13 @@ object Shop {
         for (k in banners.indices) add(ShopItem("banner_${bannerId[k]}", SHOP_BANNER, -1, banners[k], "Étendards, toits et bannières", if (k == 0) 0 else 800, bannerUnlock[k], k))
         val mounts = arrayOf("Blanc", "Bai", "Noir", "Gris pommelé", "Palomino")
         val mountId = arrayOf("white", "bay", "black", "dapple", "palomino")
-        for (k in mounts.indices) add(ShopItem("mount_${mountId[k]}", SHOP_MOUNT, -1, mounts[k], "Robe du cheval royal", if (k == 0) 0 else 1200, if (k == 4) UNLOCK_LEVEL10 else UNLOCK_NONE, k))
+        for (k in mounts.indices) add(ShopItem("mount_${mountId[k]}", SHOP_MOUNT, -1, mounts[k], "Robe du cheval royal", if (k == 0) 0 else 1200, if (k == 4) UNLOCK_LEVEL10 else UNLOCK_NONE, k, if (k == 3) "Pommelé" else mounts[k]))
         val trails = arrayOf("Or", "Étincelles bleues", "Feuilles", "Flammes")
         val trailId = arrayOf("gold", "sparks", "leaves", "flames")
-        for (k in trails.indices) add(ShopItem("trail_${trailId[k]}", SHOP_TRAIL, -1, trails[k], "Traînée des pièces", if (k == 0) 0 else 600, if (k == 3) UNLOCK_WAVE50 else UNLOCK_NONE, k))
+        for (k in trails.indices) add(ShopItem("trail_${trailId[k]}", SHOP_TRAIL, -1, trails[k], "Traînée des pièces", if (k == 0) 0 else 600, if (k == 3) UNLOCK_WAVE50 else UNLOCK_NONE, k, if (k == 1) "Étincelles" else trails[k]))
     }
 
-    /** Bumped on every purchase or equip, so Compose can re-read the shop. */
+        /** Bumped on every purchase or equip, so Compose can re-read the shop. */
     val version = mutableIntStateOf(0)
 
     fun items(kind: Int, cls: Int = -1) = items.filter { it.kind == kind && (cls < 0 || it.cls == cls) }
@@ -61,10 +68,10 @@ object Shop {
     fun canBuy(id: String): Boolean { val it = item(id) ?: return false; return !owned(id) && met(it.unlock) && Meta.treasure >= it.price }
 
     fun unlockText(cond: Int) = when (cond) {
-        UNLOCK_LEVEL10 -> "Atteindre le niveau 10"
-        UNLOCK_BOSS1 -> "Vaincre un boss"
-        UNLOCK_WAVE50 -> "Atteindre la vague 50"
-        UNLOCK_CHAPTER3STARS -> "3 étoiles sur un chapitre entier"
+        UNLOCK_LEVEL10 -> "Atteins le niveau 10"
+        UNLOCK_BOSS1 -> "Bats un boss"
+        UNLOCK_WAVE50 -> "Atteins la vague 50"
+        UNLOCK_CHAPTER3STARS -> "3 étoiles sur tout un chapitre"
         else -> ""
     }
 
@@ -116,11 +123,25 @@ object Shop {
         loaded = true
     }
 
+    fun skinLook(cls: Int): Int { if (!loaded) load(); return skinLook[cls] }
+
+    /** Animated atlas of the equipped skin (art/blender/render_sprites.py), null if none is equipped or the file is not in the build yet. */
+    fun skinAtlas(cls: Int): DrawableResource? {
+        val look = skinLook(cls)
+        return if (look == 0) null else Res.allDrawableResources["king_${SKIN_PREFIX[cls]}_${SKIN_KEY[look]}"]
+    }
+
+    /** Shop preview portrait of a skin; falls back on the class portrait. */
+    fun skinPortrait(cls: Int, look: Int): DrawableResource? =
+        if (look == 0) null else Res.allDrawableResources["portrait_${SKIN_PREFIX[cls]}_${SKIN_KEY[look]}"]
+
+    fun skinFilter(look: Int): ColorFilter? = SKIN_FILTERS[look]
+
     /** Provisional skin: a colour grade of the class sprite until the recoloured atlases exist. */
     fun kingFilter(cls: Int): ColorFilter? { if (!loaded) load(); return SKIN_FILTERS[skinLook[cls]] }
 }
 
-private val TRAIL_COLORS = arrayOf(Color(0xFFFFD84A), Color(0xFF6FD3FF), Color(0xFF7BD05A), Color(0xFFFF7A2A))
+val TRAIL_COLORS = arrayOf(Color(0xFFFFD84A), Color(0xFF6FD3FF), Color(0xFF7BD05A), Color(0xFFFF7A2A))
 
 private fun grade(r: Float, g: Float, b: Float, add: Float = 0f) = ColorFilter.colorMatrix(ColorMatrix(floatArrayOf(
     r, 0f, 0f, 0f, add, 0f, g, 0f, 0f, add, 0f, 0f, b, 0f, add, 0f, 0f, 0f, 1f, 0f,

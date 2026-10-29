@@ -1,5 +1,10 @@
 package fr.kingshot.game
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
@@ -146,6 +151,8 @@ fun GText(
     text: String, size: Int, color: Color = Color.White, title: Boolean = false, weight: FontWeight = FontWeight.ExtraBold,
     shadow: Boolean = true, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center,
 ) {
+    // menu v2 scale: never under 13 dp for body text, 11 for Cinzel labels (tabs, card titles)
+    val size = size.coerceAtLeast(if (title) 11 else 13)
     BasicText(
         if (title) text.uppercase() else text, modifier,
         style = TextStyle(
@@ -261,12 +268,26 @@ fun KitPanel(
     title: String, dark: Boolean = false, red: Boolean = false, widthFrac: Float = 0.86f,
     onDismiss: (() -> Unit)? = null, content: @Composable () -> Unit,
 ) {
+    // entrance (DA-v2 « Panneaux »): veil 150 ms, panel 0.96 → 1 + alpha in 220 ms expoOut, ribbon slides 12 dp
+    val veil = remember { Animatable(0f) }
+    val pop = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        launch { veil.animateTo(1f, tween(150)) }
+        pop.animateTo(1f, tween(220, easing = ExpoOut))
+    }
+    val reduced = Prefs.cap60
     Box(
-        Modifier.fillMaxWidth().fillMaxHeight().background(Pal.veil)
+        Modifier.fillMaxWidth().fillMaxHeight().graphicsLayer { alpha = veil.value }.background(Pal.veil)
             .then(if (onDismiss != null) Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() } else Modifier),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.fillMaxWidth(widthFrac).wrapContentSize(), contentAlignment = Alignment.TopCenter) {
+        Box(
+            Modifier.fillMaxWidth(widthFrac).wrapContentSize().graphicsLayer {
+                alpha = pop.value
+                if (!reduced) { val k = 0.96f + 0.04f * pop.value; scaleX = k; scaleY = k }
+            },
+            contentAlignment = Alignment.TopCenter,
+        ) {
             Column(
                 Modifier.padding(top = 24.dp).fillMaxWidth()
                     .nine(if (dark) Res.drawable.ui_panel_dark else Res.drawable.ui_panel, IN_PANEL, 0.4f)
@@ -275,9 +296,18 @@ fun KitPanel(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) { content() }
-            Box(Modifier.offset(y = 0.dp)) { Ribbon(title, red) }
+            Box(Modifier.graphicsLayer { if (!reduced) translationY = -(1f - pop.value) * 12.dp.toPx() }) { Ribbon(title, red) }
         }
     }
+}
+
+/** List item entrance: 40 ms apart (at most 6 offsets), alpha + 12 dp rise in 220 ms expoOut. */
+@Composable
+fun Modifier.stagger(i: Int): Modifier {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { delay(40L * minOf(i, 6)); a.animateTo(1f, tween(220, easing = ExpoOut)) }
+    val reduced = Prefs.cap60
+    return graphicsLayer { alpha = a.value; if (!reduced) translationY = (1f - a.value) * 12.dp.toPx() }
 }
 
 /** Kit switch: dark track, round knob, green fill when on. */

@@ -86,7 +86,7 @@ import org.jetbrains.compose.resources.painterResource
 private val CLASS_ROLE = arrayOf("Corps à corps · très solide", "Tir rapide à longue portée", "Constructions -30 % · aimant")
 private val CLASS_ABILITY_SHORT = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
 private val CLASS_HP = intArrayOf(3, 1, 2)
-private val PORTRAITS = arrayOf(Res.drawable.portrait_warrior, Res.drawable.portrait_ranger, Res.drawable.portrait_builder)
+val PORTRAITS = arrayOf(Res.drawable.portrait_warrior, Res.drawable.portrait_ranger, Res.drawable.portrait_builder)
 val CLASS_ICONS = arrayOf(Res.drawable.ui_icon_sword, Res.drawable.ui_icon_bow, Res.drawable.ui_icon_hammer)
 private val TALENT_ICONS = arrayOf(
     Res.drawable.ui_icon_hourglass, Res.drawable.ui_icon_coins, Res.drawable.ui_icon_hammer, Res.drawable.ui_icon_shield,
@@ -466,7 +466,7 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
             0 -> {
                 GText("${CLASS_NAMES[hero]} : améliorations", 12, Pal.goldLight, title = true)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (up in 0..2) TalentCard(UP_NAMES[up], UP_ICONS[up], Meta.level(hero, up), UP_MAX, Meta.cost(hero, up), Modifier.weight(1f)) {
+                    for (up in 0..2) TalentCard(UP_NAMES[up], UP_ICONS[up], Meta.level(hero, up), UP_MAX, Meta.cost(hero, up), Modifier.weight(1f).stagger(up)) {
                         if (Meta.buy(hero, up)) { Audio.play(Sfx.FORGE); onChange() }
                     }
                 }
@@ -474,7 +474,7 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                 for (row in 0 until 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (col in 0 until 3) {
                         val t = row * 3 + col
-                        TalentCard(TALENT_NAMES[t], TALENT_ICONS[t], Talents.level(t), TALENT_MAX, Talents.cost(t), Modifier.weight(1f)) {
+                        TalentCard(TALENT_NAMES[t], TALENT_ICONS[t], Talents.level(t), TALENT_MAX, Talents.cost(t), Modifier.weight(1f).stagger(3 + t)) {
                             if (Talents.buy(t)) { Audio.play(Sfx.FORGE); onChange() }
                         }
                     }
@@ -483,7 +483,7 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
             1 -> for (sl in 0 until Missions.SLOTS) {
                 val done = Missions.done(sl)
                 Column(
-                    Modifier.fillMaxWidth().nine(Res.drawable.ui_panel, IN_PANEL, 0.22f).padding(horizontal = 14.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().stagger(sl).nine(Res.drawable.ui_panel, IN_PANEL, 0.22f).padding(horizontal = 14.dp, vertical = 10.dp),
                 ) {
                     GText(Missions.label(sl), 13, Pal.ink, shadow = false, align = TextAlign.Start)
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -498,13 +498,15 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
             }
             else -> {
                 val secs = Stats.playSeconds
-                for ((k, v) in listOf(
+                listOf(
                     "Niveau de héros" to "${Hero.level}", "Meilleur niveau" to "${Stats.bestLevel}", "Meilleure vague" to "${Storage.loadBest()}",
                     "Étoiles" to "${Stats.stars} / 60", "Ennemis vaincus" to "${Stats.kills}", "Parties" to "${Stats.games}",
                     "Temps de jeu" to "${secs / 3600} h ${secs / 60 % 60} min",
-                )) Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-                    Box(Modifier.weight(1f)) { GText(k, 14, Color(0xFFCCD6F0), align = TextAlign.Start) }
-                    GText(v, 15, Pal.goldLight, weight = FontWeight.Black)
+                ).forEachIndexed { i, (k, v) ->
+                    Row(Modifier.fillMaxWidth().stagger(i).padding(vertical = 2.dp)) {
+                        Box(Modifier.weight(1f)) { GText(k, 14, Color(0xFFCCD6F0), align = TextAlign.Start) }
+                        GText(v, 15, Pal.goldLight, weight = FontWeight.Black)
+                    }
                 }
             }
         }

@@ -8,6 +8,7 @@ import fr.kingshot.game.resources.portrait_builder
 import fr.kingshot.game.resources.portrait_ranger
 import fr.kingshot.game.resources.portrait_warrior
 import org.jetbrains.compose.resources.painterResource
+import org.jetbrains.compose.resources.imageResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -82,6 +83,10 @@ fun App() {
     renderer.hud = rememberHud()
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }
+    var shopOpen by remember { mutableStateOf(false) }
+    // only the equipped skin of the hero in play is decoded; switching releases the previous one from the composition
+    val skinRes = remember(shopV, uiState) { Shop.skinAtlas(game.heroClass) }
+    renderer.kingSkin = skinRes?.let { imageResource(it) }
     var pausedUi by remember { mutableStateOf(false) }
     var victoryUi by remember { mutableStateOf(false) }
     val track = remember { IntArray(1) { Music.NONE } } // music playing now (changed from the frame loop)
@@ -178,6 +183,7 @@ fun App() {
                 onSettings = { settingsOpen = true },
                 onMeta = { metaPanel = it },
                 onDaily = { Daily.claim(); metaTick++ },
+                onShop = { shopOpen = true },
             )
             uiState == STATE_OVER -> DefeatPanel(game, onRevive = { game.revive(); focus.requestFocus() },
                 onRetry = { game.retryLevel(); focus.requestFocus() }, onMenu = { game.quitRun(); metaTick++ })
@@ -185,6 +191,7 @@ fun App() {
             victoryUi -> VictoryPanel(game) { game.victoryOpen = false; focus.requestFocus() }
         }
         if (metaPanel >= 0) MetaPanel(metaPanel, metaTick, picked, onChange = { metaTick++ }) { metaPanel = -1 }
+        if (shopOpen) ShopScreen(picked) { shopOpen = false; metaTick++ }
         if (settingsOpen) SettingsPanel(onReset = { game.best = 0; metaTick++ }) { settingsOpen = false }
     }
 }
