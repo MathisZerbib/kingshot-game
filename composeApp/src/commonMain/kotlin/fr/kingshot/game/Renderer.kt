@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
+import kotlin.math.atan2
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
@@ -120,6 +122,7 @@ private val ROYAL_DARK = Color(0xFF1F3F9E)
 private val SILVER = Color(0xFFD4DAE2)
 private val GOLD = Color(0xFFFFC531)
 private val GOLD_DARK = Color(0xFFD9901A)
+private val HEAL_GREEN = Color(0xFF7CFF8A)
 private val HORSE = Color(0xFFD9A066)
 private val HORSE_DARK = Color(0xFF8A5A33)
 private val RED = Color(0xFFD8262B)
@@ -155,10 +158,14 @@ private class TextCache(private val measurer: TextMeasurer, private val style: T
     fun str(s: String): TextLayoutResult = strs.getOrPut(s) { measurer.measure(s, style) }
 }
 
-class Renderer(measurer: TextMeasurer, private val density: Float) {
+class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     /** Base pixel height of cached text; drawn scaled to the wanted size. */
     private val base = 64f
     private val text = TextCache(measurer, TextStyle(fontSize = (base / density).sp, fontWeight = FontWeight.Black))
+    /** Title face (Lilita One) for the ability titles, given by App once the font is loaded. */
+    var titleFamily: androidx.compose.ui.text.font.FontFamily? = null
+        set(v) { if (v != field) { field = v; titleText = if (v != null) TextCache(measurer, TextStyle(fontSize = (base / density).sp, fontFamily = v, fontWeight = FontWeight.Bold)) else null } }
+    private var titleText: TextCache? = null
     private val outline = Stroke(width = 8f, join = StrokeJoin.Round)
 
     private val roadStrokeEdge = Stroke(width = 104f, cap = StrokeCap.Round, join = StrokeJoin.Round)
@@ -212,6 +219,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     /** Atlas of the equipped king skin, loaded on demand by App (only the one in use). */
     var kingSkin: ImageBitmap? = null
     var portraitSkin: ImageBitmap? = null
+    var fxi: FxImages? = null
+    private val tints = HashMap<Long, ColorFilter>() // one Modulate filter per effect colour, built once
     private var scale = 1f
     private val portraitClip = Path()
     private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
@@ -341,6 +350,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }) {
             drawGround(vl, vt, vr, vb)
             for (p in g.pads) if (p.visible) drawPad(p, p.kind == PAD_TOWER_ARCHER && g.squad == 0)
+            drawFx(g, ground = true)
             drawSorted(g, vl, vt, vr, vb)
             drawArrows(g, vl, vt, vr, vb)
             for (sh in g.enemyShots) if (sh.active) { // enemy arrows: short dark streak
@@ -350,6 +360,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             }
             drawFlyCoins(g)
             drawParticles(g, vl, vt, vr, vb)
+            drawFx(g, ground = false)
         }
 
         // world-anchored labels in screen space
@@ -368,12 +379,13 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val k = t.life / 0.8f
             val pop = if (k > 0.8f) 1f + (k - 0.8f) * 3f else 1f
             val px = (if (t.big) 34f else 24f) * scale * pop
-            val col = when (t.kind) { 1 -> Color(0xFFFFD84A); 2 -> ALERT_RED; else -> if (t.big) Color(0xFFFFD84A) else WHITE }
-            label(text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, col, min(1f, k * 2.5f))
+            val col = when (t.kind) { 1 -> Color(0xFFFFD84A); 2 -> ALERT_RED; 3 -> HEAL_GREEN; else -> if (t.big) Color(0xFFFFD84A) else WHITE }
+            label(if (t.kind == 3) text.str(healLabel(t.value)) else text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, col, min(1f, k * 2.5f))
         }
 
         drawFog(g, w, h)
         drawWeather(g, w, h)
+        drawAbilityScreen(g, w, h)
         drawHud(g, w, h)
     }
 
@@ -728,7 +740,13 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_CASTLE -> drawCastle(g)
                 K_TOWER -> drawTower(g.towers[idx], g.age)
                 K_WALL -> drawWall(g.walls[idx], g.age, g)
-                K_ENEMY -> drawEnemy(g.enemies[idx], g.level % 5 == 0)
+                K_ENEMY -> {
+                    val e = g.enemies[idx]
+                    if (e.squash > 0f) { // hit squash 1.25 / 0.8 → 1 in 150 ms
+                        val k = e.squash / 0.15f
+                        withTransform({ scale(1f + 0.25f * k, 1f - 0.2f * k, Offset(e.x, e.y)) }) { drawEnemy(e, g.level % 5 == 0) }
+                    } else drawEnemy(e, g.level % 5 == 0)
+                }
                 K_CORPSE -> drawCorpse(g.corpses[idx])
                 K_BUILDING -> drawBuilding(idx, g)
                 K_LANCER -> {
@@ -953,7 +971,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val kingImg = skin ?: when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
         val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
         withTransform({ rotate(lean, Offset(x, y)) }) {
-            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
+            // Tourbillon: the king turns through the 8 directions of his atlas, one step every 75 ms
+            val dir = if (g.kSpin > 0f) (g.kDir + ((0.6f - g.kSpin) / 0.075f).toInt()) % 8 else g.kDir
+            sprite(kingImg, SpriteData.kingWarrior, col, dir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f || g.kFlash > 0f) flashFilter else null)
         }
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)
@@ -1054,10 +1074,119 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (p in g.particles) {
             if (!p.active || p.x < vl || p.x > vr || p.y - p.z < vt || p.y - p.z > vb) continue
             val k = p.life / p.maxLife
-            val s = p.size * (0.4f + 0.6f * k)
-            drawRect(Color(p.color.toInt()), Offset(p.x - s / 2f, p.y - p.z - s / 2f), Size(s, s), alpha = min(1f, k * 2f))
+            val fi = fxi
+            if (fi == null) {
+                val s = p.size * (0.4f + 0.6f * k)
+                drawRect(Color(p.color.toInt()), Offset(p.x - s / 2f, p.y - p.z - s / 2f), Size(s, s), alpha = min(1f, k * 2f))
+                continue
+            }
+            // round particles: size 0.4 → 1 → 0.6 over the life, fading on the last third; bright ones glow (additive)
+            val age = 1f - k
+            val sz = p.size * 2.2f * (if (age < 0.3f) 0.4f + 2f * age else 1f - 0.4f * ((age - 0.3f) / 0.7f))
+            val c = p.color
+            val bright = ((c shr 16 and 255) + (c shr 8 and 255) + (c and 255)) > 480
+            val a = min(1f, k * 3f)
+            if (bright) fxDraw(fi.glow, 0, p.x, p.y - p.z, sz * 2.4f, sz * 2.4f, 0f, a, tint(c), true)
+            else fxDraw(fi.dot, 0, p.x, p.y - p.z, sz, sz, 0f, a, tint(c), false)
         }
     }
+
+    // ------------------------------------------------------------ ability effects (art/fx/FX.md)
+
+    private fun tint(c: Long): ColorFilter = tints.getOrPut(c) { ColorFilter.tint(Color(c.toInt()), BlendMode.Modulate) }
+
+    /** One frame of a horizontal effect strip, centred on (cx, cy), w × h world px, rotated [rot] degrees. */
+    private fun DrawScope.fxDraw(img: ImageBitmap, frame: Int, cx: Float, cy: Float, w: Float, h: Float, rot: Float, alpha: Float, filter: ColorFilter?, plus: Boolean) {
+        if (alpha <= 0.01f || w < 1f || h < 1f) return
+        val fs = img.height
+        val src = IntOffset(frame * fs, 0)
+        val dst = IntOffset((cx - w / 2f).toInt(), (cy - h / 2f).toInt())
+        val ds = IntSize(w.toInt(), h.toInt())
+        val bm = if (plus) BlendMode.Plus else BlendMode.SrcOver
+        if (rot == 0f) drawImage(img, src, IntSize(fs, fs), dst, ds, alpha = alpha.coerceAtMost(1f), colorFilter = filter, blendMode = bm)
+        else withTransform({ rotate(rot, Offset(cx, cy)) }) { drawImage(img, src, IntSize(fs, fs), dst, ds, alpha = alpha.coerceAtMost(1f), colorFilter = filter, blendMode = bm) }
+    }
+
+    private fun DrawScope.drawFx(g: Game, ground: Boolean) {
+        val fi = fxi ?: return
+        for (f in g.fx) {
+            if (!f.active || f.t < 0f) continue
+            val k = (f.t / f.life).coerceIn(0f, 1f)
+            val tn = tint(f.color)
+            when (f.kind) {
+                FX_GLOW -> if (ground) { val s = 120f * f.r1 * expoOut(k * 1.5f); fxDraw(fi.glow, 0, f.x, f.y, s, s * 0.55f, 0f, 0.9f * (1f - k), tn, true) }
+                FX_RING -> if (ground) {
+                    val r = f.r0 + (f.r1 - f.r0) * (if (f.thin) k else expoOut(k))
+                    fxDraw(fi.ring, if (f.thin) 7 else (k * 7f).toInt(), f.x, f.y, r * 2.2f, r * 2.2f * 0.55f, 0f, (if (f.thin) 0.9f else 1f) * (1f - k), tn, true)
+                }
+                FX_SLASH -> if (ground) { // 2.5 turns around the king, squashed for the 3/4 view
+                    val ang = f.a + 900f * expoOut(k)
+                    val r = f.r0 + (f.r1 - f.r0) * k
+                    val rad = ang * PI.toFloat() / 180f
+                    val x = f.x + cos(rad) * r * 0.35f
+                    val y = f.y + sin(rad) * r * 0.35f * 0.55f
+                    val al = if (f.t < 0.4f) 1f else 1f - (f.t - 0.4f) / 0.2f
+                    fxDraw(fi.slash, ((ang / 45f).toInt() % 8 + 8) % 8, x, y - 20f, r * 2f, r * 2f * 0.55f, (ang % 45f), al, tn, true)
+                }
+                FX_RUNE -> if (ground) {
+                    val s = 360f * (0.6f + 0.6f * k)
+                    val al = if (f.t < 0.3f) 0.8f * f.t / 0.3f else if (f.t > 0.8f) 0.8f * (1.2f - f.t) / 0.4f else 0.8f
+                    fxDraw(fi.rune, 0, f.x, f.y, s, s * 0.55f, 60f * k, al, tn, true)
+                }
+                FX_RETICLE -> if (ground) {
+                    val s = 110f * (if (f.t < 0.3f) 1.6f - 0.6f * expoOut(f.t / 0.3f) else if (f.t > 1.3f) 1f + 0.3f * (f.t - 1.3f) / 0.3f else 1f + 0.08f * sin(f.t * 25f))
+                    val al = if (f.t < 0.3f) 0.9f * f.t / 0.3f else if (f.t > 1.3f) 0.9f * (1.6f - f.t) / 0.3f else 0.9f
+                    fxDraw(fi.reticle, 0, f.x, f.y, s, s * 0.55f, 0f, al, tn, true)
+                }
+                FX_SHADOW -> if (ground) { val s = 70f * (0.3f + 0.7f * (f.t / 0.75f).coerceAtMost(1f)); fxDraw(fi.shadow, 0, f.x, f.y, s, s * 0.5f, 0f, 0.6f, null, false) }
+                FX_STUCK -> if (ground) fxDraw(fi.stuck, 0, f.x, f.y - 16f, 40f, 40f, f.a, if (f.t > 2.5f) (2.8f - f.t) / 0.3f else 1f, null, false)
+                FX_SPARK -> if (!ground) fxDraw(fi.spark, (k * 5.99f).toInt(), f.x, f.y, 110f * f.r1, 110f * f.r1, f.a, 1f, tn, true)
+                FX_PUFF -> if (!ground) fxDraw(fi.puff, (k * 7.99f).toInt(), f.x, f.y - 10f, 100f * f.r1, 100f * f.r1, 0f, 0.85f, tn, false)
+                FX_SPARKLE -> if (!ground) fxDraw(fi.sparkle, (k * 5.99f).toInt(), f.x, f.y - f.z, 34f, 34f, 0f, 1f, tn, true)
+                FX_SPIRAL -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - 30f, 28f, 28f, 0f, 1f - k, tn, true)
+                FX_RISE -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - f.z, 20f, 20f, 0f, if (k > 0.66f) (1f - k) * 3f else 1f, tn, true)
+                FX_ARROW -> if (!ground) {
+                    // ballistic: from the king (z 40) up to ~900 px (off screen) and down on the target
+                    val u = k
+                    val x = f.sx + (f.tx - f.sx) * u
+                    val y = f.sy + (f.ty - f.sy) * u
+                    val z = 40f * (1f - u) + 3600f * u * (1f - u)
+                    val vx = (f.tx - f.sx)
+                    val vy = (f.ty - f.sy) - (-40f + 3600f * (1f - 2f * u))
+                    val ang = atan2(vy, vx)
+                    val deg = ang * 180f / PI.toFloat()
+                    val px = x; val py = y - z
+                    val c = cos(ang); val s = sin(ang)
+                    fxDraw(fi.trail, 0, px - c * 30f, py - s * 30f, 60f, 16f, deg, 0.8f, tn, true)
+                    line(WOOD_DARK, px - c * 22f, py - s * 22f, px, py, 2.5f)
+                    line(WHITE, px - c * 4f, py - s * 4f, px + c * 3f, py + s * 3f, 4f)
+                }
+            }
+        }
+    }
+
+    /** Screen-space part of an ability: edge vignette (220 ms) and the title (180 in, 400 hold, 200 out). */
+    private fun DrawScope.drawAbilityScreen(g: Game, w: Float, h: Float) {
+        val col = Color(ABILITY_COLORS[g.abilityCls].toInt())
+        if (g.vignette > 0f) {
+            val a = 0.35f * g.vignette / 0.22f
+            drawRect(Brush.radialGradient(0.55f to Color.Transparent, 1f to col.copy(alpha = a), center = Offset(w / 2f, h / 2f), radius = max(w, h) * 0.75f))
+        }
+        val t = g.abilityTitle
+        if (t < 0.78f) {
+            val u = min(w, h) / 400f
+            val (sc, al, rise) = when {
+                t < 0.18f -> { val e = expoOut(t / 0.18f); Triple(1.3f - 0.3f * e, e, 0f) }
+                t < 0.58f -> Triple(1f, 1f, 0f)
+                else -> { val e = (t - 0.58f) / 0.2f; Triple(1f, 1f - e, 10f * u * e) }
+            }
+            label((titleText ?: text).str(ABILITY_TITLES[g.abilityCls]), w / 2f, h * 0.22f - rise, 26f * u * sc, col, al)
+        }
+    }
+
+    private val ABILITY_TITLES = arrayOf("TOURBILLON !", "PLUIE DE FLÈCHES !", "RÉPARATION !")
+    private val healLabels = HashMap<Int, String>()
+    private fun healLabel(v: Int) = healLabels.getOrPut(v) { "+$v %" }
 
     // ------------------------------------------------------------ HUD
 
@@ -1301,7 +1430,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     var abilityX = -1000f; var abilityY = -1000f; var abilityRadius = 0f
 
     private fun DrawScope.drawAbilityButton(g: Game, w: Float, h: Float, u: Float) {
-        val r = 34f * u
+        // press: 0.9 (80 ms) → 1.12 (160 ms) → 1, with a ring around the button
+        val pt = g.abilityPress
+        val bounce = if (pt < 0.08f) 1f - 0.1f * (pt / 0.08f) else if (pt < 0.24f) 0.9f + 0.22f * sin((pt - 0.08f) / 0.16f * PI.toFloat()) + 0.1f * ((pt - 0.08f) / 0.16f) else 1f
+        val r = 34f * u * bounce
         abilityX = w - 18f * u - r; abilityY = h - 46f * u - r; abilityRadius = r + 10f * u
         val ready = g.abilityCd <= 0f
         if (ready) circ(GOLD, abilityX, abilityY, r + (5f + 3f * sin(g.time * 6f)) * u) // ready glow
@@ -1315,9 +1447,15 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             circ(CLASS_COLORS[g.heroClass], abilityX, abilityY, r - 4f * u)
             drawAbilityIcon(g.heroClass, abilityX, abilityY, r * 0.55f, u)
         }
+        val fi = fxi
+        if (fi != null && pt < 0.2f) fxDraw(fi.ring, (pt / 0.2f * 4f).toInt().coerceIn(0, 3) * 2, abilityX, abilityY, r * 3.2f, r * 3.2f, 0f, 1f - pt / 0.2f, tint(ABILITY_COLORS[g.heroClass]), true)
         if (!ready) {
             val f = (g.abilityCd / g.abilityTime).coerceIn(0f, 1f)
             drawArc(COOLDOWN, -90f, 360f * f, true, Offset(abilityX - r + 4f * u, abilityY - r + 4f * u), Size((r - 4f * u) * 2f, (r - 4f * u) * 2f))
+            if (fi != null) { // bright tip on the refilling edge
+                val ang = (-90f + 360f * f) * PI.toFloat() / 180f
+                fxDraw(fi.glow, 0, abilityX + cos(ang) * (r - 4f * u), abilityY + sin(ang) * (r - 4f * u), 16f * u, 16f * u, 0f, 0.9f, tint(ABILITY_COLORS[g.heroClass]), true)
+            }
             label(text.num(g.abilityCd.toInt() + 1), abilityX, abilityY, 22f * u, WHITE)
         }
         label(text.str(ABILITY_NAMES[g.heroClass]), abilityX, abilityY + r + 12f * u, 11f * u, WHITE)

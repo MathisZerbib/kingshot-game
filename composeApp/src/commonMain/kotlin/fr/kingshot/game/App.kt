@@ -81,6 +81,8 @@ fun App() {
     }
     renderer.sprites = sprites
     renderer.hud = rememberHud()
+    renderer.fxi = rememberFx()
+    renderer.titleFamily = cinzel()
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }
     var shopOpen by remember { mutableStateOf(false) }

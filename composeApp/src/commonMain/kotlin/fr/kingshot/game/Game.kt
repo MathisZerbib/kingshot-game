@@ -1,5 +1,6 @@
 package fr.kingshot.game
 
+import kotlin.math.pow
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -128,6 +129,10 @@ class Enemy {
     var atkCd = 0f
     var swing = 0f
     var hitFlash = 0f
+    var knockT = -1f // animated knockback (Tourbillon): seconds elapsed, -1 when none
+    var knockDx = 0f
+    var knockDy = 0f
+    var squash = 0f // hit squash 1.25/0.8 → 1, seconds left
     var walk = 0f
     var faceRight = false
     var dir = 0
@@ -196,6 +201,47 @@ class FlyCoin {
     var value = 1 // coins carried (big payments fly in bundles)
 }
 
+// ---------------------------------------------------------------- ability effects (art/fx/FX.md)
+const val FX_RING = 0
+const val FX_SLASH = 1
+const val FX_SPARK = 2
+const val FX_PUFF = 3
+const val FX_SPARKLE = 4
+const val FX_GLOW = 5 // ground halo under the king
+const val FX_SPIRAL = 6 // light motes spiralling out (Tourbillon)
+const val FX_RETICLE = 7
+const val FX_SHADOW = 8
+const val FX_ARROW = 9 // ballistic arrow of the rain: up off-screen, down on its marker
+const val FX_STUCK = 10
+const val FX_RUNE = 11
+const val FX_RISE = 12 // light motes rising around the keep (Réparation)
+
+/** Class colours of the effects: warrior gold, ranger green, builder light gold. */
+val ABILITY_COLORS = longArrayOf(0xFFFFC531L, 0xFF9EE37DL, 0xFFFFE08AL)
+
+fun expoOut(x: Float) = if (x >= 1f) 1f else 1f - 2f.pow(-10f * x.coerceAtLeast(0f))
+
+class Fx {
+    var active = false
+    var kind = 0
+    var x = 0f
+    var y = 0f
+    var z = 0f
+    var t = 0f // age in seconds (negative = not started yet)
+    var life = 1f
+    var color = 0L
+    var a = 0f // angle (degrees) or phase
+    var r0 = 0f
+    var r1 = 1f // end radius or scale
+    var thin = false
+    var target = -1
+    var gen = 0
+    var sx = 0f // arrow: start and target
+    var sy = 0f
+    var tx = 0f
+    var ty = 0f
+}
+
 class Particle {
     var active = false
     var x = 0f
@@ -219,7 +265,7 @@ class FloatText {
     var value = 0
     var life = 0f
     var big = false
-    var kind = 0 // 0 normal hit (white), 1 critical (yellow), 2 damage taken by the king (red)
+    var kind = 0 // 0 normal hit (white), 1 critical (yellow), 2 damage taken by the king (red), 3 heal « +N % » (green)
 }
 
 /** A fallen enemy: tips over, sinks and fades, then disappears. */
@@ -274,6 +320,9 @@ class Wall(val path: Int, val s: Float) {
     var maxHp = 300f
     var hitFlash = 0f
     var bump = 0f
+    var healT = -1f // Réparation: the gauge climbs from healFrom to healTo in 0.4 s
+    var healFrom = 0f
+    var healTo = 0f
     var gate = 0f // 0 closed .. 1 open (ramparts, from the stone age)
     // rampart line snapped to the sprite axes (east-west or north-south), since the stone sprites are axis-aligned
     var rx = 0f
@@ -347,6 +396,25 @@ class Game {
     var treasureWon = 0 // coins sent to the treasure by the last game (game-over panel)
     var abilityCd = 0f // seconds until the ability is ready
     var abilityFlash = 0f // > 0 right after use (visual)
+    // ability choreography (art/fx/FX.md): one timeline, effects in a preallocated pool
+    val fx = Array(96) { Fx() }
+    var abilityT = -1f // seconds since the cast, -1 when no ability is playing
+    var abilityCls = 0
+    var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
+    var kFlash = 0f // white flash on the king at the cast
+    var vignette = 0f // class-coloured screen edge flash (seconds left, 0.22)
+    var abilityTitle = 0f // « TOURBILLON ! » title (seconds since shown, < 0.78)
+    var abilityPress = 0f // HUD button bounce (seconds since press, < 0.24)
+    private var abilityStop = 0f // hit-stop: dt × 0.15
+    private var abilityStep = 0 // next timeline event already fired
+    private val rainTarget = IntArray(60)
+    private val rainGen = IntArray(60)
+    private var rainCount = 0
+    private var castleHealT = -1f
+    private var castleHealFrom = 0f
+    private var castleHealTo = 0f
+    private var castleHealed = false
+    private var healDmg = 0f
     var paused = false
 
     // Enclosure: arcs around the castle linking each built wall to the next one (by angle), as points RING_STEP apart.
@@ -615,6 +683,8 @@ class Game {
         kMaxHp = when (heroClass) { CLASS_WARRIOR -> 300f; CLASS_RANGER -> 110f; else -> 160f } * (1f + 0.1f * Meta.level(heroClass, UP_HP))
         heroPower = (1f + 0.08f * Meta.level(heroClass, UP_POWER)) * (1f + 0.01f * min(50, Hero.level - 1))
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
+        for (f in fx) f.active = false
+        abilityT = -1f; kSpin = 0f; kFlash = 0f; vignette = 0f; abilityTitle = 1f; abilityPress = 1f; abilityStop = 0f; castleHealT = -1f
         abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1; worldZoom = 1f; fogR = 0f
         kHp = kMaxHp; kDead = false; coins = 10 * tal[TAL_START_COINS]
         squad = START_SQUAD + tal[TAL_START_ARCHERS] / 2
@@ -842,36 +912,187 @@ class Game {
         abilityFlash = 0.6f
         Audio.play(Sfx.ABILITY)
         Audio.haptic(Haptic.MEDIUM)
+        // common opening: hit-stop, white flash on the king, ground halo, edge vignette, title, button bounce
+        val calm = Prefs.cap60 // reduced motion: no hit-stop, no shake; the effects stay
+        abilityCls = heroClass; abilityT = 0f; abilityStep = 0
+        if (!calm) abilityStop = if (heroClass == CLASS_RANGER) 0.05f else 0.09f
+        kFlash = 0.06f; vignette = 0.22f; abilityTitle = 0f; abilityPress = 0f
+        val col = ABILITY_COLORS[heroClass]
+        spawnFx(FX_GLOW, kx, ky, 0.22f, col)?.r1 = 2.2f
         when (heroClass) {
             CLASS_WARRIOR -> {
                 for (i in enemies.indices) {
                     val e = enemies[i]
                     if (!e.active || hypot(e.x - kx, e.y - ky) > 190f + e.radius) continue
-                    if (e.kind != 2) e.s = max(0f, e.s - 90f) // knocked back along its road
+                    if (e.kind != 2) { // knocked back 90 px along its road, animated over 180 ms (expoOut)
+                        e.s = max(0f, e.s - 90f)
+                        val d = max(1f, hypot(e.x - kx, e.y - ky))
+                        e.knockT = 0f; e.knockDx = (e.x - kx) / d * 90f; e.knockDy = (e.y - ky) / d * 90f
+                    }
+                    e.squash = 0.15f
                     hitEnemy(i, 110f * dmgMult * heroPower)
+                    spawnFx(FX_SPARK, e.x, e.y - 30f * e.scale, 0.3f, col)?.let { it.a = rnd.nextFloat() * 360f; it.r1 = 1.2f }
                 }
-                shake = max(shake, 9f)
-                burst(kx, ky, 20f, 50, 0xFFFFFFFFL, 520f)
-                burst(kx, ky, 20f, 30, 0xFFFFC531L, 380f)
+                if (!calm) shake = max(shake, 9f)
+                kSpin = 0.6f
+                spawnFx(FX_RING, kx, ky, 0.35f, col)?.let { it.r0 = 40f; it.r1 = 190f }
+                for (k in 0..2) spawnFx(FX_SLASH, kx, ky, 0.6f, col)?.let { it.a = k * 120f; it.r0 = 150f; it.r1 = 190f }
             }
             CLASS_RANGER -> {
-                var n = 0
+                rainCount = 0
                 for (i in enemies.indices) {
                     val e = enemies[i]
-                    if (!e.active || hypot(e.x - kx, e.y - ky) > 520f || n >= 60) continue
-                    fire(kx + (rnd.nextFloat() - 0.5f) * 80f, ky, 260f, i, 70f * dmgMult * heroPower)
-                    n++
+                    if (!e.active || hypot(e.x - kx, e.y - ky) > 520f || rainCount >= 60) continue
+                    rainTarget[rainCount] = i; rainGen[rainCount] = e.gen
+                    if (rainCount < 12) { // markers on the first 12 targets: reticle + falling shadow
+                        spawnFx(FX_RETICLE, e.x, e.y, 1.6f, col)?.let { it.target = i; it.gen = e.gen }
+                        spawnFx(FX_SHADOW, e.x, e.y, 1.6f, 0xFF000000L)?.let { it.target = i; it.gen = e.gen }
+                    }
+                    rainCount++
                 }
-                burst(kx, ky, 60f, 30, 0xFF9EE37DL, 300f)
             }
             else -> {
-                castleHp = min(castleMaxHp, castleHp + castleMaxHp * 0.4f)
-                for (w in walls) if (w.built) { w.hp = min(w.maxHp, w.hp + w.maxHp * 0.6f); w.bump = 1f; burst(w.x, w.y, 30f, 18, 0xFF7CFF8AL, 220f) }
-                burst(World.CASTLE_X, World.CASTLE_Y, 60f, 40, 0xFF7CFF8AL, 300f)
+                if (!calm) shake = max(shake, 5f)
+                spawnFx(FX_RING, kx, ky, 0.6f, col)?.let { it.r0 = 0f; it.r1 = 700f; it.thin = true }
+                spawnFx(FX_RUNE, World.CASTLE_X, World.CASTLE_Y + 20f, 1.2f, col)
+                for (w in walls) w.healT = -1f
+                castleHealed = false; castleHealT = -1f
                 kHp = kMaxHp
             }
         }
         return true
+    }
+
+    /** Timeline events of the ability being played (FX.md), in game time. */
+    private fun updateAbility(dt: Float) {
+        if (kSpin > 0f) kSpin -= dt
+        if (kFlash > 0f) kFlash -= dt
+        if (abilityT < 0f) return
+        val t0 = abilityT
+        abilityT += dt
+        val t = abilityT
+        fun at(ms: Int) = t0 * 1000f < ms && t * 1000f >= ms
+        val col = ABILITY_COLORS[abilityCls]
+        when (abilityCls) {
+            CLASS_WARRIOR -> {
+                for (k in 0 until 7) if (at(80 + 80 * k)) { // 7 dust puffs on the circle
+                    val a = rnd.nextFloat() * 2f * PI.toFloat()
+                    val r = 150f + rnd.nextFloat() * 40f
+                    spawnFx(FX_PUFF, kx + cos(a) * r, ky + sin(a) * r * 0.55f, 0.5f, 0xFFD9C9A0L)
+                }
+                if (at(350)) for (k in 0 until 12) spawnFx(FX_SPIRAL, kx, ky, 0.4f, col)?.let { it.a = k * 30f }
+                if (t > 0.75f) abilityT = -1f
+            }
+            CLASS_RANGER -> {
+                for (salvo in 0..2) if (at(250 + 180 * salvo)) {
+                    if (!Prefs.cap60) shake = max(shake, 3f)
+                    var k = salvo
+                    while (k < rainCount) {
+                        val i = rainTarget[k]
+                        val e = enemies[i]
+                        spawnFx(FX_ARROW, kx + (rnd.nextFloat() - 0.5f) * 30f, ky, 0.45f + (rnd.nextFloat() - 0.5f) * 0.12f, col)?.let {
+                            it.target = i; it.gen = rainGen[k]; it.sx = it.x; it.sy = it.y
+                            it.tx = if (e.active && e.gen == rainGen[k]) e.x else it.x; it.ty = if (e.active && e.gen == rainGen[k]) e.y else it.y
+                        }
+                        k += 3
+                    }
+                }
+                if (t > 1.6f) abilityT = -1f
+            }
+            else -> {
+                // the wave reaches the walls and the keep one after the other: each heal starts when it is touched
+                val r = 700f * (t / 0.6f).coerceAtMost(1f)
+                for (w in walls) if (w.built && w.healT < 0f && w.hp < w.maxHp + 1f && hypot(w.x - kx, w.y - ky) <= r) {
+                    w.healT = 0f; w.healFrom = w.hp; w.healTo = min(w.maxHp, w.hp + w.maxHp * 0.6f)
+                    healTouch(w.x, w.y, 60)
+                    w.bump = 1f; w.hitFlash = 0.08f
+                }
+                if (!castleHealed && hypot(World.CASTLE_X - kx, World.CASTLE_Y - ky) <= r) {
+                    castleHealed = true; castleHealT = 0f; castleHealFrom = castleHp; castleHealTo = min(castleMaxHp, castleHp + castleMaxHp * 0.4f)
+                    castleFlash = 0.08f
+                    healTouch(World.CASTLE_X, World.CASTLE_Y - 20f, 40)
+                }
+                for (k in 0 until 8) if (at(200 + 100 * k)) for (m in 0..2) { // 24 golden motes rising around the keep
+                    val a = rnd.nextFloat() * 2f * PI.toFloat()
+                    spawnFx(FX_RISE, World.CASTLE_X + cos(a) * 140f, World.CASTLE_Y + sin(a) * 70f, 0.8f, col)?.a = rnd.nextFloat() * 6f
+                }
+                if (at(1000)) { Audio.play(Sfx.REPAIR); Audio.haptic(Haptic.LIGHT) }
+                if (t > 1.2f && castleHealed) abilityT = -1f
+            }
+        }
+        // heal gauges climb in 0.4 s instead of jumping
+        for (w in walls) if (w.healT >= 0f) {
+            w.healT += dt
+            val k = (w.healT / 0.4f).coerceAtMost(1f)
+            w.hp = max(w.hp, w.healFrom + (w.healTo - w.healFrom) * k)
+            if (k >= 1f) w.healT = -1f
+        }
+        if (castleHealT >= 0f) {
+            castleHealT += dt
+            val k = (castleHealT / 0.4f).coerceAtMost(1f)
+            castleHp = max(castleHp, castleHealFrom + (castleHealTo - castleHealFrom) * k)
+            if (k >= 1f) castleHealT = -1f
+        }
+    }
+
+    /** Réparation touches a wall or the keep: « +N % », four rising sparkles (90 ms apart), a puff at the base. */
+    private fun healTouch(x: Float, y: Float, pct: Int) {
+        text(x, y, 60f, pct, true, 3)
+        for (k in 0..3) spawnFx(FX_SPARKLE, x + (k - 1.5f) * 22f, y - 40f, 0.6f + k * 0.09f, 0xFFFFE08AL)?.t = -k * 0.09f
+        spawnFx(FX_PUFF, x, y + 10f, 0.5f, 0xFFD9C9A0L)
+    }
+
+    fun spawnFx(kind: Int, x: Float, y: Float, life: Float, color: Long): Fx? {
+        val f = fx.firstOrNull { !it.active } ?: return null
+        f.active = true; f.kind = kind; f.x = x; f.y = y; f.z = 0f; f.t = 0f; f.life = life; f.color = color
+        f.a = 0f; f.r0 = 0f; f.r1 = 1f; f.target = -1; f.gen = 0; f.thin = false
+        return f
+    }
+
+    private fun updateFx(dt: Float) {
+        for (f in fx) {
+            if (!f.active) continue
+            f.t += dt
+            if (f.target >= 0 && (f.kind == FX_RETICLE || f.kind == FX_SHADOW)) { // markers follow their target
+                val e = enemies[f.target]
+                if (e.active && e.gen == f.gen) { f.x = e.x; f.y = e.y }
+            }
+            when (f.kind) {
+                FX_SPIRAL -> { // spiral out: 380 px/s, turning 2 rad/s
+                    val a = f.a * PI.toFloat() / 180f + f.t * 2f
+                    f.x += cos(a) * 380f * dt; f.y += sin(a) * 380f * dt * 0.55f
+                }
+                FX_RISE -> { f.z += 80f * dt; f.x += sin(f.t * 5f + f.a) * 20f * dt }
+                FX_SPARKLE -> if (f.t > 0f) f.z += 20f / 0.6f * dt
+                FX_ARROW -> if (f.t >= f.life) { // lands: damage, spark, dust, an arrow left in the ground
+                    val e = enemies.getOrNull(f.target)
+                    val hitIt = e != null && e.active && e.gen == f.gen
+                    if (hitIt) hitEnemy(f.target, 70f * dmgMult * heroPower)
+                    spawnFx(FX_SPARK, f.tx, f.ty - 20f, 0.25f, 0xFFDDFFD0L)?.r1 = 0.7f
+                    spawnFx(FX_PUFF, f.tx, f.ty, 0.4f, 0xFFD9C9A0L)?.r1 = 0.8f
+                    spawnFx(FX_STUCK, f.tx + (rnd.nextFloat() - 0.5f) * 16f, f.ty, 2.8f, 0xFFFFFFFFL)?.a = (rnd.nextFloat() - 0.5f) * 30f
+                    for (m in fx) if (m.active && m.kind == FX_SHADOW && m.target == f.target && m.gen == f.gen) m.active = false
+                    f.active = false
+                    continue
+                } else { // track a moving target until the last third of the flight
+                    val e = enemies.getOrNull(f.target)
+                    if (e != null && e.active && e.gen == f.gen && f.t < f.life * 0.66f) { f.tx = e.x; f.ty = e.y }
+                }
+            }
+            if (f.t >= f.life) f.active = false
+        }
+        // knockback and squash of the enemies hit by Tourbillon
+        for (e in enemies) {
+            if (!e.active) continue
+            if (e.squash > 0f) e.squash -= dt
+            if (e.knockT >= 0f) {
+                val k0 = expoOut(e.knockT / 0.18f)
+                e.knockT += dt
+                val k1 = expoOut((e.knockT / 0.18f).coerceAtMost(1f))
+                e.x += e.knockDx * (k1 - k0); e.y += e.knockDy * (k1 - k0)
+                if (e.knockT >= 0.18f) e.knockT = -1f
+            }
+        }
     }
 
     /** Continue the saved game if any, else a new game with [cls]. */
@@ -1078,8 +1299,12 @@ class Game {
         val dtReal = dtIn.coerceIn(0f, 1f / 20f)
         if (slowMo > 0f) slowMo -= dtReal
         if (hitStop > 0f) hitStop -= dtReal
+        if (abilityStop > 0f) abilityStop -= dtReal
         // hitstop freezes the action for a few frames when the king is hit; slow motion after a boss or a level
-        val dt = if (hitStop > 0f) 0f else if (slowMo > 0f) dtReal * 0.4f else dtReal
+        val dt = if (hitStop > 0f) 0f else if (abilityStop > 0f) dtReal * 0.15f else if (slowMo > 0f) dtReal * 0.4f else dtReal
+        if (abilityPress < 1f) abilityPress += dtReal
+        if (vignette > 0f) vignette -= dtReal
+        if (abilityTitle < 1f) abilityTitle += dtReal
         fpsFrames++
         fpsTime += dtIn
         if (fpsTime >= 0.5f) {
@@ -1113,7 +1338,9 @@ class Game {
             updatePads(dt)
             if (abilityCd > 0f) abilityCd -= dt
             if (abilityFlash > 0f) abilityFlash -= dt
+            updateAbility(dt)
         }
+        updateFx(dt)
         updateArrows(dt)
         updateEnemyShots(dt)
         updateRain(dt)

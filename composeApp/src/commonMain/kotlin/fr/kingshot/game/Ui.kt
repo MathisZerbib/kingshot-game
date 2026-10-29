@@ -364,3 +364,19 @@ fun rememberHud(): HudImages {
         HudImages(circle, circleRed, ribbon, pill, panel, track, red, green, gold, coins, pause, arrayOf(sword, bow, hammer))
     }
 }
+
+/** Ability effect sheets (art/fx/fx.json): white or neutral, tinted at draw time. */
+class FxImages(
+    val slash: ImageBitmap, val ring: ImageBitmap, val spark: ImageBitmap, val puff: ImageBitmap, val sparkle: ImageBitmap,
+    val glow: ImageBitmap, val shadow: ImageBitmap, val trail: ImageBitmap, val reticle: ImageBitmap, val rune: ImageBitmap,
+    val stuck: ImageBitmap, val dot: ImageBitmap,
+)
+
+@Composable
+fun rememberFx(): FxImages {
+    val a = imageResource(Res.drawable.fx_slash); val b = imageResource(Res.drawable.fx_ring); val c = imageResource(Res.drawable.fx_spark)
+    val d = imageResource(Res.drawable.fx_puff); val e = imageResource(Res.drawable.fx_sparkle); val f = imageResource(Res.drawable.fx_glow)
+    val g = imageResource(Res.drawable.fx_shadow); val h = imageResource(Res.drawable.fx_trail); val i = imageResource(Res.drawable.fx_reticle)
+    val j = imageResource(Res.drawable.fx_rune); val k = imageResource(Res.drawable.fx_arrow_stuck); val l = imageResource(Res.drawable.fx_dot)
+    return remember(a, b, c, d, e, f, g, h, i, j, k, l) { FxImages(a, b, c, d, e, f, g, h, i, j, k, l) }
+}
