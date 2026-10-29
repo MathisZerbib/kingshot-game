@@ -591,7 +591,7 @@ class Game {
         if (pendCoins > 0) Missions.add(MIS_COINS, pendCoins)
         if (pendBuilds > 0) Missions.add(MIS_BUILD, pendBuilds)
         if (pendWaves > 0) Missions.add(MIS_WAVES, pendWaves)
-        if (pendBosses > 0) Missions.add(MIS_BOSSES, pendBosses)
+        if (pendBosses > 0) { Missions.add(MIS_BOSSES, pendBosses); Storage.saveInt("st_bosses", Stats.bosses + pendBosses) }
         if (pendXp > 0) Hero.xp += pendXp
         pendKills = 0; pendCoins = 0; pendBuilds = 0; pendWaves = 0; pendBosses = 0; pendXp = 0
     }

@@ -1,6 +1,7 @@
 package fr.kingshot.game
 
 import android.content.Context
+import androidx.compose.ui.graphics.asImageBitmap
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -68,3 +69,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
+
+actual fun imageFromPixels(w: Int, h: Int, argb: IntArray): androidx.compose.ui.graphics.ImageBitmap =
+    android.graphics.Bitmap.createBitmap(argb, w, h, android.graphics.Bitmap.Config.ARGB_8888).asImageBitmap()

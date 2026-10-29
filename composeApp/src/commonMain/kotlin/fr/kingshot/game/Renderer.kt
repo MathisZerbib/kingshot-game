@@ -737,7 +737,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 }
                 K_ARCHER -> drawArcher(g, idx)
                 K_KING -> drawKing(g)
-                K_COIN -> drawGroundCoin(g.coinsOnGround[idx])
+                K_COIN -> drawGroundCoin(g.coinsOnGround[idx], g.kx, g.ky)
             }
         }
     }
@@ -949,7 +949,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val kingImg = when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
         val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
         withTransform({ rotate(lean, Offset(x, y)) }) {
-            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
+            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else Shop.kingFilter(g.heroClass))
         }
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)
@@ -1004,9 +1004,15 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
     }
 
-    private fun DrawScope.drawGroundCoin(c: Coin) {
+    private fun DrawScope.drawGroundCoin(c: Coin, kx: Float, ky: Float) {
         val sp = sprites ?: return
         val frame = ((c.spin / PI.toFloat() * 8f).toInt() % 8 + 8) % 8
+        if (c.state == 2) { // flying to the king: short trail in the shop colour
+            val tc = Shop.trailColor
+            val dx = c.x - kx; val dy = c.y - ky
+            val inv = 13f / max(1f, sqrt(dx * dx + dy * dy))
+            for (k in 1..3) drawCircle(tc, 9f - 2f * k, Offset(c.x + dx * inv * k, c.y - c.z + dy * inv * k + 3f * k), alpha = 0.55f - 0.15f * k)
+        }
         sprite(sp.coinSpin, SpriteData.coinSpin, frame, 0, c.x, c.y - c.z, 1f)
     }
 

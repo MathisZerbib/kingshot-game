@@ -37,6 +37,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -69,7 +72,13 @@ fun App() {
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
     val renderer = remember(measurer, density.density) { Renderer(measurer, density.density) }
-    renderer.sprites = rememberSprites()
+    val baseSprites = rememberSprites()
+    val shopV = Shop.version.intValue
+    val banner = remember(shopV) { Shop.load(); Shop.bannerLook }
+    val sprites by produceState(baseSprites, baseSprites, banner) {
+        value = if (banner == 0) baseSprites else withContext(Dispatchers.Default) { withBanner(baseSprites, banner) }
+    }
+    renderer.sprites = sprites
     renderer.hud = rememberHud()
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }

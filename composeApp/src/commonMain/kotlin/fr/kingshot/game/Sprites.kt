@@ -78,7 +78,7 @@ import fr.kingshot.game.resources.lumbermill
 import org.jetbrains.compose.resources.imageResource
 
 /** Sprite atlases pre-rendered in Blender from the KayKit models (see art/blender/render_sprites.py). */
-class Sprites(
+data class Sprites(
     val archer: ImageBitmap,
     val knight: ImageBitmap,
     val boss: ImageBitmap,
