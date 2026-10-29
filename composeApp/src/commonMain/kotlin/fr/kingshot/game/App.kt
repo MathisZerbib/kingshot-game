@@ -6,8 +6,19 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,6 +65,8 @@ fun App() {
     renderer.sprites = rememberSprites()
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }
+    var pausedUi by remember { mutableStateOf(false) }
+    var picked by remember { mutableIntStateOf(game.savedClass) }
     val focus = remember { FocusRequester() }
     val topInset = WindowInsets.safeDrawing.getTop(density).toFloat()
     renderer.topInset = topInset
@@ -68,6 +81,7 @@ fun App() {
                 last = now
                 frame.longValue = now
                 if (game.state != uiState) uiState = game.state
+                if (game.paused != pausedUi) pausedUi = game.paused
             }
         }
     }
@@ -99,6 +113,12 @@ fun App() {
                 awaitEachGesture {
                     val first = awaitFirstDown(requireUnconsumed = false)
                     val id = first.id
+                    // HUD buttons take the touch instead of the joystick
+                    if (game.state == STATE_PLAY && !game.paused) {
+                        val p = first.position
+                        if (hit(p, renderer.abilityX, renderer.abilityY, renderer.abilityRadius)) { game.useAbility(); first.consume(); return@awaitEachGesture }
+                        if (hit(p, renderer.pauseX, renderer.pauseY, renderer.pauseRadius)) { game.paused = true; first.consume(); return@awaitEachGesture }
+                    }
                     game.input.touchStart(first.position.x, first.position.y, first.position.y < size.height * 0.6f)
                     while (true) {
                         val ev = awaitPointerEvent()
@@ -116,24 +136,138 @@ fun App() {
             frame.longValue
             renderer.draw(this, game)
         }
-        when (uiState) {
-            STATE_MENU -> Overlay(
-                title = "KINGSHOT",
-                subtitle = "Le vrai jeu. Zéro pub.",
-                body = "Déplace le roi en glissant le doigt (ou ZQSD / flèches).\n" +
-                    "Tes archers tirent tout seuls. Ramasse l'or des chevaliers\n" +
-                    "et dépose-le sur les chantiers : archers, tours, palissades.\n" +
-                    "Protège le donjon le plus longtemps possible !",
-                info = if (game.best > 0) "Record : vague ${game.best}" else null,
-                button = if (game.hasSave) "CONTINUER" else "JOUER",
-            ) { game.start(); focus.requestFocus() }
-            STATE_OVER -> Overlay(
-                title = "LE DONJON EST TOMBÉ",
-                subtitle = "Vague ${game.wave} · ${game.kills} chevaliers vaincus",
-                body = null,
-                info = if (game.newRecord) "Nouveau record !" else "Record : vague ${game.best}",
-                button = "REJOUER",
-            ) { game.start(); focus.requestFocus() }
+        when {
+            uiState == STATE_MENU -> MainMenu(
+                hasSave = game.hasSave, savedLevel = game.savedLevel, savedClass = game.savedClass, best = game.best,
+                picked = picked, onPick = { picked = it },
+                onContinue = { game.start(); focus.requestFocus() },
+                onNew = { game.newGame(picked); focus.requestFocus() },
+            )
+            uiState == STATE_OVER -> Panel("LE DONJON EST TOMBÉ", "Niveau ${game.level} · vague ${game.wave} · ${game.kills} ennemis vaincus",
+                if (game.newRecord) "Nouveau record !" else "Record : vague ${game.best}",
+                "REJOUER", { game.newGame(game.heroClass); focus.requestFocus() }, "Menu", { game.toMenu() })
+            pausedUi -> Panel("PAUSE", "${CLASS_NAMES[game.heroClass]} · niveau ${game.level} · vague ${game.wave}", "Partie sauvegardée à chaque vague",
+                "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.toMenu() })
+        }
+    }
+}
+
+private fun hit(p: Offset, x: Float, y: Float, r: Float): Boolean {
+    val dx = p.x - x
+    val dy = p.y - y
+    return dx * dx + dy * dy < r * r
+}
+
+private val CLASS_TINT = arrayOf(Color(0xFFD9443A), Color(0xFF3F9E4D), Color(0xFFE08A2B))
+private val CLASS_ROLE = arrayOf("Corps à corps · très solide", "Tir rapide à longue portée · fragile", "Constructions -30 % · grand aimant")
+private val CLASS_ABILITY = arrayOf(
+    "Tourbillon : frappe et repousse tout autour",
+    "Pluie de flèches sur tous les ennemis proches",
+    "Répare murs et donjon, soigne le roi",
+)
+private val CLASS_HP = intArrayOf(3, 1, 2)
+
+@Composable
+private fun MainMenu(
+    hasSave: Boolean, savedLevel: Int, savedClass: Int, best: Int,
+    picked: Int, onPick: (Int) -> Unit, onContinue: () -> Unit, onNew: () -> Unit,
+) {
+    Box(
+        Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x66000000), Color(0x22000000), Color(0xCC000000)))),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Label("KINGSHOT", Color(0xFFFFC531), 52, FontWeight.Black)
+            Label("Défends ton royaume", Color.White, 16, FontWeight.Bold)
+            Spacer(Modifier.height(28.dp))
+            Label("Choisis ton héros", Color.White, 18, FontWeight.Black)
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (c in 0..2) ClassCard(c, c == picked, Modifier.weight(1f)) { onPick(c) }
+            }
+            Spacer(Modifier.height(26.dp))
+            if (hasSave) {
+                BigButton("CONTINUER", "${CLASS_NAMES[savedClass]} · niveau $savedLevel", Color(0xFF45C34A), Color(0xFF2A8A2F), onContinue)
+                Spacer(Modifier.height(12.dp))
+                BigButton("NOUVELLE PARTIE", CLASS_NAMES[picked], Color(0xFFFFB627), Color(0xFFC77E00), onNew, small = true)
+            } else {
+                BigButton("JOUER", CLASS_NAMES[picked], Color(0xFF45C34A), Color(0xFF2A8A2F), onNew)
+            }
+            if (best > 0) {
+                Spacer(Modifier.height(14.dp))
+                Label("Record : vague $best", Color(0xFF9EE37D), 14, FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ClassCard(c: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier
+            .scale(if (selected) 1.04f else 1f)
+            .clip(shape)
+            .background(if (selected) Color(0xEE2B3A55) else Color(0xAA1A2233))
+            .border(if (selected) 3.dp else 1.dp, if (selected) Color(0xFFFFC531) else Color(0x55FFFFFF), shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 6.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Canvas(Modifier.size(56.dp)) {
+            val r = size.minDimension / 2f
+            drawCircle(Color(0xFFD9901A), r)
+            drawCircle(CLASS_TINT[c], r * 0.88f)
+            classIcon(c, center.x, center.y, r * 0.5f, r * 0.14f)
+        }
+        Spacer(Modifier.height(6.dp))
+        Label(CLASS_NAMES[c], Color.White, 15, FontWeight.Black)
+        Label("PV " + "♥".repeat(CLASS_HP[c]), Color(0xFFFF7A7A), 11, FontWeight.Bold)
+        Spacer(Modifier.height(4.dp))
+        Label(CLASS_ROLE[c], Color(0xFFDDDDDD), 10)
+        Spacer(Modifier.height(4.dp))
+        Label(CLASS_ABILITY[c], Color(0xFFFFD86A), 10, FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun BigButton(text: String, sub: String?, color: Color, shade: Color, onClick: () -> Unit, small: Boolean = false) {
+    val shape = RoundedCornerShape(18.dp)
+    Box(
+        Modifier
+            .width(if (small) 220.dp else 260.dp)
+            .clip(shape)
+            .background(shade) // darker bottom edge gives the chunky mobile-button look
+            .clickable(onClick = onClick)
+            .padding(bottom = 5.dp),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().clip(shape).background(color).padding(vertical = if (small) 8.dp else 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Label(text, Color.White, if (small) 18 else 26, FontWeight.Black)
+            if (sub != null) Label(sub, Color(0xEEFFFFFF), 12, FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun Panel(title: String, subtitle: String, info: String, button: String, onClick: () -> Unit, second: String, onSecond: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.padding(24.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xEE1F2A40))
+                .border(3.dp, Color(0xFFFFC531), RoundedCornerShape(22.dp)).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Label(title, Color(0xFFFFC531), 32, FontWeight.Black)
+            Spacer(Modifier.height(8.dp))
+            Label(subtitle, Color.White, 15, FontWeight.Bold)
+            Spacer(Modifier.height(8.dp))
+            Label(info, Color(0xFF9EE37D), 13, FontWeight.Bold)
+            Spacer(Modifier.height(20.dp))
+            BigButton(button, null, Color(0xFF45C34A), Color(0xFF2A8A2F), onClick)
+            Spacer(Modifier.height(10.dp))
+            BigButton(second, null, Color(0xFF4A5A7A), Color(0xFF2E3A52), onSecond, small = true)
         }
     }
 }
@@ -145,37 +279,4 @@ private fun Label(text: String, color: Color, size: Int, weight: FontWeight = Fo
         modifier,
         style = TextStyle(color = color, fontSize = size.sp, fontWeight = weight, textAlign = TextAlign.Center, lineHeight = (size * 1.4f).sp),
     )
-}
-
-@Composable
-private fun Overlay(title: String, subtitle: String, body: String?, info: String?, button: String, onClick: () -> Unit) {
-    Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
-        Column(
-            Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Label(title, Color(0xFFFFC531), 40, FontWeight.Black)
-            Spacer(Modifier.height(6.dp))
-            Label(subtitle, Color.White, 18, FontWeight.Bold)
-            if (body != null) {
-                Spacer(Modifier.height(18.dp))
-                Label(body, Color(0xFFE8E8E8), 14)
-            }
-            if (info != null) {
-                Spacer(Modifier.height(14.dp))
-                Label(info, Color(0xFF9EE37D), 16, FontWeight.Bold)
-            }
-            Spacer(Modifier.height(26.dp))
-            Box(
-                Modifier
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFFFFB627))
-                    .clickable(onClick = onClick)
-                    .padding(horizontal = 44.dp, vertical = 14.dp),
-            ) {
-                Label(button, Color(0xFF3A2400), 24, FontWeight.Black)
-            }
-        }
-    }
 }

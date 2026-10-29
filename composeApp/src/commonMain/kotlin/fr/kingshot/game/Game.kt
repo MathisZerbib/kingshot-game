@@ -22,9 +22,18 @@ const val PAD_REPAIR = 2
 const val PAD_TOWER = 3
 const val PAD_TOWER_ARCHER = 4
 const val START_SQUAD = 2
+const val TRANSITION_TIME = 4.2f
 const val PAD_WALL = 5
 
 const val MAX_SQUAD = 30
+
+// Hero classes, chosen on the menu
+const val CLASS_WARRIOR = 0 // melee cleave, tough; ability: whirlwind (damage + knockback around the king)
+const val CLASS_RANGER = 1 // fast long-range shots, fragile; ability: arrow rain on every enemy in range
+const val CLASS_BUILDER = 2 // weak shots, builds 30 % cheaper, bigger magnet; ability: repair all walls and the keep
+val CLASS_NAMES = arrayOf("Guerrier", "Rôdeur", "Bâtisseur")
+val ABILITY_NAMES = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
+val ABILITY_COOLDOWN = floatArrayOf(10f, 12f, 20f)
 
 /** Coins drawn on the king's head (tall enough to leave the screen); the HUD counter shows the real total. */
 const val MAX_STACK = 360 // ~1.3 screen heights of coins; more would not be visible
@@ -220,6 +229,15 @@ class Game {
     var kDir = 0
     var kHp = 150f
     var kMaxHp = 150f
+    var heroClass = CLASS_WARRIOR
+    var abilityCd = 0f // seconds until the ability is ready
+    var abilityFlash = 0f // > 0 right after use (visual)
+    var paused = false
+
+    // Level transition (ad-style): celebrate, zoom out over the grown map revealing the new road, zoom back
+    var transition = 0f // seconds left, TRANSITION_TIME .. 0
+    var camZoom = 1f
+    var revealRoad = -1 // index of the road being revealed during the transition, -1 none
     var kDead = false
     var kRespawn = 0f
     var kHurtTimer = 0f
@@ -346,12 +364,12 @@ class Game {
     private fun addMapPads(fromTower: Int, fromWall: Int) {
         for (i in fromTower until towers.size) {
             val t = towers[i]
-            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = 25; it.visible = !t.built })
+            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = price(25); it.visible = !t.built })
             pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = t.built && t.archers < TOWER_SLOTS })
         }
         for (i in fromWall until walls.size) {
             val w = walls[i]
-            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = 15; it.visible = !w.built })
+            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = price(15); it.visible = !w.built })
         }
     }
 
@@ -373,6 +391,8 @@ class Game {
         castleMaxHp = 600f
         kx = World.KING_START_X; ky = World.KING_START_Y
         kvx = 0f; kvy = 0f
+        kMaxHp = when (heroClass) { CLASS_WARRIOR -> 300f; CLASS_RANGER -> 110f; else -> 160f }
+        abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1
         kHp = kMaxHp; kDead = false; coins = 0
         squad = START_SQUAD
         castleHp = castleMaxHp
@@ -392,10 +412,19 @@ class Game {
         for (w in walls) { w.built = false; w.hp = 0f; w.gate = 0f }
         recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.level = squad; it.cost = recruitCost(squad) }
         forgePad = Pad(PAD_FORGE, 560f, 1640f).also { it.cost = forgeCost(0); it.visible = false }
-        repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = 15; it.visible = false }
+        repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = price(15); it.visible = false }
         pads.clear()
         pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
         addMapPads(0, 0)
+    }
+
+    /** Share of this level's construction done (towers, their archers, walls): the HUD progress bar. */
+    val levelProgress: Float get() {
+        var done = 0
+        var total = 0
+        for (t in towers) { total += 1 + TOWER_SLOTS; if (t.built) done += 1 + t.archers }
+        for (w in walls) { total++; if (w.built) done++ }
+        return if (total == 0) 0f else done.toFloat() / total
     }
 
     private fun levelDone(): Boolean =
@@ -433,12 +462,96 @@ class Game {
         for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
         burst(kx, ky, 40f, 70, 0xFFFFD84AL, 420f)
         shake = 8f
+        // ad-style sequence, see updateTransition
+        transition = TRANSITION_TIME
+        revealRoad = if (roadAdded) walls.size - 1 else -1
+        for (k in CONFETTI.indices) burst(kx, ky, 90f, 22, CONFETTI[k], 520f)
     }
 
-    fun start() {
+    private val CONFETTI = longArrayOf(0xFFFFD84AL, 0xFF4AD3FFL, 0xFFFF5A7AL, 0xFF7CFF8AL, 0xFFFFFFFFL)
+
+    /** 0..1 progress of the new road drawing during the transition. */
+    val revealT: Float get() = ((TRANSITION_TIME - transition - 1.9f) / 1.1f).coerceIn(0f, 1f)
+
+    private fun smooth(t: Float): Float { val c = t.coerceIn(0f, 1f); return c * c * (3f - 2f * c) }
+
+    private fun updateTransition(dt: Float) {
+        val before = TRANSITION_TIME - transition
+        transition = max(0f, transition - dt)
+        val t = TRANSITION_TIME - transition
+        // 0-1.1 s celebrate on the king, 1.1-1.9 zoom out over the base, 1.9-3.0 new road drawn, 3.2-4.2 back to the king
+        val out = smooth((t - 1.1f) / 0.8f) * (1f - smooth((t - 3.2f) / 1f))
+        camZoom = 1f - 0.5f * out
+        val tx = kx + (World.CASTLE_X - kx) * out
+        val ty = ky - 40f + (World.CASTLE_Y - 420f - (ky - 40f)) * out
+        camX += (tx - camX) * min(1f, dt * 8f)
+        camY += (ty - camY) * min(1f, dt * 8f)
+        // the new road's pads pop in as the road reaches them
+        if (before < 3.0f && t >= 3.0f) for (p in pads) if (p.visible && (p.kind == PAD_TOWER || p.kind == PAD_WALL) && p.ref == walls.size - 1) {
+            p.bump = 1f; burst(p.x, p.y, 10f, 20, 0xFFFFD84AL, 260f)
+        }
+        if (t >= 0.25f && before < 0.25f) for (k in CONFETTI.indices) burst(kx, ky - 80f, 140f, 16, CONFETTI[k], 600f)
+        if (transition <= 0f) { camZoom = 1f; revealRoad = -1 }
+    }
+
+    /** Class ability (button); returns false while on cooldown. */
+    fun useAbility(): Boolean {
+        if (state != STATE_PLAY || paused || transition > 0f || kDead || abilityCd > 0f) return false
+        abilityCd = ABILITY_COOLDOWN[heroClass]
+        abilityFlash = 0.6f
+        when (heroClass) {
+            CLASS_WARRIOR -> {
+                for (i in enemies.indices) {
+                    val e = enemies[i]
+                    if (!e.active || hypot(e.x - kx, e.y - ky) > 190f + e.radius) continue
+                    if (e.kind != 2) e.s = max(0f, e.s - 90f) // knocked back along its road
+                    hitEnemy(i, 110f * dmgMult)
+                }
+                shake = max(shake, 9f)
+                burst(kx, ky, 20f, 50, 0xFFFFFFFFL, 520f)
+                burst(kx, ky, 20f, 30, 0xFFFFC531L, 380f)
+            }
+            CLASS_RANGER -> {
+                var n = 0
+                for (i in enemies.indices) {
+                    val e = enemies[i]
+                    if (!e.active || hypot(e.x - kx, e.y - ky) > 520f || n >= 60) continue
+                    fire(kx + (rnd.nextFloat() - 0.5f) * 80f, ky, 260f, i, 70f * dmgMult)
+                    n++
+                }
+                burst(kx, ky, 60f, 30, 0xFF9EE37DL, 300f)
+            }
+            else -> {
+                castleHp = min(castleMaxHp, castleHp + castleMaxHp * 0.4f)
+                for (w in walls) if (w.built) { w.hp = min(w.maxHp, w.hp + w.maxHp * 0.6f); w.bump = 1f; burst(w.x, w.y, 30f, 18, 0xFF7CFF8AL, 220f) }
+                burst(World.CASTLE_X, World.CASTLE_Y, 60f, 40, 0xFF7CFF8AL, 300f)
+                kHp = kMaxHp
+            }
+        }
+        return true
+    }
+
+    /** Continue the saved game if any, else a new game with [cls]. */
+    fun start(cls: Int = heroClass) {
         val save = Storage.loadGame()
-        if (save == null || !restore(save)) reset()
+        if (save == null || !restore(save)) { heroClass = cls; reset() }
         state = STATE_PLAY
+    }
+
+    /** Always a fresh game (drops the save). */
+    fun newGame(cls: Int) {
+        Storage.saveGame(null)
+        heroClass = cls
+        reset()
+        state = STATE_PLAY
+    }
+
+    val savedClass: Int get() = Storage.loadGame()?.split(";")?.getOrNull(14)?.toIntOrNull() ?: CLASS_WARRIOR
+    val savedLevel: Int get() = Storage.loadGame()?.split(";")?.getOrNull(1)?.toIntOrNull() ?: 1
+
+    fun toMenu() {
+        paused = false
+        state = STATE_MENU
     }
 
     val hasSave get() = Storage.loadGame() != null
@@ -455,6 +568,7 @@ class Game {
         for (t in towers) sb.append(if (t.built) t.archers else -1).append(",")
         sb.append(";")
         for (w in walls) sb.append(if (w.built) w.hp else -1f).append(",")
+        sb.append(";").append(heroClass)
         Storage.saveGame(sb.toString())
     }
 
@@ -462,6 +576,7 @@ class Game {
         val f = s.split(";")
         if (f.size < 14 || f[0] != "v1") return false
         return try {
+            heroClass = f.getOrNull(14)?.toIntOrNull()?.coerceIn(0, 2) ?: CLASS_WARRIOR
             reset()
             level = f[1].toInt()
             World.load(level)
@@ -499,9 +614,12 @@ class Game {
     }
 
     // Archers are spent on towers now, so recruiting stays affordable; cheaper from level 2.
-    private fun recruitCost(n: Int): Int = (min(4 + n * 2, 20) * (if (level >= 2) 0.75f else 1f)).toInt()
+    private fun recruitCost(n: Int): Int = price((min(4 + n * 2, 20) * (if (level >= 2) 0.75f else 1f)).toInt())
 
-    private fun forgeCost(n: Int): Int = ((20 + n * 25 + n * n * 5) * (if (age >= 2) 0.7f else 1f)).toInt()
+    /** Builder pays 30 % less for everything. */
+    private fun price(c: Int) = if (heroClass == CLASS_BUILDER) max(1, (c * 0.7f + 0.5f).toInt()) else c
+
+    private fun forgeCost(n: Int): Int = price(((20 + n * 25 + n * n * 5) * (if (age >= 2) 0.7f else 1f)).toInt())
 
     fun bestOrCurrent() = max(best, wave)
 
@@ -523,6 +641,15 @@ class Game {
             updateParticles(dt)
             return
         }
+        if (paused) return
+        if (transition > 0f) {
+            updateTransition(dt)
+            updateParticles(dt)
+            updateTexts(dt)
+            if (levelBanner > 0f) levelBanner -= dt
+            if (shake > 0f) shake = max(0f, shake - dt * 30f)
+            return
+        }
         if (state == STATE_PLAY) {
             updateKing(dt)
             updateSquad(dt)
@@ -530,6 +657,8 @@ class Game {
             updateEnemies(dt)
             updateTowers(dt)
             updatePads(dt)
+            if (abilityCd > 0f) abilityCd -= dt
+            if (abilityFlash > 0f) abilityFlash -= dt
         }
         updateArrows(dt)
         updateRain(dt)
@@ -645,13 +774,30 @@ class Game {
 
         kFireCd -= dt
         if (kFireCd <= 0f) {
-            val t = nearestEnemy(kx, ky, 300f)
-            if (t >= 0) {
-                fire(kx, ky - 6f, 52f, t, 25f * dmgMult)
-                kFaceRight = enemies[t].x > kx
-                if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
-                kFireCd = 0.5f
-            } else kFireCd = 0.1f
+            if (heroClass == CLASS_WARRIOR) {
+                // sword cleave: every enemy within reach
+                var hit = -1
+                for (i in enemies.indices) {
+                    val e = enemies[i]
+                    if (!e.active || hypot(e.x - kx, e.y - ky) > 78f + e.radius) continue
+                    hit = i
+                    kDir = dirIndex(e.x - kx, e.y - ky)
+                    burst((kx + e.x) * 0.5f, (ky + e.y) * 0.5f, 30f, 4, 0xFFFFFFFFL, 160f)
+                    hitEnemy(i, 40f * dmgMult)
+                }
+                if (hit >= 0) {
+                    kFireCd = 0.6f
+                } else kFireCd = 0.1f
+            } else {
+                val range = if (heroClass == CLASS_RANGER) 430f else 300f
+                val t = nearestEnemy(kx, ky, range)
+                if (t >= 0) {
+                    fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 24f else 18f) * dmgMult)
+                    kFaceRight = enemies[t].x > kx
+                    if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
+                    kFireCd = if (heroClass == CLASS_RANGER) 0.26f else 0.5f
+                } else kFireCd = 0.1f
+            }
         }
     }
 
@@ -811,7 +957,7 @@ class Game {
     }
 
     private fun updateCoins(dt: Float) {
-        val magnet = 520f
+        val magnet = if (heroClass == CLASS_BUILDER) 780f else 520f
         for (c in coinsOnGround) {
             if (!c.active) continue
             c.t += dt
@@ -948,7 +1094,7 @@ class Game {
             PAD_REPAIR -> {
                 castleHp = min(castleMaxHp, castleHp + castleMaxHp * 0.45f)
                 p.level++
-                p.cost = 15 + p.level * 10
+                p.cost = price(15 + p.level * 10)
                 burst(World.CASTLE_X, World.CASTLE_Y, 60f, 30, 0xFF7CFF8AL, 260f)
             }
             PAD_TOWER -> {
@@ -1173,7 +1319,7 @@ class Game {
         burst(w.x, w.y, 25f, 34, 0xFF7A4A2AL, 320f)
         shake = max(shake, 6f)
         pads.first { it.kind == PAD_WALL && it.ref == w.path }.apply {
-            visible = true; paid = 0; pending = 0; level++; cost = 15 + level * 5
+            visible = true; paid = 0; pending = 0; level++; cost = price(15 + level * 5)
         }
     }
 

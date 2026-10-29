@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
@@ -69,6 +70,12 @@ private val CLIFF_LIP = Color(0x55000000)
 private val CLIFF_SHADOW = Color(0x26000000)
 private val SHADOW = Color(0x33000000)
 private val KING_RING = Color(0x4DFFFFFF)
+private val CLASS_COLORS = arrayOf(Color(0xFFD9443A), Color(0xFF3F9E4D), Color(0xFFE08A2B))
+private val HUD_SHADOW = Color(0x55000000)
+private val HUD_TRACK = Color(0x66000000)
+private val HUD_BUTTON = Color(0xFF3B4A6B)
+private val WAVE_RED = Color(0xFFC8342B)
+private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
 private val ALERT_RED = Color(0xFFFF4A3A)
 private const val MAX_EDGE_ARROWS = 12
@@ -146,6 +153,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private var cliffBrush: ShaderBrush? = null
     private val autumnTint = ColorFilter.tint(Color(0xFFF2CF86), BlendMode.Modulate)
     private val winterTint = ColorFilter.tint(Color(0xFFDDE6EA), BlendMode.Modulate)
+
+    // new road drawn progressively during the level transition
+    private var revealIdx = -1
+    private val revealPath = Path()
+    private val revealMeasure = PathMeasure()
 
     private fun syncTiles() {
         val sp = sprites ?: return
@@ -236,7 +248,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val w = size.width
         val h = size.height
         val portrait = h >= w
-        scale = if (portrait) w / 560f else min(w / 1000f, h / 620f)
+        scale = (if (portrait) w / 560f else min(w / 1000f, h / 620f)) * g.camZoom
         val halfW = w / 2f / scale
         val halfH = h / 2f / scale
         val cx = if (halfW * 2 >= World.W) World.W / 2 else g.camX.coerceIn(halfW, World.W - halfW)
@@ -253,6 +265,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
         syncRoads()
         syncTiles()
+        revealIdx = g.revealRoad
+        if (revealIdx in roads2.indices) {
+            revealPath.reset()
+            revealMeasure.setPath(roads2[revealIdx], false)
+            revealMeasure.getSegment(0f, revealMeasure.length * g.revealT, revealPath, true)
+        }
         season = SEASONS[(g.level - 1) % SEASONS.size]
         drawRect(season[0])
         withTransform({
@@ -318,9 +336,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
         if (rb != null) {
             withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
-                for (r in roads2) drawPath(r, DIRT_EDGE, alpha = 0.55f, style = roadEdge2) // soft border
-                for (r in roads2) drawPath(r, rb, style = road2, colorFilter = if (winter) winterTint else null)
-                for (r in roads2) drawPath(r, DIRT_LIGHT, alpha = 0.25f, style = roadCenter2) // worn middle of the track
+                for (k in roads2.indices) drawPath(if (k == revealIdx) revealPath else roads2[k], DIRT_EDGE, alpha = 0.55f, style = roadEdge2) // soft border
+                for (k in roads2.indices) drawPath(if (k == revealIdx) revealPath else roads2[k], rb, style = road2, colorFilter = if (winter) winterTint else null)
+                for (k in roads2.indices) drawPath(if (k == revealIdx) revealPath else roads2[k], DIRT_LIGHT, alpha = 0.25f, style = roadCenter2) // worn middle of the track
             }
         } else {
             for (r in roads) drawPath(r, DIRT_EDGE, style = roadStrokeEdge)
@@ -686,41 +704,79 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private fun DrawScope.drawHud(g: Game, w: Float, h: Float) {
         val u = min(w, h) / 400f // HUD unit
         val top = topInset + 10f * u
-        if (g.state != STATE_MENU) {
-            // coins
-            val pw = 110f * u
-            val ph = 36f * u
-            val px = w - pw - 10f * u
-            rr(HUD_BG, px, top, pw, ph, ph / 2f)
-            drawCoinIcon(px + ph / 2f, top + ph / 2f, ph * 0.46f)
-            label(text.num(g.coins), px + pw * 0.62f, top + ph / 2f, 26f * u * (1f + g.stackBump * 0.18f), WHITE)
-            // wave
-            rr(HUD_BG, 10f * u, top, 120f * u, ph, ph / 2f)
-            label(text.str(waveLabel(g.wave)), 70f * u, top + ph / 2f, 18f * u, WHITE, outlined = false)
-            // castle hp
-            val bw = min(w * 0.5f, 260f * u)
+        if (g.state != STATE_MENU && g.transition <= 0f) {
+            // --- top-left: hero portrait, level badge, level progress
+            val pr = 25f * u
+            val pcx = 12f * u + pr
+            val pcy = top + pr
+            circ(HUD_SHADOW, pcx, pcy + 3f * u, pr + 3f * u)
+            circ(GOLD_DARK, pcx, pcy, pr + 3f * u)
+            circ(CLASS_COLORS[g.heroClass], pcx, pcy, pr)
+            drawClassIcon(g.heroClass, pcx, pcy, pr * 0.62f, u)
+            val bcx = pcx + pr * 0.78f
+            val bcy = pcy + pr * 0.78f
+            circ(GOLD_DARK, bcx, bcy, 12f * u)
+            circ(GOLD, bcx, bcy, 10f * u)
+            label(text.num(g.level), bcx, bcy, 13f * u, Color(0xFF4A2A00), outlined = false)
+            val lx = pcx + pr + 8f * u
+            val lw = 112f * u
+            rr(HUD_BG, lx, top + 4f * u, lw, 44f * u, 12f * u)
+            label(text.str(CLASS_NAMES[g.heroClass]), lx + lw / 2f, top + 15f * u, 13f * u, WHITE, outlined = false)
+            label(text.str(ageLabel(g.age)), lx + lw / 2f, top + 28f * u, 10f * u, GOLD, outlined = false)
+            rr(HUD_TRACK, lx + 8f * u, top + 37f * u, lw - 16f * u, 6f * u, 3f * u)
+            rr(GOLD, lx + 8f * u, top + 37f * u, (lw - 16f * u) * g.levelProgress, 6f * u, 3f * u)
+            // --- top-right: coins and pause
+            val ph = 34f * u
+            val pauseR = 17f * u
+            pauseX = w - 12f * u - pauseR; pauseY = top + pauseR; pauseRadius = pauseR + 8f * u
+            circ(HUD_SHADOW, pauseX, pauseY + 3f * u, pauseR)
+            circ(HUD_BUTTON, pauseX, pauseY, pauseR)
+            rr(WHITE, pauseX - 6f * u, pauseY - 7f * u, 4f * u, 14f * u, 1.5f * u)
+            rr(WHITE, pauseX + 2f * u, pauseY - 7f * u, 4f * u, 14f * u, 1.5f * u)
+            val pw = 96f * u
+            val px = pauseX - pauseR - 8f * u - pw
+            rr(HUD_BG, px, top + 1f * u, pw, ph, ph / 2f)
+            drawCoinIcon(px + ph / 2f, top + 1f * u + ph / 2f, ph * 0.46f)
+            label(text.num(g.coins), px + pw * 0.6f, top + 1f * u + ph / 2f, 22f * u * (1f + g.stackBump * 0.18f), WHITE)
+            // --- centre: wave pill and keep health
+            val by = top + 62f * u
+            val wpw = 112f * u
+            rr(HUD_SHADOW, w / 2f - wpw / 2f, by + 2f * u, wpw, 24f * u, 12f * u)
+            rr(WAVE_RED, w / 2f - wpw / 2f, by, wpw, 24f * u, 12f * u)
+            label(text.str(waveLabel(g.wave).uppercase()), w / 2f, by + 12f * u, 14f * u, WHITE)
+            val bw = min(w * 0.55f, 220f * u)
             val bx = w / 2f - bw / 2f
-            val by = top + ph + 8f * u
-            rr(HUD_BG, bx - 3f * u, by - 3f * u, bw + 6f * u, 14f * u, 7f * u)
+            val hy = by + 30f * u
+            rr(HUD_BG, bx - 3f * u, hy - 3f * u, bw + 6f * u, 13f * u, 6.5f * u)
             val frac = (g.castleHp / g.castleMaxHp).coerceIn(0f, 1f)
-            rr(if (frac > 0.35f) HP_GREEN else HP_RED, bx, by, bw * frac, 8f * u, 4f * u)
-            label(text.str("Donjon"), w / 2f, by + 22f * u, 12f * u, WHITE)
-            label(text.str(levelLabel(g.level)), 70f * u, by + 22f * u, 14f * u, GOLD)
+            rr(if (frac > 0.35f) HP_GREEN else HP_RED, bx, hy, bw * frac, 7f * u, 3.5f * u)
+            label(text.str("Donjon"), w / 2f, hy + 17f * u, 11f * u, WHITE)
             // wave countdown
             if (g.toSpawn == 0 && !g.bossPending && g.waveBreak < 7f && g.waveBreak > 0f && g.enemies.none { it.active }) {
-                label(text.str("Prochaine vague dans"), w / 2f, by + 46f * u, 14f * u, WHITE)
-                label(text.num(g.waveBreak.toInt() + 1), w / 2f, by + 70f * u, 24f * u, GOLD)
+                label(text.str("Prochaine vague dans"), w / 2f, hy + 38f * u, 14f * u, WHITE)
+                label(text.num(g.waveBreak.toInt() + 1), w / 2f, hy + 62f * u, 24f * u, GOLD)
             }
+            // --- bottom-right: class ability with cooldown
+            if (g.state == STATE_PLAY) drawAbilityButton(g, w, h, u)
         }
-        if (g.state == STATE_PLAY) {
-            drawEdgeArrows(g, w, h, u, top + 90f * u)
+        if (g.state == STATE_PLAY && g.transition <= 0f) {
+            drawEdgeArrows(g, w, h, u, top + 110f * u)
             if (g.castleAlarm > 0f) {
                 val pulse = 0.55f + 0.45f * sin(g.time * 12f)
-                label(text.str("Le donjon est attaqué !"), w / 2f, top + 112f * u, 20f * u * (1f + pulse * 0.06f), ALERT_RED, min(1f, g.castleAlarm) * pulse)
+                label(text.str("Le donjon est attaqué !"), w / 2f, top + 128f * u, 20f * u * (1f + pulse * 0.06f), ALERT_RED, min(1f, g.castleAlarm) * pulse)
             }
         }
         // banners
         if (g.levelBanner > 0f) {
+            // sunburst behind the title, like the ads
+            val ra = min(1f, g.levelBanner * 1.5f) * 0.35f
+            withTransform({ translate(w / 2f, h * 0.27f) }) {
+                for (k in 0 until 14) {
+                    withTransform({ rotate(g.time * 25f + k * (360f / 14f), Offset.Zero); scale(w * 0.9f, 26f * u, Offset.Zero) }) {
+                        drawPath(sunRay, GOLD, alpha = ra)
+                    }
+                }
+            }
             val k = g.levelBanner / 3.5f
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             val a = min(1f, g.levelBanner * 2f)
@@ -746,8 +802,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.str("Le roi est tombé..."), w / 2f, h * 0.45f, 26f * u, WHITE)
         }
         if (g.state == STATE_PLAY && g.wave <= 1 && g.squad <= START_SQUAD) {
-            label(text.str("Tue les chevaliers, ramasse l'or,"), w / 2f, h - 86f * u, 16f * u, WHITE)
-            label(text.str("puis dépose-le sur les chantiers"), w / 2f, h - 64f * u, 16f * u, WHITE)
+            label(text.str("Tue les chevaliers, ramasse l'or,"), w / 2f, h - 150f * u, 16f * u, WHITE)
+            label(text.str("puis dépose-le sur les chantiers"), w / 2f, h - 128f * u, 16f * u, WHITE)
         }
         // fps
         label(text.str(fpsLabel(g.fps)), 34f * u, h - 16f * u, 11f * u, Color(0xCCFFFFFF), outlined = false)
@@ -792,6 +848,35 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
     }
 
+    /** Hit areas of the HUD buttons, in screen pixels (read by App's touch handler). */
+    var pauseX = -1000f; var pauseY = -1000f; var pauseRadius = 0f
+    var abilityX = -1000f; var abilityY = -1000f; var abilityRadius = 0f
+
+    private fun DrawScope.drawAbilityButton(g: Game, w: Float, h: Float, u: Float) {
+        val r = 34f * u
+        abilityX = w - 18f * u - r; abilityY = h - 46f * u - r; abilityRadius = r + 10f * u
+        val ready = g.abilityCd <= 0f
+        if (ready) circ(GOLD, abilityX, abilityY, r + (5f + 3f * sin(g.time * 6f)) * u) // ready glow
+        circ(HUD_SHADOW, abilityX, abilityY + 4f * u, r)
+        circ(GOLD_DARK, abilityX, abilityY, r)
+        circ(CLASS_COLORS[g.heroClass], abilityX, abilityY, r - 4f * u)
+        drawAbilityIcon(g.heroClass, abilityX, abilityY, r * 0.55f, u)
+        if (!ready) {
+            val f = (g.abilityCd / ABILITY_COOLDOWN[g.heroClass]).coerceIn(0f, 1f)
+            drawArc(COOLDOWN, -90f, 360f * f, true, Offset(abilityX - r + 4f * u, abilityY - r + 4f * u), Size((r - 4f * u) * 2f, (r - 4f * u) * 2f))
+            label(text.num(g.abilityCd.toInt() + 1), abilityX, abilityY, 22f * u, WHITE)
+        }
+        label(text.str(ABILITY_NAMES[g.heroClass]), abilityX, abilityY + r + 12f * u, 11f * u, WHITE)
+    }
+
+    private fun DrawScope.drawClassIcon(cls: Int, x: Float, y: Float, s: Float, u: Float) = classIcon(cls, x, y, s, 4.5f * u)
+    private fun DrawScope.drawAbilityIcon(cls: Int, x: Float, y: Float, s: Float, u: Float) = classIcon(cls, x, y, s, 4.5f * u)
+
+    private val ageLabels = arrayOf("Âge du Bois", "Âge de Pierre", "Âge Royal")
+    private fun ageLabel(age: Int) = ageLabels[(age - 1).coerceIn(0, 2)]
+    /** Unit ray (tip at the origin, widening to x = 1) for the level-up sunburst. */
+    private val sunRay = Path().apply { moveTo(0f, 0f); lineTo(1f, -1f); lineTo(1f, 1f); close() }
+
     private val waveLabels = HashMap<Int, String>()
     private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { "Vague ${max(n, 1)}" }
     private val levelLabels = HashMap<Int, String>()
@@ -800,4 +885,28 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private fun levelDoneLabel(n: Int) = levelDoneLabels.getOrPut(n) { "NIVEAU $n TERMINÉ !" }
     private val fpsLabels = HashMap<Int, String>()
     private fun fpsLabel(n: Int) = fpsLabels.getOrPut(n) { "$n fps" }
+}
+
+/** Simple vector class icons (crossed swords, bow, hammer), shared by the HUD and the menu cards. */
+fun DrawScope.classIcon(cls: Int, x: Float, y: Float, s: Float, lw: Float) {
+    val c = Color.White
+    when (cls) {
+        CLASS_WARRIOR -> {
+            drawLine(c, Offset(x - s, y + s), Offset(x + s * 0.8f, y - s * 0.8f), lw, StrokeCap.Round)
+            drawLine(c, Offset(x + s, y + s), Offset(x - s * 0.8f, y - s * 0.8f), lw, StrokeCap.Round)
+            drawLine(c, Offset(x - s * 0.95f, y + s * 0.45f), Offset(x - s * 0.45f, y + s * 0.95f), lw, StrokeCap.Round)
+            drawLine(c, Offset(x + s * 0.95f, y + s * 0.45f), Offset(x + s * 0.45f, y + s * 0.95f), lw, StrokeCap.Round)
+        }
+        CLASS_RANGER -> {
+            drawArc(c, -70f, 140f, false, Offset(x - s * 1.4f, y - s), Size(s * 2f, s * 2f), style = Stroke(lw))
+            drawLine(c, Offset(x - s * 0.06f, y - s * 0.94f), Offset(x - s * 0.06f, y + s * 0.94f), lw * 0.45f)
+            drawLine(c, Offset(x - s * 0.9f, y), Offset(x + s * 0.9f, y), lw * 0.7f, StrokeCap.Round)
+            drawLine(c, Offset(x + s * 0.9f, y), Offset(x + s * 0.55f, y - s * 0.3f), lw * 0.7f, StrokeCap.Round)
+            drawLine(c, Offset(x + s * 0.9f, y), Offset(x + s * 0.55f, y + s * 0.3f), lw * 0.7f, StrokeCap.Round)
+        }
+        else -> {
+            drawLine(c, Offset(x - s * 0.7f, y + s), Offset(x + s * 0.3f, y - s * 0.1f), lw, StrokeCap.Round)
+            drawRoundRect(c, Offset(x - s * 0.1f, y - s * 0.9f), Size(s * 1.1f, s * 0.6f), CornerRadius(lw * 0.4f, lw * 0.4f))
+        }
+    }
 }
