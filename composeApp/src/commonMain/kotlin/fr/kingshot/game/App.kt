@@ -4,6 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import fr.kingshot.game.resources.Res
 import fr.kingshot.game.resources.logo
+import fr.kingshot.game.resources.portrait_builder
+import fr.kingshot.game.resources.portrait_ranger
+import fr.kingshot.game.resources.portrait_warrior
 import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
@@ -188,6 +191,7 @@ private val CLASS_ABILITY = arrayOf(
     "Répare murs et donjon, soigne le roi",
 )
 private val CLASS_HP = intArrayOf(3, 1, 2)
+private val PORTRAITS = arrayOf(Res.drawable.portrait_warrior, Res.drawable.portrait_ranger, Res.drawable.portrait_builder)
 
 @Composable
 private fun MainMenu(
@@ -291,11 +295,8 @@ private fun ClassCard(c: Int, selected: Boolean, modifier: Modifier, onClick: ()
             .padding(horizontal = 6.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Canvas(Modifier.size(56.dp)) {
-            val r = size.minDimension / 2f
-            drawCircle(Color(0xFFD9901A), r)
-            drawCircle(CLASS_TINT[c], r * 0.88f)
-            classIcon(c, center.x, center.y, r * 0.5f, r * 0.14f)
+        Box(Modifier.size(64.dp).clip(CircleShape).background(Color(0xFFD9901A)).padding(3.dp).clip(CircleShape).background(CLASS_TINT[c])) {
+            Image(painterResource(PORTRAITS[c]), CLASS_NAMES[c], Modifier.fillMaxSize().scale(1.1f))
         }
         Spacer(Modifier.height(6.dp))
         Label(CLASS_NAMES[c], Color.White, 15, FontWeight.Black)

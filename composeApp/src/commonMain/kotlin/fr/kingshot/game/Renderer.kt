@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.scale
@@ -197,6 +198,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     /** Pre-rendered 3D sprite atlases; null until loaded. */
     var sprites: Sprites? = null
     private var scale = 1f
+    private val portraitClip = Path()
     private var viewTop = 0f // world y of the top of the view, to stop the coin stack where it leaves the screen
     private var viewOx = 0f // world -> screen offset of the current frame, for the HUD
     private var viewOy = 0f
@@ -543,7 +545,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         i = 0
         while (i < pr.size) { if (vis(pr[i], pr[i + 1])) n = push(n, pr[i + 1], K_PROP, i); i += 3 }
         // enclosure: stakes every point (wood), a stone block every 3rd point (stone/royal)
-        val ringStride = if (g.age >= 2) 2 else 1
+        val ringStride = 2
         for (k in 0 until g.ringCount) if (k % ringStride == 0 && vis(g.ringX[k], g.ringY[k])) n = push(n, g.ringY[k], K_RING, k)
         n = push(n, World.HOUSE_Y, K_HOUSE, 0)
         if (g.farm) n = push(n, World.FARM_Y, K_BUILDING, 0)
@@ -642,15 +644,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val sp = sprites ?: return
         val x = g.ringX[k]
         val y = g.ringY[k]
-        if (g.age >= 2) {
-            // stone block oriented by the local direction of the ring
-            val j = if (k + 1 < g.ringCount && g.ringRun[k + 1]) k + 1 else k - 1
-            val vertical = j >= 0 && abs(g.ringY[j] - y) > abs(g.ringX[j] - x)
-            if (vertical) sprite(sp.wallStoneV, SpriteData.wallStoneV, 0, 0, x, y, 0.72f)
-            else sprite(sp.wallStone, SpriteData.wallStone, 0, 0, x, y, 0.72f)
-        } else {
-            sprite(sp.stake, SpriteData.stake, 0, 0, x, y, 0.95f + ((k * 7) % 3) * 0.06f)
-        }
+        // wall block oriented by the local direction of the ring: wood, then stone from the stone age
+        val j = if (k + 1 < g.ringCount && g.ringRun[k + 1]) k + 1 else k - 1
+        val vertical = j >= 0 && abs(g.ringY[j] - y) > abs(g.ringX[j] - x)
+        val stone = g.age >= 2
+        if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, 0.72f)
+        else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, 0.72f)
     }
 
     // placeholder looks for the new buildings until their own models land
@@ -726,31 +725,24 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val sp = sprites ?: return
         val filter = if (w.hitFlash > 0f) flashFilter else null
         val b = 1f + w.bump * 0.2f
-        if (age >= 2) {
-            // stone rampart: segment, gate, segment along the wall line, drawn back to front
-            val vertical = w.ry != 0f
-            val open = w.gate > 0.5f
-            for (i in -1..1) { // left to right / top to bottom = back to front
-                val x = w.x + w.rx * i * 90f
-                val y = w.y + w.ry * i * 90f
-                if (i == 0) {
+        // segment, gate, segment along the wall line, drawn back to front: wooden palisade, then stone from the stone age
+        val vertical = w.ry != 0f
+        val open = w.gate > 0.5f
+        val stone = age >= 2
+        for (i in -1..1) { // left to right / top to bottom = back to front
+            val x = w.x + w.rx * i * 90f
+            val y = w.y + w.ry * i * 90f
+            if (i == 0) {
+                if (stone) {
                     if (vertical) sprite(if (open) sp.gateOpenV else sp.gateClosedV, if (open) SpriteData.gateOpenV else SpriteData.gateClosedV, 0, 0, x, y, b, filter)
                     else sprite(if (open) sp.gateOpen else sp.gateClosed, if (open) SpriteData.gateOpen else SpriteData.gateClosed, 0, 0, x, y, b, filter)
                 } else {
-                    if (vertical) sprite(sp.wallStoneV, SpriteData.wallStoneV, 0, 0, x, y, b, filter)
-                    else sprite(sp.wallStone, SpriteData.wallStone, 0, 0, x, y, b, filter)
+                    if (vertical) sprite(if (open) sp.gateWoodOpenV else sp.gateWoodClosedV, if (open) SpriteData.gateWoodOpenV else SpriteData.gateWoodClosedV, 0, 0, x, y, b, filter)
+                    else sprite(if (open) sp.gateWoodOpen else sp.gateWoodClosed, if (open) SpriteData.gateWoodOpen else SpriteData.gateWoodClosed, 0, 0, x, y, b, filter)
                 }
-            }
-        } else {
-            val stakes = 9
-            val reverse = w.ny < 0f
-            val slide = w.gate * 26f
-            for (k0 in 0 until stakes) {
-                val k = if (reverse) stakes - 1 - k0 else k0
-                if (k == 4 && w.gate > 0.5f) continue // the middle stake swings away
-                var tt = (k - (stakes - 1) / 2f) * 20f
-                if (k == 3) tt -= slide else if (k == 5) tt += slide
-                sprite(sp.stake, SpriteData.stake, 0, 0, w.x + w.nx * tt, w.y + w.ny * tt, b * (0.95f + ((k * 7) % 3) * 0.06f), filter)
+            } else {
+                if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, b, filter)
+                else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, b, filter)
             }
         }
         if (w.hp < w.maxHp) hpBar(w.x, w.y - 64f, 70f, w.hp / w.maxHp, HP_GREEN)
@@ -778,7 +770,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val moving = abs(g.kvx) + abs(g.kvy) > 30f
         val col = if (moving) 1 + walkFrame(g.kWalk, 6) else 0
         oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
-        sprite(sp.king, SpriteData.king, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
+        val kingImg = when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
+        sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)
         val bob = if (moving) abs(sin(g.kWalk * 2f)) * 2f else 0f
@@ -876,7 +869,15 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             circ(HUD_SHADOW, pcx, pcy + 3f * u, pr + 3f * u)
             circ(GOLD_DARK, pcx, pcy, pr + 3f * u)
             circ(CLASS_COLORS[g.heroClass], pcx, pcy, pr)
-            drawClassIcon(g.heroClass, pcx, pcy, pr * 0.62f, u)
+            val sp = sprites
+            if (sp != null) {
+                portraitClip.reset()
+                portraitClip.addOval(androidx.compose.ui.geometry.Rect(pcx - pr, pcy - pr, pcx + pr, pcy + pr))
+                clipPath(portraitClip) {
+                    val img = when (g.heroClass) { CLASS_WARRIOR -> sp.portraitWarrior; CLASS_RANGER -> sp.portraitRanger; else -> sp.portraitBuilder }
+                    drawImage(img, IntOffset.Zero, IntSize(256, 256), IntOffset((pcx - pr * 1.1f).toInt(), (pcy - pr * 1.1f).toInt()), IntSize((pr * 2.2f).toInt(), (pr * 2.2f).toInt()))
+                }
+            } else drawClassIcon(g.heroClass, pcx, pcy, pr * 0.62f, u)
             val bcx = pcx + pr * 0.78f
             val bcy = pcy + pr * 0.78f
             circ(GOLD_DARK, bcx, bcy, 12f * u)

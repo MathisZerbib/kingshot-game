@@ -249,7 +249,6 @@ class Wall(val path: Int, val s: Float) {
 
 /** Half length of a stone rampart across its road, and half width of its gate. */
 const val RAMPART_HALF = 135f // gate (90) + one 90-unit stone segment each side
-const val PALISADE_HALF = 85f
 const val GATE_HALF = 40f
 const val RING_MAX = 640 // points of the wall ring linking the palisades/ramparts
 const val RING_STEP = 20f
@@ -594,14 +593,13 @@ class Game {
                 j--
             }
         }
-        val stone = age >= 2
-        val half = if (stone) RAMPART_HALF else PALISADE_HALF
+        val half = RAMPART_HALF // walls are axis-aligned segment + gate + segment in every age
         for (k in 0 until n) {
             val a = walls[ringOrder[k]]
             val b = walls[ringOrder[(k + 1) % n]]
             // end of a with the larger angle, end of b with the smaller angle
-            val ax = if (stone) a.rx else a.nx; val ay = if (stone) a.ry else a.ny
-            val bx = if (stone) b.rx else b.nx; val by = if (stone) b.ry else b.ny
+            val ax = a.rx; val ay = a.ry
+            val bx = b.rx; val by = b.ry
             var p0x = a.x + ax * half; var p0y = a.y + ay * half
             if (angleFrom(a, a.x - ax * half, a.y - ay * half) > angleFrom(a, p0x, p0y)) { p0x = a.x - ax * half; p0y = a.y - ay * half }
             var p1x = b.x - bx * half; var p1y = b.y - by * half
@@ -1096,15 +1094,14 @@ class Game {
             nx = World.CASTLE_X + cdx / cd * minD
             ny = World.CASTLE_Y + cdy / cd * minD / 1.6f
         }
-        val stone = age >= 2
         for (w in walls) {
             if (!w.built) continue
-            val lx = if (stone) w.rx else w.nx // wall line direction
-            val ly = if (stone) w.ry else w.ny
+            val lx = w.rx // wall line direction (axis-aligned, like the wall sprites)
+            val ly = w.ry
             val rx = nx - w.x
             val ry = ny - w.y
             val along = rx * lx + ry * ly
-            if (abs(along) > (if (stone) RAMPART_HALF else PALISADE_HALF)) continue
+            if (abs(along) > RAMPART_HALF) continue
             val across = rx * ly - ry * lx // through it
             if (abs(across) >= 22f) continue
             if (abs(along) < GATE_HALF && w.gate > 0.6f) continue
