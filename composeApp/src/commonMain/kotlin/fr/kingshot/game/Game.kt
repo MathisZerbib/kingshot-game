@@ -84,7 +84,11 @@ class Enemy {
     var dmg = 0f
     var radius = 16f
     var scale = 1f
-    var kind = 0 // 0 soldier, 1 brute, 2 boss
+    var kind = 0 // see KIND_* (2 = boss, its look/behaviour in bossType)
+    var bossType = 0 // 0 giant knight (wood age), 1 ogre (stone: hurls the king), 2 dark lord (royal: summons soldiers)
+    var special = 0f // per-kind timer: archer reload, lord summon, wolf leap
+    var mdx = 0f // last movement direction (shield bearers block arrows from the front)
+    var mdy = 0f
     var atkCd = 0f
     var swing = 0f
     var hitFlash = 0f
@@ -92,6 +96,26 @@ class Enemy {
     var faceRight = false
     var dir = 0
     var coins = 1
+}
+
+const val KIND_SOLDIER = 0
+const val KIND_BRUTE = 1
+const val KIND_BOSS = 2
+const val KIND_WOLF = 3 // fast, weak, leaps at the king
+const val KIND_ARCHER = 4 // stops at range and shoots the king, walls and keep
+const val KIND_SHIELD = 5 // slow, tough, blocks arrows from the front
+const val KIND_RAM = 6 // goes for walls and gates, ignores the king, escorted
+
+/** Enemy archer's arrow, flying to a fixed spot; [target] 1 king, 2 wall [ref], 3 keep. */
+class EnemyShot {
+    var active = false
+    var x = 0f
+    var y = 0f
+    var tx = 0f
+    var ty = 0f
+    var target = 0
+    var ref = 0
+    var dmg = 0f
 }
 
 class Arrow {
@@ -329,6 +353,7 @@ class Game {
     val particles = Array(700) { Particle() }
     val texts = Array(90) { FloatText() }
     val corpses = Array(60) { Corpse() }
+    val enemyShots = Array(40) { EnemyShot() }
     private var slowMo = 0f // real seconds of 0.4x time left
 
     var towers = emptyArray<Tower>(); private set
@@ -461,6 +486,7 @@ class Game {
         revived = false; coinsCollected = 0; slowMo = 0f
         tutorial = if (Storage.loadInt("tuto_done") == 1) 4 else 0
         for (c in corpses) c.active = false
+        for (sh in enemyShots) sh.active = false
         camX = kx; camY = ky
         for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i]; aDir[i] = 0; aShoot[i] = 0f; acd[i] = 0.3f }
         for (e in enemies) e.active = false
@@ -871,6 +897,7 @@ class Game {
             if (abilityFlash > 0f) abilityFlash -= dt
         }
         updateArrows(dt)
+        updateEnemyShots(dt)
         updateRain(dt)
         updateCoins(dt)
         updateFlyCoins(dt)
@@ -1124,6 +1151,23 @@ class Game {
         a.dx = dx / d; a.dy = dy / d; a.dz = 0f
     }
 
+    private fun updateEnemyShots(dt: Float) {
+        for (sh in enemyShots) {
+            if (!sh.active) continue
+            val dx = sh.tx - sh.x
+            val dy = sh.ty - sh.y
+            val d = hypot(dx, dy)
+            val step = 650f * dt
+            if (d > step) { sh.x += dx / d * step; sh.y += dy / d * step; continue }
+            sh.active = false
+            when (sh.target) {
+                1 -> if (!kDead && hypot(kx - sh.tx, ky - sh.ty) < 60f) damageKing(sh.dmg)
+                2 -> { val w = walls[sh.ref]; if (w.built) { w.hp -= sh.dmg; w.hitFlash = 0.1f; if (w.hp <= 0f) breakWall(w) } }
+                3 -> { castleHp -= sh.dmg; castleFlash = 0.12f; castleAlarm = 2.5f; if (castleHp <= 0f && state == STATE_PLAY) gameOver() }
+            }
+        }
+    }
+
     private fun updateArrows(dt: Float) {
         val speed = 1000f
         for (a in arrows) {
@@ -1141,8 +1185,10 @@ class Game {
             if (d <= step + 4f) {
                 a.active = false
                 if (alive) {
-                    hitEnemy(a.target, a.dmg)
+                    val blocked = e.kind == KIND_SHIELD && a.dx * e.mdx + a.dy * e.mdy < -0.3f
+                    hitEnemy(a.target, if (blocked) a.dmg * 0.25f else a.dmg)
                     sparks(a.tx, a.ty, a.tz)
+                    if (blocked) burst(a.tx, a.ty, a.tz, 4, 0xFFFFFFFFL, 160f)
                 }
                 continue
             }
@@ -1383,12 +1429,11 @@ class Game {
             spawnTimer -= dt
             if (spawnTimer <= 0f) {
                 if (bossPending && toSpawn <= (3 + wave * 2) / 2) {
-                    spawnEnemy(2)
+                    spawnEnemy(KIND_BOSS)
                     bossPending = false
                     bossBanner = 2.2f
                 } else if (toSpawn > 0) {
-                    val brute = wave >= 3 && rnd.nextFloat() < 0.1f + wave * 0.012f
-                    spawnEnemy(if (brute) 1 else 0)
+                    spawnEnemy(pickKind())
                     toSpawn--
                 }
                 spawnTimer = max(0.22f, 0.95f - wave * 0.05f) * (0.6f + rnd.nextFloat() * 0.8f)
@@ -1423,8 +1468,21 @@ class Game {
         }
     }
 
-    private fun spawnEnemy(kind: Int) {
-        val e = enemies.firstOrNull { !it.active } ?: return
+    /** Wave mix: new enemy types join as the waves climb. */
+    private fun pickKind(): Int {
+        val r = rnd.nextFloat()
+        return when {
+            wave >= 8 && r < 0.05f && walls.any { it.built } -> KIND_RAM
+            wave >= 6 && r < 0.15f -> KIND_SHIELD
+            wave >= 4 && r < 0.27f -> KIND_ARCHER
+            wave >= 3 && r < 0.42f -> KIND_WOLF
+            wave >= 3 && r < 0.42f + 0.1f + wave * 0.012f -> KIND_BRUTE
+            else -> KIND_SOLDIER
+        }
+    }
+
+    private fun spawnEnemy(kind: Int, path: Int = -1, s: Float = 0f, ox: Float = Float.NaN, oy: Float = 0f): Enemy? {
+        val e = enemies.firstOrNull { !it.active } ?: return null
         val paths = when {
             wave <= 1 -> 1
             wave <= 3 -> 2
@@ -1433,23 +1491,36 @@ class Game {
         e.active = true
         e.gen++
         e.kind = kind
-        e.path = if (paths == 1) 1 else rnd.nextInt(paths)
-        e.s = 0f
+        e.path = if (path >= 0) path else if (paths == 1) 1 else rnd.nextInt(paths)
+        e.s = s
         e.offX = (rnd.nextFloat() - 0.5f) * 60f
         e.offY = (rnd.nextFloat() - 0.5f) * 40f
-        World.paths[e.path].sample(0f, tmp)
+        World.paths[e.path].sample(s, tmp)
         e.x = tmp.x + e.offX; e.y = tmp.y + e.offY
+        if (!ox.isNaN()) { e.x = ox; e.y = oy }
+        e.special = 0f; e.mdx = 0f; e.mdy = 0f
         val hpScale = 1f + (wave - 1) * 0.17f
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.4f) 3 else 2 }
-            1 -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
-            else -> { e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 120 + 40 * (level - 1) + 10 * wave / 5 }
+            KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
+            KIND_WOLF -> { e.maxHp = 30f * hpScale; e.speed = 150f; e.dmg = 6f; e.radius = 14f; e.scale = 0.8f; e.coins = 1 + rnd.nextInt(2) }
+            KIND_ARCHER -> { e.maxHp = 40f * hpScale; e.speed = 70f; e.dmg = 7f; e.radius = 15f; e.scale = 0.95f; e.coins = 3 }
+            KIND_SHIELD -> { e.maxHp = 200f * hpScale; e.speed = 45f; e.dmg = 14f; e.radius = 20f; e.scale = 1.25f; e.coins = 7 }
+            KIND_RAM -> { e.maxHp = 500f * hpScale; e.speed = 38f; e.dmg = 60f; e.radius = 30f; e.scale = 1.8f; e.coins = 15 }
+            else -> {
+                e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 120 + 40 * (level - 1) + 10 * wave / 5
+                e.bossType = age - 1
+            }
+        }
+        if (kind == KIND_RAM) repeat(2) { k -> // escort
+            spawnEnemy(KIND_SOLDIER, e.path, max(0f, s - 30f), e.x + (k * 2 - 1) * 40f, e.y + 20f)
         }
         e.hp = e.maxHp
         e.atkCd = 0.5f
         e.hitFlash = 0f
         e.swing = 0f
         e.walk = rnd.nextFloat() * 6f
+        return e
     }
 
     private fun updateEnemies(dt: Float) {
@@ -1469,7 +1540,18 @@ class Game {
             val dkx = kx - e.x
             val dky = ky - e.y
             val dk = hypot(dkx, dky)
-            val aggro = if (e.kind == 2) 170f else 140f
+            val aggro = when (e.kind) { KIND_BOSS -> 170f; KIND_WOLF -> 230f; KIND_RAM -> 0f; KIND_ARCHER -> 260f; else -> 140f }
+            if (e.kind == KIND_BOSS && e.bossType == 2) { // dark lord: summons a ring of soldiers every 6 s
+                e.special -= dt
+                if (e.special <= 0f) {
+                    e.special = 6f
+                    for (k in 0 until 6) {
+                        val a = k * PI.toFloat() / 3f
+                        spawnEnemy(KIND_SOLDIER, e.path, e.s, e.x + cos(a) * 70f, e.y + sin(a) * 50f)
+                    }
+                    burst(e.x, e.y, 40f, 30, 0xFF8E4AE0L, 300f)
+                }
+            }
             if (!kDead && dk < aggro) {
                 tx = kx; ty = ky; target = 1
             } else {
@@ -1490,6 +1572,23 @@ class Game {
             val dx = tx - e.x
             val dy = ty - e.y
             val d = hypot(dx, dy)
+            if (e.kind == KIND_ARCHER) { // archers keep their distance and shoot
+                val goal = when (target) { 1 -> dk; 2 -> hypot(wall.x - e.x, wall.y - e.y); 3 -> hypot(World.CASTLE_X - e.x, World.CASTLE_Y - e.y); else -> 9999f }
+                if (goal < 250f) {
+                    e.special -= dt
+                    if (e.special <= 0f) {
+                        e.special = 1.6f
+                        e.swing = 1f
+                        val sx = if (target == 1) kx else if (target == 2) wall.x else World.CASTLE_X
+                        val sy = if (target == 1) ky else if (target == 2) wall.y else World.CASTLE_Y
+                        e.dir = dirIndex(sx - e.x, sy - e.y)
+                        enemyShots.firstOrNull { !it.active }?.let { sh ->
+                            sh.active = true; sh.x = e.x; sh.y = e.y - 30f; sh.tx = sx; sh.ty = sy; sh.target = target; sh.ref = e.path; sh.dmg = e.dmg
+                        }
+                    }
+                    continue
+                }
+            }
             val stopDist = when (target) {
                 1 -> reach + 10f
                 2 -> 20f
@@ -1499,8 +1598,10 @@ class Game {
             var moving = false
             val distToGoal = if (target == 3) hypot(World.CASTLE_X - e.x, (World.CASTLE_Y - e.y) * 1.6f) else d
             if (distToGoal > stopDist && d > 0.5f) {
-                val step = min(e.speed * dt, d)
+                val leap = e.kind == KIND_WOLF && target == 1 && dk < 140f
+                val step = min(e.speed * (if (leap) 1.8f else 1f) * dt, d)
                 e.x += dx / d * step; e.y += dy / d * step
+                e.mdx = dx / d; e.mdy = dy / d
                 moving = true
                 if (abs(dx) > 2f) e.faceRight = dx > 0f
                 if (step > 0.2f) e.dir = dirIndex(dx, dy)
@@ -1511,7 +1612,12 @@ class Game {
                 when {
                     target == 1 && dk < reach + 16f -> {
                         damageKing(e.dmg)
-                        if (e.kind == 2) shake = max(shake, 9f)
+                        if (e.kind == KIND_BOSS) shake = max(shake, 9f)
+                        if (e.kind == KIND_BOSS && e.bossType == 1 && dk > 1f) { // ogre: hurls the king and scatters the squad
+                            kx = (kx + dkx / dk * 150f).coerceIn(40f, World.W - 40f); ky = (ky + dky / dk * 150f).coerceIn(60f, World.H - 40f)
+                            for (q in 0 until squad) { ax[q] += (rnd.nextFloat() - 0.5f) * 160f; ay[q] += (rnd.nextFloat() - 0.5f) * 120f }
+                            burst(kx, ky, 20f, 20, 0xFF9DA3AAL, 260f)
+                        }
                         e.faceRight = dkx > 0f
                         e.dir = dirIndex(dkx, dky)
                         e.atkCd = 1.1f; e.swing = 1f

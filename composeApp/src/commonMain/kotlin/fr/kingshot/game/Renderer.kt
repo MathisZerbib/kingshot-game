@@ -84,6 +84,7 @@ private val HUD_BUTTON = Color(0xFF3B4A6B)
 private val WAVE_RED = Color(0xFFC8342B)
 private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
+private val ENEMY_ARROW = Color(0xFF3A2414)
 private val ALERT_RED = Color(0xFFFF4A3A)
 private const val MAX_EDGE_ARROWS = 12
 private val WOOD = Color(0xFFA4683A)
@@ -315,6 +316,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             for (p in g.pads) if (p.visible) drawPad(p, p.kind == PAD_TOWER_ARCHER && g.squad == 0)
             drawSorted(g, vl, vt, vr, vb)
             drawArrows(g)
+            for (sh in g.enemyShots) if (sh.active) { // enemy arrows: short dark streak
+                val dx = sh.tx - sh.x; val dy = sh.ty - sh.y
+                val l = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
+                line(ENEMY_ARROW, sh.x, sh.y, sh.x - dx / l * 26f, sh.y - dy / l * 26f, 3.5f)
+            }
             drawFlyCoins(g)
             drawParticles(g)
         }
@@ -730,13 +736,23 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         if (g.kHp < g.kMaxHp) hpBar(x, y + 18f, 50f, g.kHp / g.kMaxHp, HP_GREEN) // under the king: the stack can be taller than the screen
     }
 
+    // placeholder looks for the new enemies until their own models land: tinted knights
+    private val kindTints = arrayOf(
+        null, null, null,
+        ColorFilter.tint(Color(0xB08A5A2E), BlendMode.SrcAtop), // wolf
+        ColorFilter.tint(Color(0x9944A040), BlendMode.SrcAtop), // archer
+        ColorFilter.tint(Color(0xA07A8AA0), BlendMode.SrcAtop), // shield bearer
+        ColorFilter.tint(Color(0xB05A3A20), BlendMode.SrcAtop), // ram
+    )
+    private val bossTints = arrayOf(null, ColorFilter.tint(Color(0x9950A040), BlendMode.SrcAtop), ColorFilter.tint(Color(0xA05A2A90), BlendMode.SrcAtop))
+
     private fun DrawScope.drawEnemy(e: Enemy) {
         val sp = sprites ?: return
         val boss = e.kind == 2
-        val filter = if (e.hitFlash > 0f) flashFilter else null
+        val filter = if (e.hitFlash > 0f) flashFilter else if (boss) bossTints[e.bossType.coerceIn(0, 2)] else kindTints[e.kind.coerceIn(0, kindTints.size - 1)]
         if (boss) {
             val col = if (e.swing > 0f) 4 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 4)
-            sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE, filter)
+            sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE * (if (e.bossType == 1) 1.15f else 1f), filter)
         } else {
             val col = if (e.swing > 0f) 6 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 6)
             sprite(sp.knight, SpriteData.knight, col, e.dir, e.x, e.y, UNIT_SCALE * e.scale, filter)
