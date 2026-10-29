@@ -12,9 +12,17 @@ from PIL import Image, ImageDraw, ImageFilter
 sys.argv = sys.argv[:3]
 import mockup as M  # noqa: E402  (shares img/nine/font/text helpers and the argv convention)
 
+# DA v3: round display face instead of Cinzel, white titles, soft shadows instead of outlines
+_font = M.font
+M.font = lambda name, size: _font("lilita_one_regular" if name.startswith("cinzel") else name, size)
+_text = M.text
+M.text = lambda draw, xy, s, fnt, fill=M.WHITE, anchor="mm", stroke=0, stroke_fill=(20, 12, 4), shadow=True: _text(
+    draw, xy, s, fnt, M.WHITE if fill == M.GOLD_LIGHT else fill, anchor, 0, stroke_fill, shadow)
+M.GOLD_LIGHT = (255, 255, 255)
+
 W, H = M.W, M.H
 NAVY_DEEP = (12, 19, 38)
-GOLD, GOLD_LIGHT, WHITE, INK = M.GOLD, M.GOLD_LIGHT, M.WHITE, M.INK
+GOLD, GOLD_LIGHT, WHITE, INK = (255, 200, 60), (255, 255, 255), M.WHITE, (20, 30, 60)
 CLASSES = [
     dict(key="warrior", name="GUERRIER", role="Tient la ligne au corps à corps", ability="Tourbillon", icon="sword", stats=(3, 2, 1)),
     dict(key="ranger", name="RÔDEUR", role="Tir rapide à longue portée", ability="Pluie de flèches", icon="bow", stats=(1, 3, 3)),
@@ -47,7 +55,7 @@ def portrait_chip(c, cx, cy, cls, size, selected):
     d = ImageDraw.Draw(c)
     if selected:
         glow = Image.new("RGBA", (size + 80, size + 80), (0, 0, 0, 0))
-        ImageDraw.Draw(glow).ellipse((20, 20, size + 60, size + 60), fill=(255, 215, 90, 210))
+        ImageDraw.Draw(glow).ellipse((20, 20, size + 60, size + 60), fill=(255, 200, 60, 190))
         glow = glow.filter(ImageFilter.GaussianBlur(16))
         c.alpha_composite(glow, (int(cx - size / 2 - 40), int(cy - size / 2 - 40)))
     ring = M.img("ui_circle").resize((size, size), Image.LANCZOS)
@@ -58,7 +66,7 @@ def portrait_chip(c, cx, cy, cls, size, selected):
     ImageDraw.Draw(mask).ellipse((1, 1, ps - 1, ps - 1), 255)
     c.paste(p, (int(cx - ps / 2), int(cy - ps / 2)), mask)
     if selected:
-        d.ellipse((cx - size / 2 + 4, cy - size / 2 + 4, cx + size / 2 - 4, cy + size / 2 - 4), outline=GOLD + (255,), width=7)
+        d.ellipse((cx - size / 2 + 4, cy - size / 2 + 4, cx + size / 2 - 4, cy + size / 2 - 4), outline=(255, 214, 90, 255), width=7)
     else:
         shade = Image.new("RGBA", (size, size), (0, 0, 0, 0))
         ImageDraw.Draw(shade).ellipse((0, 0, size - 1, size - 1), fill=(10, 14, 30, 95))
@@ -69,9 +77,9 @@ def ornament(d, cx, y, half=250, gap=190):
     """Gold rule + diamond on each side of the hero name."""
     for s in (-1, 1):
         x0, x1 = cx + s * gap, cx + s * half
-        d.line((x0, y, x1, y), fill=GOLD + (255,), width=4)
+        d.line((x0, y, x1, y), fill=(255, 255, 255, 110), width=3)
         dx = x1
-        d.polygon((dx - 12, y, dx, y - 12, dx + 12, y, dx, y + 12), fill=GOLD_LIGHT + (255,))
+        d.ellipse((dx - 7, y - 7, dx + 7, y + 7), fill=GOLD + (255,))
 
 
 def nameplate(c, cls, hero_level=12, xp=0.62):
@@ -83,7 +91,7 @@ def nameplate(c, cls, hero_level=12, xp=0.62):
     # hero level + xp under the name
     c.alpha_composite(M.nine("ui_bar_track", 300, 26), (cx - 150, 1712))
     c.alpha_composite(M.nine("ui_bar_blue", int(300 * xp), 26), (cx - 150, 1712))
-    M.text(d, (cx, 1760), "Héros niv. %d" % hero_level, M.font("nunito_black", 24), (170, 200, 255), stroke=0)
+    M.text(d, (cx, 1760), "Héros niv. %d" % hero_level, M.font("nunito_black", 24), (150, 185, 255), stroke=0)
     # three stat rows: label left, bar right
     x0, bw, bh = 110, 330, 36
     for i, (name, bar) in enumerate(zip(STAT_NAMES, STAT_BARS)):
@@ -107,7 +115,7 @@ def nameplate(c, cls, hero_level=12, xp=0.62):
 
 def tabbar(c, d, active=-1, badge=2):
     bar = Image.new("RGBA", (W, 130), (0, 0, 0, 0))
-    ImageDraw.Draw(bar).rounded_rectangle((40, 0, W - 40, 130), 30, fill=(12, 19, 38, 225), outline=(160, 108, 20, 255), width=3)
+    ImageDraw.Draw(bar).rounded_rectangle((40, 0, W - 40, 130), 30, fill=(16, 26, 48, 235), outline=(255, 255, 255, 28), width=3)
     c.alpha_composite(bar, (0, 2196))
     tw = 236
     for i, (lab, ic) in enumerate([("BOUTIQUE", "chest"), ("TALENTS", "star"), ("MISSIONS", "scroll"), ("STATS", "trophy")]):
