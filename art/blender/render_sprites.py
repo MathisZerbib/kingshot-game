@@ -331,6 +331,17 @@ def build_materials():
     M["petal_p"] = mat("petal_p", (0.95, 0.35, 0.55), rough=0.6)
     M["bush"] = mat("bush", (0.16, 0.4, 0.14), rough=0.85)
     M["bush_light"] = mat("bush_light", (0.3, 0.55, 0.2), rough=0.85)
+    M["velvet_blue"] = mat("velvet_blue", (0.08, 0.2, 0.62), rough=0.85)
+    M["steel"] = mat("steel", (0.55, 0.58, 0.62), rough=0.35, metal=1.0)
+    M["horse_brown"] = mat("horse_brown", (0.42, 0.22, 0.1), rough=0.65, sss=0.1)
+    M["horse_grey"] = mat("horse_grey", (0.58, 0.58, 0.6), rough=0.65, sss=0.1)
+    M["mane_dark"] = mat("mane_dark", (0.12, 0.08, 0.06), rough=0.8)
+    M["wolf"] = mat("wolf", (0.17, 0.15, 0.18), rough=0.9, sss=0.05)
+    M["wolf_dark"] = mat("wolf_dark", (0.08, 0.07, 0.09), rough=0.9)
+    M["eye_red"] = mat("eye_red", (0.9, 0.15, 0.05), rough=0.3, emit=(1.0, 0.2, 0.05), strength=1.5)
+    M["iron"] = mat("iron", (0.3, 0.3, 0.33), rough=0.5, metal=1.0)
+    M["club"] = noise_mat("club", (0.2, 0.11, 0.05), (0.32, 0.2, 0.09), scale=4.0, rough=0.75, bump=0.3)
+    M["skin_green"] = mat("skin_green", (0.45, 0.62, 0.3), rough=0.7, sss=0.1)
 
 
 build_materials()
@@ -526,9 +537,27 @@ def build_bow():
     return root
 
 
+BLUE = (0.14, 0.4, 0.92)
+GOLD = (0.98, 0.76, 0.24)
+
+
+def rogue_texture(name, cloth, trim=None):
+    """Recolors the green hood/cape (and teal trims) of the rogue palette; the yellow-green details become `trim`."""
+    rules = [(135, 195, 0.5, 1.0, 0.15, 1.0, cloth)]
+    if trim is not None:
+        rules.append((60, 75, 0.5, 1.0, 0.5, 1.0, trim))
+    return recolor("rogue_texture.png", rules, name)
+
+
+def barbarian_texture(name, cloth):
+    """Recolors the blue cloth of the barbarian palette."""
+    return recolor("barbarian_texture.png", [(195, 215, 0.3, 0.6, 0.3, 0.8, cloth)], name)
+
+
 def build_archer():
+    tex = rogue_texture("tex_archer_blue", BLUE, GOLD)
     c = Char("Rogue_Hooded", {"Rogue_ArmLeft", "Rogue_ArmRight", "Rogue_Body", "Rogue_Head_Hooded", "Rogue_LegLeft",
-                              "Rogue_LegRight", "Rogue_Cape"})
+                              "Rogue_LegRight", "Rogue_Cape"}, tex)
     c.act("1H_Ranged_Aiming")
     c.at(0.0)
     bow = build_bow()
@@ -570,26 +599,26 @@ def build_boss():
     return c
 
 
-def build_crown(c):
+def build_crown(c, z=2.12, r=0.4, cushion="velvet"):
     parts = []
-    z = 2.12
-    parts.append(torus((0, 0, z), 0.4, 0.05, M["gold"], seg=24))
-    parts.append(cyl((0, 0, z + 0.08), 0.4, 0.4, 0.14, M["gold"], seg=24))
-    parts.append(sphere((0, 0, z + 0.14), (0.36, 0.36, 0.22), M["velvet"], seg=16))
+    parts.append(torus((0, 0, z), r, 0.05, M["gold"], seg=24))
+    parts.append(cyl((0, 0, z + 0.08), r, r, 0.14, M["gold"], seg=24))
+    parts.append(sphere((0, 0, z + 0.14), (r * 0.9, r * 0.9, 0.22), M[cushion], seg=16))
     for i in range(6):
         a = i * math.pi / 3 + math.pi / 6
-        x, y = math.cos(a) * 0.39, math.sin(a) * 0.39
+        x, y = math.cos(a) * (r - 0.01), math.sin(a) * (r - 0.01)
         parts.append(cyl((x, y, z + 0.26), 0.07, 0.0, 0.26, M["gold"], seg=8))
         parts.append(sphere((x * 1.02, y * 1.02, z + 0.1), 0.045, M["ruby"], seg=10))
     for p in parts:
         c.attach(p, "head")
 
 
-def build_horse():
-    """Chibi white horse facing -Y, origin at the ground under its belly. Returns (root, body, legs, head)."""
+def build_horse(coat="horse", mane="mane"):
+    """Chibi horse facing -Y, origin at the ground under its belly. Returns (root, body, legs, head)."""
     root = empty("horse")
     body = empty("hbody", (0, 0, 0), root)
-    h = M["horse"]
+    h = M[coat]
+    M_mane = M[mane]
     sphere((0, 0.05, 0.8), (0.3, 0.5, 0.28), h, body, subsurf=1)
     sphere((0, -0.36, 0.8), (0.27, 0.28, 0.27), h, body, subsurf=1)
     sphere((0, 0.44, 0.8), (0.28, 0.27, 0.27), h, body, subsurf=1)
@@ -603,9 +632,9 @@ def build_horse():
     # Mane along the neck and a forelock
     for i in range(7):
         t = i / 6
-        sphere((0, -0.3 - 0.4 * t, 1.08 + 0.52 * t), (0.075, 0.11, 0.13), M["mane"], body, subsurf=1)
-    sphere((0, -0.05, 0.22), (0.1, 0.13, 0.09), M["mane"], head, subsurf=1)
-    tube([(0, 0.7, 0.92), (0, 0.84, 0.7), (0, 0.8, 0.42)], 0.07, M["mane"], body, taper=0.6)
+        sphere((0, -0.3 - 0.4 * t, 1.08 + 0.52 * t), (0.075, 0.11, 0.13), M_mane, body, subsurf=1)
+    sphere((0, -0.05, 0.22), (0.1, 0.13, 0.09), M_mane, head, subsurf=1)
+    tube([(0, 0.7, 0.92), (0, 0.84, 0.7), (0, 0.8, 0.42)], 0.07, M_mane, body, taper=0.6)
     legs = []
     for x, y in ((-0.16, -0.34), (0.16, -0.34), (-0.16, 0.38), (0.16, 0.38)):
         piv = empty("leg", (x, y, 0.66), body)
@@ -617,7 +646,7 @@ def build_horse():
     box((0, 0.06, 1.04), (0.34, 0.4, 0.12), M["saddle"], body, bevel=0.04, subsurf=1, smooth=True)
     torus((0, 0.06, 1.0), 0.3, 0.02, M["gold_dark"], body, seg=24)
     # Bridle
-    torus((0, -1.06, 1.3), 0.13, 0.015, M["leather"], head, rot=(math.radians(60), 0, 0), seg=16)
+    torus((0, -0.3, -0.1), 0.14, 0.016, M["leather"], head, rot=(math.radians(58), 0, 0), seg=16)
     return root, body, legs, head
 
 
@@ -648,6 +677,526 @@ def build_king():
     # Short red mantle on the shoulders instead of the long cape (which hid the horse from behind)
     c.attach(sphere((0, 0.12, 1.25), (0.52, 0.3, 0.2), M["velvet"], seg=16), "chest")
     return c
+
+
+def build_hammer():
+    """A war hammer along +Z: wooden handle, steel head on top."""
+    root = empty("hammer")
+    cyl((0, 0, 0.65), 0.05, 0.045, 1.3, M["wood"], root, seg=10)
+    box((0, 0, 1.32), (0.64, 0.3, 0.3), M["steel"], root, bevel=0.04)
+    box((0, 0, 1.32), (0.7, 0.12, 0.12), M["gold_dark"], root, bevel=0.02)
+    torus((0, 0, 0.22), 0.05, 0.014, M["leather"], root, seg=12)
+    return root
+
+
+def build_king_warrior():
+    """Gold plate armour with blue details, blue mantle, sword: tanky melee king."""
+    tex = knight_texture("tex_king_w", GOLD, BLUE)
+    c = Char("Knight", {"Knight_ArmLeft", "Knight_ArmRight", "Knight_Body", "Knight_Head",
+                        "Knight_LegLeft", "Knight_LegRight", "1H_Sword"}, tex)
+    build_crown(c)
+    c.attach(sphere((0, 0.12, 1.25), (0.52, 0.3, 0.2), M["velvet_blue"], seg=16), "chest")
+    c.horse = ("horse", "mane")
+    return c
+
+
+def build_king_ranger():
+    """Blue hooded ranger with a gold-trimmed crown over the hood and a longbow: fast, fragile, long range."""
+    tex = rogue_texture("tex_king_r", BLUE, GOLD)
+    c = Char("Rogue_Hooded", {"Rogue_ArmLeft", "Rogue_ArmRight", "Rogue_Body", "Rogue_Head_Hooded", "Rogue_LegLeft",
+                              "Rogue_LegRight"}, tex)
+    build_crown(c, z=2.2, r=0.42, cushion="velvet_blue")
+    quiver = prop(ACC + "quiver.gltf", 1.0)
+    quiver.location = (-0.2, 0.42, 1.15)
+    quiver.rotation_euler = (math.radians(20), math.radians(-25), math.radians(15))
+    c.attach(quiver, "chest")
+
+    def weapon():
+        bow = build_bow()
+        hand = c.bone_world("hand.r")
+        bow.location = hand + Vector((0.0, -0.08, 0))
+        bow.rotation_euler = (math.radians(-6), 0, 0)
+        c.attach_posed(bow, "hand.r")
+    c.weapon = weapon
+    c.horse = ("horse_brown", "mane_dark")
+    return c
+
+
+def build_king_builder():
+    """Broad barbarian in blue cloth with a crown and a big war hammer: cheap buildings, repairs."""
+    tex = barbarian_texture("tex_king_b", BLUE)
+    c = Char("Barbarian", {"Barbarian_ArmLeft", "Barbarian_ArmRight", "Barbarian_Body", "Barbarian_Head",
+                           "Barbarian_LegLeft", "Barbarian_LegRight"}, tex)
+    build_crown(c, z=2.1, r=0.42)
+    c.attach(sphere((0, 0.12, 1.22), (0.56, 0.32, 0.2), M["leather"], seg=16), "chest")
+
+    def weapon():
+        h = build_hammer()
+        hand = c.bone_world("hand.r")
+        h.location = hand + Vector((0.0, -0.02, -0.3))
+        h.rotation_euler = (math.radians(-38), 0, 0)
+        c.attach_posed(h, "hand.r")
+    c.weapon = weapon
+    c.horse = ("horse_grey", "mane")
+    return c
+
+
+KINGS = {"king_warrior": build_king_warrior, "king_ranger": build_king_ranger, "king_builder": build_king_builder}
+SEAT_BONES = ["upperleg.l", "upperleg.r", "lowerleg.l", "lowerleg.r", "hips", "spine", "chest",
+              "upperarm.l", "lowerarm.l", "upperarm.r", "lowerarm.r", "hand.l", "hand.r", "head"]
+
+
+def seat_rider(c):
+    """Puts the rider in the saddle pose and returns the captured bone pose."""
+    c.act("Sit_Chair_Pose")
+    c.at(0)
+    c.rotate_bone("upperleg.l", "Y", -35)
+    c.rotate_bone("upperleg.r", "Y", 35)
+    c.rotate_bone("upperleg.l", "X", -25)
+    c.rotate_bone("upperleg.r", "X", -25)
+    c.rotate_bone("lowerleg.l", "X", 40)
+    c.rotate_bone("lowerleg.r", "X", 40)
+    seat = c.capture(SEAT_BONES)
+    if getattr(c, "weapon", None):
+        c.weapon()
+    return seat
+
+
+def mounted(build_rider):
+    """Builds horse + seated rider. Returns (horse root, rider, pose(phase, moving) callable)."""
+    c = build_rider()
+    hroot, hbody, legs, hhead = build_horse(*getattr(c, "horse", ("horse", "mane")))
+    seat = seat_rider(c)
+    c.scale()
+    c.root.parent = hbody
+    c.root.location = (0, 0.1, 0.8)
+
+    def pose(phase, moving):
+        c.act("Sit_Chair_Pose")
+        c.at(0)
+        c.apply(seat)
+        pose_horse(hbody, legs, hhead, phase, moving)
+        bpy.context.view_layer.update()
+    return hroot, c, pose
+
+
+def king_atlas(name, build_rider):
+    clear_models()
+    hroot, c, pose = mounted(build_rider)
+
+    class KingRig:
+        def face(self, d):
+            hroot.rotation_euler.z = d * math.pi / 4
+
+    def frame(phase, moving):
+        return lambda _: pose(phase, moving)
+
+    frames = [frame(0, False)] + [frame(2 * math.pi * i / 6, True) for i in range(6)]
+    unit_atlas(name, 300, 300, 150, 268, 96, frames, KingRig())
+
+
+def portrait(name, build_rider, px=256):
+    """Head-and-shoulders bust of the class hero, slightly turned, on a transparent background."""
+    clear_models()
+    c = build_rider()
+    c.act("Idle")
+    c.at(0.3)
+    c.scale()
+    c.root.rotation_euler.z = math.radians(-28)
+    bpy.context.view_layer.update()
+    SC.render.resolution_x = SC.render.resolution_y = px
+    CAM.data.ortho_scale = 1.25
+    p = math.radians(8)
+    target = Vector((0.0, 0.0, 1.22))
+    CAM.location = target + Vector((0, -30 * math.cos(p), 30 * math.sin(p)))
+    CAM.rotation_euler = (math.pi / 2 - p, 0, 0)
+    bpy.context.view_layer.update()
+    path = os.path.join(TMP, name + "_0_0.png")
+    SC.render.filepath = path
+    bpy.ops.render.render(write_still=True)
+    clean_alpha(path)
+    SPRITES[name] = dict(w=px, h=px, ax=px / 2, ay=px / 2, ppu=1.0, cols=1, rows=1, cells=[(0, 0, path)])
+
+
+def build_palisade(gate=None):
+    """A 2.8 m wooden palisade segment along X (same footprint as wall_stone). gate: None, 'closed' or 'open'."""
+    L = 2.8
+    wood, dark, cut = M["wood"], M["wood_dark"], M["wood_cut"]
+
+    def log(x, h, r=0.15, parent=None, i=0):
+        cyl((x, 0, h / 2), r, r * 0.9, h, wood if i % 2 else dark, parent, seg=10)
+        cyl((x, 0, h + 0.12), r * 0.9, 0.0, 0.26, cut, parent, seg=10)
+
+    if gate is None:
+        n = 9
+        for i in range(n):
+            x = -L / 2 + 0.155 + i * (L - 0.31) / (n - 1)
+            log(x, 1.45 + 0.06 * ((i * 7) % 3), i=i)
+        for z in (0.5, 1.1):
+            box((0, 0.17, z), (L, 0.09, 0.14), dark, bevel=0.01)
+        for x in (-L / 2 + 0.155, L / 2 - 0.155):
+            for z in (0.5, 1.1):
+                torus((x, 0.03, z), 0.2, 0.028, M["rope"], rot=(0, math.pi / 2, 0), seg=14)
+        return
+    for sx in (-1, 1):
+        log(sx * (L / 2 - 0.19), 2.05, r=0.19)
+    box((0, 0, 2.22), (L, 0.34, 0.2), dark, bevel=0.02)
+    box((0, 0.02, 2.42), (0.9, 0.3, 0.2), wood, bevel=0.02)
+    for sx in (-1, 1):
+        hinge = empty("hinge", (sx * (L / 2 - 0.4), 0, 0))
+        leaf = empty("leaf", (0, 0, 0), hinge)
+        for j in range(4):
+            log(-sx * (0.12 + j * 0.26), 1.45, r=0.125, parent=leaf, i=j)
+        for z in (0.45, 1.05):
+            box((-sx * 0.5, 0.14, z), (1.02, 0.06, 0.12), dark, leaf)
+        box((-sx * 0.5, 0.15, 0.75), (1.05, 0.05, 0.1), dark, leaf, rot=(0, 0, sx * math.radians(32)))
+        if gate == "open":
+            hinge.rotation_euler.z = sx * math.radians(105)
+
+
+# ----------------------------------------------------------------------------- v5: new enemies, units and buildings
+
+
+def build_wolf():
+    """Chibi grey wolf facing -Y, origin under its belly. Returns (root, body, legs, head)."""
+    root = empty("wolf")
+    root.scale = (1.6, 1.6, 1.6)
+    body = empty("wbody", (0, 0, 0), root)
+    fur, dark = M["wolf"], M["wolf_dark"]
+    sphere((0, 0.05, 0.42), (0.2, 0.42, 0.2), fur, body, subsurf=1)
+    sphere((0, -0.3, 0.46), (0.2, 0.22, 0.2), fur, body, subsurf=1)
+    sphere((0, 0.38, 0.42), (0.18, 0.2, 0.18), dark, body, subsurf=1)
+    head = empty("whead", (0, -0.5, 0.58), body)
+    sphere((0, 0, 0), (0.18, 0.19, 0.17), fur, head, subsurf=1)
+    box((0, -0.2, -0.05), (0.15, 0.24, 0.13), dark, head, bevel=0.04, subsurf=1, smooth=True)
+    sphere((0, -0.32, -0.01), 0.045, M["eye"], head)
+    for sx in (-1, 1):
+        sphere((sx * 0.085, -0.11, 0.06), 0.032, M["eye_red"], head)
+        cyl((sx * 0.1, 0.04, 0.2), 0.055, 0.0, 0.18, dark, head, rot=(math.radians(-15), math.radians(sx * 22), 0), seg=8)
+    for i in range(4):
+        tt = i / 3
+        sphere((0, 0.5 + 0.36 * tt, 0.44 + 0.16 * tt), (0.085 - 0.02 * tt, 0.12, 0.085 - 0.02 * tt), dark, body, subsurf=1)
+    legs = []
+    for x, y in ((-0.11, -0.26), (0.11, -0.26), (-0.11, 0.28), (0.11, 0.28)):
+        piv = empty("wleg", (x, y, 0.32), body)
+        cyl((0, 0, -0.15), 0.055, 0.045, 0.32, fur, piv, subsurf=1)
+        sphere((0, -0.02, -0.3), (0.06, 0.07, 0.04), dark, piv)
+        legs.append(piv)
+    return root, body, legs, head
+
+
+def pose_wolf(body, legs, head, phase, moving, bite=0.0):
+    if moving:
+        s = math.sin(phase)
+        for i, l in enumerate(legs):
+            sign = 1 if i in (0, 3) else -1
+            l.rotation_euler.x = sign * s * 1.0
+            l.location.z = 0.32 + 0.06 * max(0.0, sign * math.cos(phase))
+        body.location.z = 0.06 * (1 - math.cos(2 * phase)) / 2
+        body.rotation_euler.x = 0.08 * math.sin(2 * phase)
+    else:
+        for l in legs:
+            l.rotation_euler.x = 0
+            l.location.z = 0.32
+        body.location.z = 0
+        body.rotation_euler.x = 0
+    head.rotation_euler.x = math.radians(-35) * bite
+    head.location.y = -0.5 - 0.12 * bite
+    head.location.z = 0.58 - 0.08 * bite
+
+
+def build_ram():
+    """Battering ram: wooden cart with a roof and a hanging log; +Y is the back. Returns (root, log pivot)."""
+    root = empty("ram")
+    wood, dark = M["wood"], M["wood_dark"]
+    for sx in (-1, 1):
+        box((sx * 0.55, 0, 0.42), (0.1, 2.3, 0.1), dark, root)
+        box((sx * 0.55, 0, 1.55), (0.1, 2.3, 0.1), dark, root)
+        for y in (-1.0, 0.0, 1.0):
+            cyl((sx * 0.55, y, 1.0), 0.055, 0.05, 1.2, dark, root, seg=8)
+        box((sx * 0.4, 0.15, 1.78), (0.9, 1.7, 0.05), wood, root, rot=(0, sx * math.radians(28), 0))
+        for y in (-0.8, 0.8):
+            cyl((sx * 0.68, y, 0.3), 0.3, 0.3, 0.12, dark, root, rot=(0, math.pi / 2, 0), seg=16)
+            cyl((sx * 0.68, y, 0.3), 0.08, 0.08, 0.16, M["iron"], root, rot=(0, math.pi / 2, 0), seg=10)
+    for y in (-1.0, 1.0):
+        box((0, y, 1.55), (1.2, 0.1, 0.1), dark, root)
+    box((0, 0.15, 2.0), (0.2, 1.7, 0.08), dark, root)
+    log = empty("ramlog", (0, 0, 1.55), root)
+    cyl((0, 0, -0.6), 0.17, 0.17, 2.7, wood, log, rot=(math.pi / 2, 0, 0), seg=14)
+    cyl((0, -1.42, -0.6), 0.2, 0.15, 0.36, M["iron"], log, rot=(math.pi / 2, 0, 0), seg=12)
+    torus((0, -1.1, -0.6), 0.19, 0.03, M["iron"], log, rot=(math.pi / 2, 0, 0), seg=16)
+    for y in (-0.6, 0.6):
+        cyl((0, y, -0.3), 0.022, 0.022, 0.6, M["rope"], log, seg=6)
+    return root, log
+
+
+def build_spear():
+    root = empty("spear")
+    cyl((0, 0, 0.6), 0.03, 0.028, 1.7, M["wood"], root, seg=8)
+    cyl((0, 0, 1.6), 0.06, 0.0, 0.3, M["steel"], root, seg=8)
+    torus((0, 0, 1.42), 0.04, 0.012, M["gold_dark"], root, seg=10)
+    return root
+
+
+def build_club():
+    root = empty("club")
+    cyl((0, 0, 0.55), 0.06, 0.17, 1.3, M["club"], root, seg=12, bevel=0.03)
+    for i in range(6):
+        a = i * math.pi / 3
+        cyl((math.cos(a) * 0.16, math.sin(a) * 0.16, 1.0), 0.04, 0.0, 0.16, M["iron"], root,
+            rot=(0, math.pi / 2, a), seg=6)
+    torus((0, 0, 0.1), 0.065, 0.015, M["leather"], root, seg=10)
+    return root
+
+
+def hold(c, obj, bone="hand.r", offset=(0, 0, 0), rot=(0, 0, 0), action="Idle"):
+    """Attaches a prop to a hand in the given action's first frame; it then follows every animation."""
+    c.act(action)
+    c.at(0.0)
+    obj.location = c.bone_world(bone) + Vector(offset)
+    obj.rotation_euler = rot
+    c.attach_posed(obj, bone)
+
+
+def build_enemy_archer():
+    rules = [(135, 195, 0.5, 1.0, 0.15, 1.0, (0.75, 0.1, 0.1)), (60, 75, 0.5, 1.0, 0.5, 1.0, (0.15, 0.12, 0.12))]
+    tex = recolor("rogue_texture.png", rules, "tex_archer_red")
+    c = Char("Rogue_Hooded", {"Rogue_ArmLeft", "Rogue_ArmRight", "Rogue_Body", "Rogue_Head_Hooded", "Rogue_LegLeft",
+                              "Rogue_LegRight", "Rogue_Cape"}, tex)
+    hold(c, build_bow(), offset=(0, -0.08, 0), rot=(math.radians(-6), 0, 0), action="1H_Ranged_Aiming")
+    return c
+
+
+def build_shieldman():
+    tex = knight_texture("tex_shieldman", (0.62, 0.1, 0.08), (0.2, 0.18, 0.2), (0.2, 0.17, 0.18))
+    c = Char("Knight", {"Knight_ArmLeft", "Knight_ArmRight", "Knight_Body", "Knight_Head", "Knight_Helmet",
+                        "Knight_LegLeft", "Knight_LegRight", "1H_Sword"}, tex)
+    shield = prop(ACC + "shield_square_color.gltf", 1.15)
+    retexture([o for o in COLL.objects if o.type == "MESH" and o.parent is shield], tex)
+    sr = [float(v) for v in os.environ.get("SHIELD_ROT", "0,0,0").split(",")]
+    so = [float(v) for v in os.environ.get("SHIELD_OFF", "0,-0.1,0.05").split(",")]
+    hold(c, shield, bone="hand.l", offset=tuple(so), rot=tuple(math.radians(v) for v in sr), action="Idle")
+    return c
+
+
+def build_ogre():
+    rules = [(15, 35, 0.25, 0.5, 0.75, 1.0, (0.45, 0.62, 0.3)),   # skin -> green
+             (195, 215, 0.3, 0.6, 0.3, 0.8, (0.35, 0.15, 0.1))]   # blue cloth -> dark leather
+    tex = recolor("barbarian_texture.png", rules, "tex_ogre")
+    c = Char("Barbarian", {"Barbarian_ArmLeft", "Barbarian_ArmRight", "Barbarian_Body", "Barbarian_Head",
+                           "Barbarian_LegLeft", "Barbarian_LegRight"}, tex)
+    for sx in (-1, 1):
+        h = empty("tusk", (sx * 0.12, -0.42, 1.78), rot=(math.radians(-20), 0, 0))
+        cyl((0, 0, 0.08), 0.04, 0.0, 0.18, M["bone"] if "bone" in M else mat("bone", (0.85, 0.8, 0.68), rough=0.5), h, seg=8)
+        c.attach(h, "head")
+    hold(c, build_club(), offset=(0, -0.05, -0.2), rot=(math.radians(-30), 0, 0), action="2H_Melee_Idle")
+    return c
+
+
+def build_dark_lord():
+    rules = [(178, 196, 0.5, 1.0, 0.3, 1.0, (0.2, 0.05, 0.3)),   # teal robe -> deep purple
+             (8, 26, 0.6, 1.0, 0.6, 1.0, (0.65, 0.05, 0.08)),    # orange trims -> crimson
+             (15, 35, 0.25, 0.45, 0.8, 1.0, (0.55, 0.6, 0.62))]  # skin -> pale grey
+    tex = recolor("mage_texture.png", rules, "tex_dark_lord")
+    c = Char("Mage", {"Mage_ArmLeft", "Mage_ArmRight", "Mage_Body", "Mage_Head", "Mage_LegLeft", "Mage_LegRight",
+                      "2H_Staff", "Mage_Cape"}, tex)
+    for sx in (-1, 1):
+        sphere((sx * 0.11, -0.38, 1.42), 0.045, M["eye_red"], seg=10)
+    for o in list(COLL.objects):
+        if o.type == "MESH" and o.name.startswith("Sphere") and o.parent is None:
+            c.attach(o, "head")
+    crown = empty("ironcrown", (0, 0, 1.7))
+    torus((0, 0, 0), 0.34, 0.045, M["iron"], crown, seg=20)
+    for i in range(5):
+        a = i * 2 * math.pi / 5 + math.pi / 2
+        cyl((math.cos(a) * 0.34, math.sin(a) * 0.34, 0.12), 0.05, 0.0, 0.28, M["iron"], crown, seg=6)
+    c.attach(crown, "head")
+    return c
+
+
+def build_lancer():
+    tex = knight_texture("tex_lancer", (0.3, 0.42, 0.9), GOLD, (0.22, 0.2, 0.24))
+    c = Char("Knight", {"Knight_ArmLeft", "Knight_ArmRight", "Knight_Body", "Knight_Head", "Knight_Helmet",
+                        "Knight_LegLeft", "Knight_LegRight"}, tex)
+    shield = prop(ACC + "shield_round_color.gltf", 1.3)
+    hold(c, shield, bone="hand.l", offset=(0.0, -0.16, 0.08), rot=(0, 0, math.radians(90)), action="Idle")
+    hold(c, build_spear(), offset=(0, -0.02, -0.5), rot=(math.radians(-12), 0, 0), action="Idle")
+    return c
+
+
+def build_archer_elite():
+    tex = rogue_texture("tex_archer_elite", (0.1, 0.3, 0.8), GOLD)
+    c = Char("Rogue_Hooded", {"Rogue_ArmLeft", "Rogue_ArmRight", "Rogue_Body", "Rogue_Head_Hooded", "Rogue_LegLeft",
+                              "Rogue_LegRight", "Rogue_Cape"}, tex)
+    c.act("1H_Ranged_Aiming")
+    c.at(0.0)
+    bow = build_bow()
+    bow.location = c.bone_world("hand.r") + Vector((0.0, -0.08, 0))
+    bow.rotation_euler = (math.radians(-6), 0, 0)
+    c.attach_posed(bow, "hand.r")
+    quiver = prop(ACC + "quiver.gltf", 1.0)
+    quiver.location = (-0.2, 0.42, 1.15)
+    quiver.rotation_euler = (math.radians(20), math.radians(-25), math.radians(15))
+    c.attach(quiver, "chest")
+    plume = empty("plume", (0, 0.1, 2.15), rot=(math.radians(35), 0, 0))
+    tube([(0, 0, 0), (0, 0.05, 0.22), (0, 0.18, 0.4)], 0.05, M["flag"], plume, taper=0.4)
+    c.attach(plume, "head")
+    return c
+
+
+def build_ballista():
+    """Tower-top ballista aimed to the front-left (-X, -Y): post, swivel, bow limbs, string and a loaded bolt."""
+    root = empty("ballista", rot=(0, 0, math.radians(35)))
+    wood, dark, steel = M["wood"], M["wood_dark"], M["steel"]
+    cyl((0, 0, 0.25), 0.12, 0.1, 0.5, dark, root, seg=10)
+    box((0, 0, 0.06), (0.9, 0.9, 0.12), wood, root, bevel=0.02)
+    box((0, 0.1, 0.62), (0.16, 1.5, 0.12), wood, root, rot=(math.radians(-12), 0, 0), bevel=0.02)
+    for sx in (-1, 1):
+        box((sx * 0.45, -0.5, 0.72), (0.9, 0.07, 0.1), dark, root, rot=(0, 0, sx * math.radians(-18)), bevel=0.01)
+    cyl((0, -0.5 - 0.08, 0.72), 0.012, 0.012, 1.75, M["string"], root, rot=(0, math.pi / 2, 0), seg=6)
+    cyl((0, -0.1, 0.7), 0.03, 0.03, 1.3, steel, root, rot=(math.radians(78), 0, 0), seg=8)
+    cyl((0, -0.72, 0.84), 0.06, 0.0, 0.22, steel, root, rot=(math.radians(78), 0, 0), seg=8)
+    cyl((0, 0.55, 0.55), 0.1, 0.1, 0.1, steel, root, rot=(0, math.pi / 2, 0), seg=12)
+    return root
+
+
+V5_NAMES = ("wolf", "enemy_archer", "shieldman", "ram", "ogre", "dark_lord", "lancer", "archer_elite",
+            "farm", "barracks", "ballista_top", "mine", "boulder")
+
+
+def v5_sprites():
+    if want("wolf"):
+        clear_models()
+        root, body, legs, head = build_wolf()
+
+        class Rig:
+            def face(self, d):
+                root.rotation_euler.z = d * math.pi / 4
+
+        def frame(phase, moving, bite=0.0):
+            return lambda _: pose_wolf(body, legs, head, phase, moving, bite) or bpy.context.view_layer.update()
+        frames = [frame(2 * math.pi * i / 6, True) for i in range(6)] + [frame(0.5, False, 0.5), frame(0.5, False, 1.0)]
+        unit_atlas("wolf", 210, 180, 105, 155, 96, frames, Rig())
+    if want("enemy_archer"):
+        clear_models()
+        c = build_enemy_archer()
+        c.scale()
+        frames = action_frames("1H_Ranged_Aiming", [0.0]) + walk_frames(c, "Walking_A", 4) + \
+            action_frames("1H_Ranged_Shoot", [0.15, 0.45, 0.8])
+        unit_atlas("enemy_archer", 200, 230, 100, 205, 96, frames, c)
+    if want("shieldman"):
+        clear_models()
+        c = build_shieldman()
+        c.scale()
+        frames = walk_frames(c, "Walking_A", 6) + action_frames("1H_Melee_Attack_Chop", [0.3, 0.55, 0.8])
+        unit_atlas("shieldman", 240, 240, 120, 215, 96, frames, c)
+    if want("ram"):
+        clear_models()
+        root, log = build_ram()
+
+        class Rig:
+            def face(self, d):
+                root.rotation_euler.z = d * math.pi / 4
+
+        def frame(a):
+            def pose(_):
+                log.rotation_euler.x = math.radians(a)
+                bpy.context.view_layer.update()
+            return pose
+        unit_atlas("ram", 300, 280, 150, 245, 96, [frame(a) for a in (0, 9, 0, -9)], Rig())
+    if want("ogre"):
+        clear_models()
+        c = build_ogre()
+        c.scale(KS * 1.9)
+        frames = walk_frames(c, "Walking_A", 4) + action_frames("2H_Melee_Attack_Chop", [0.25, 0.5, 0.8])
+        unit_atlas("ogre", 300, 300, 150, 272, 64, frames, c)
+    if want("dark_lord"):
+        clear_models()
+        c = build_dark_lord()
+        c.scale(KS * 1.75)
+        frames = walk_frames(c, "Walking_A", 4) + action_frames("Spellcast_Shoot", [0.2, 0.5, 0.8])
+        unit_atlas("dark_lord", 300, 320, 150, 290, 64, frames, c)
+    if want("lancer"):
+        clear_models()
+        c = build_lancer()
+        c.scale()
+        frames = action_frames("Idle", [0.0]) + walk_frames(c, "Running_A", 6) + \
+            action_frames("1H_Melee_Attack_Stab", [0.3, 0.55, 0.8])
+        unit_atlas("lancer", 240, 250, 120, 225, 96, frames, c)
+    if want("archer_elite"):
+        clear_models()
+        c = build_archer_elite()
+        c.scale(KS * 1.12)
+        frames = action_frames("1H_Ranged_Aiming", [0.0]) + walk_frames(c, "Running_A", 6) + \
+            action_frames("1H_Ranged_Shoot", [0.15, 0.45, 0.8])
+        unit_atlas("archer_elite", 220, 250, 110, 225, 96, frames, c)
+    for name, path, scale, rot, h in (
+            ("farm", "buildings/blue/building_windmill_blue.gltf", 2.6, 20, 2.6),
+            ("barracks", "buildings/blue/building_tavern_blue.gltf", 2.7, 0, 2.0),
+            ("mine", "buildings/blue/building_mine_blue.gltf", 2.6, 10, 1.6)):
+        if want(name):
+            clear_models()
+            prop(HEX + path, scale, rot_z=math.radians(rot))
+            static_sprite(name, 700, 64, center=(0, 0, h))
+    if want("ballista_top"):
+        clear_models()
+        build_ballista()
+        static_sprite("ballista_top", 400, 96, center=(0, 0, 0.5))
+    if want("boulder"):
+        clear_models()
+        prop(HEX + "buildings/neutral/projectile_catapult.gltf", 2.0)
+        static_sprite("boulder", 200, 96, center=(0, 0, 0.3))
+
+
+V4_NAMES = ("king_warrior", "king_ranger", "king_builder", "portrait_warrior", "portrait_ranger", "portrait_builder",
+            "wall_wood", "wall_wood_v", "gate_wood_closed", "gate_wood_open", "gate_wood_closed_v", "gate_wood_open_v")
+
+
+def v4_sprites():
+    for name, builder in KINGS.items():
+        if want(name):
+            king_atlas(name, builder)
+    for cls, builder in (("warrior", build_king_warrior), ("ranger", build_king_ranger), ("builder", build_king_builder)):
+        if want("portrait_" + cls):
+            portrait("portrait_" + cls, builder)
+    for suffix, rot in (("", 0.0), ("_v", math.pi / 2)):
+        if want("wall_wood" + suffix):
+            clear_models()
+            root = empty("wall", rot=(0, 0, rot))
+            build_palisade()
+            for o in list(COLL.objects):
+                if o.parent is None and o is not root:
+                    o.parent = root
+            static_sprite("wall_wood" + suffix, 400, 96, center=(0, 0, 0.8))
+        for state in ("closed", "open"):
+            if want("gate_wood_%s%s" % (state, suffix)):
+                clear_models()
+                root = empty("wall", rot=(0, 0, rot))
+                build_palisade(state)
+                for o in list(COLL.objects):
+                    if o.parent is None and o is not root:
+                        o.parent = root
+                static_sprite("gate_wood_%s%s" % (state, suffix), 400, 96, center=(0, 0, 1.0))
+
+
+def logo(out_png):
+    """Hero shot of the warrior king at a gallop, 3/4 view, low camera, for the app icon (transparent PNG)."""
+    clear_models()
+    hroot, c, pose = mounted(build_king_warrior)
+    pose(1.1, True)
+    hroot.rotation_euler.z = math.radians(-32)
+    bpy.context.view_layer.update()
+    px = 1024
+    SC.render.resolution_x = SC.render.resolution_y = px
+    CAM.data.ortho_scale = 3.3
+    p = math.radians(16)
+    target = Vector((0.0, 0.0, 1.35))
+    CAM.location = target + Vector((0, -30 * math.cos(p), 30 * math.sin(p)))
+    CAM.rotation_euler = (math.pi / 2 - p, 0, 0)
+    bpy.context.view_layer.update()
+    SC.render.filepath = out_png
+    bpy.ops.render.render(write_still=True)
+    clean_alpha(out_png)
 
 
 # ----------------------------------------------------------------------------- procedural statics
@@ -870,7 +1419,7 @@ def all_sprites():
                           "upperarm.l", "lowerarm.l", "upperarm.r", "lowerarm.r", "hand.l", "hand.r", "head"])
         c.scale()
         c.root.parent = hbody
-        c.root.location = (0, 0.1, 1.02)
+        c.root.location = (0, 0.1, 0.8)
         rider = c
 
         class KingRig:
@@ -1186,7 +1735,11 @@ def pack():
     order = ["archer", "knight", "boss", "king", "castle", "house", "tower", "stake", "pine0", "pine1", "roundtree",
              "rock0", "rock1", "coinSpin", "coinFlat", "wallStone", "wallStoneV", "gateClosed", "gateOpen", "gateClosedV",
              "gateOpenV", "towerStone", "towerRoyal", "castleRoyal", "grassTile", "roadTile", "cliffTile", "tuft0", "tuft1",
-             "flower0", "flower1", "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack"]
+             "flower0", "flower1", "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack",
+             "kingWarrior", "kingRanger", "kingBuilder", "portraitWarrior", "portraitRanger", "portraitBuilder",
+             "wallWood", "wallWoodV", "gateWoodClosed", "gateWoodOpen", "gateWoodClosedV", "gateWoodOpenV",
+             "wolf", "enemyArcher", "shieldman", "ram", "ogre", "darkLord", "lancer", "archerElite",
+             "farm", "barracks", "ballistaTop", "mine", "boulder"]
     names = [n for n in order if n in existing] + [n for n in existing if n not in order]
     lines = [
         "package fr.kingshot.game",
@@ -1203,7 +1756,14 @@ def pack():
         f.write("\n".join(lines))
 
 
+if ONLY is not None and "logo" in ONLY:
+    logo(os.path.join(TMP, "logo_fg.png"))
+    sys.exit(0)
 all_sprites()
+if ONLY is not None and any(n in ONLY for n in V4_NAMES):
+    v4_sprites()
+if ONLY is not None and any(n in ONLY for n in V5_NAMES):
+    v5_sprites()
 if ONLY is not None and any(n in ONLY for n in ("grass_tile", "road_tile", "cliff_tile", "tuft0", "tuft1", "flower0", "flower1",
                                                   "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack")):
     terrain_sprites()
