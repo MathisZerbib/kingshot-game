@@ -67,6 +67,7 @@ fun App() {
     var uiState by remember { mutableIntStateOf(game.state) }
     var pausedUi by remember { mutableStateOf(false) }
     var picked by remember { mutableIntStateOf(game.savedClass) }
+    var metaTick by remember { mutableIntStateOf(0) } // bumps after a purchase so the menu re-reads Meta
     val focus = remember { FocusRequester() }
     val topInset = WindowInsets.safeDrawing.getTop(density).toFloat()
     renderer.topInset = topInset
@@ -140,11 +141,12 @@ fun App() {
             uiState == STATE_MENU -> MainMenu(
                 hasSave = game.hasSave, savedLevel = game.savedLevel, savedClass = game.savedClass, best = game.best,
                 picked = picked, onPick = { picked = it },
+                metaTick = metaTick, onBuy = { up -> if (Meta.buy(picked, up)) metaTick++ },
                 onContinue = { game.start(); focus.requestFocus() },
                 onNew = { game.newGame(picked); focus.requestFocus() },
             )
             uiState == STATE_OVER -> Panel("LE DONJON EST TOMBÉ", "Niveau ${game.level} · vague ${game.wave} · ${game.kills} ennemis vaincus",
-                if (game.newRecord) "Nouveau record !" else "Record : vague ${game.best}",
+                (if (game.newRecord) "Nouveau record !  " else "") + "+${game.crownsWon} couronnes · total ${Meta.crowns}",
                 "REJOUER", { game.newGame(game.heroClass); focus.requestFocus() }, "Menu", { game.toMenu() })
             pausedUi -> Panel("PAUSE", "${CLASS_NAMES[game.heroClass]} · niveau ${game.level} · vague ${game.wave}", "Partie sauvegardée à chaque vague",
                 "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.toMenu() })
@@ -170,13 +172,19 @@ private val CLASS_HP = intArrayOf(3, 1, 2)
 @Composable
 private fun MainMenu(
     hasSave: Boolean, savedLevel: Int, savedClass: Int, best: Int,
-    picked: Int, onPick: (Int) -> Unit, onContinue: () -> Unit, onNew: () -> Unit,
+    picked: Int, onPick: (Int) -> Unit, metaTick: Int, onBuy: (Int) -> Unit, onContinue: () -> Unit, onNew: () -> Unit,
 ) {
+    metaTick // read so a purchase recomposes the menu
     Box(
         Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x66000000), Color(0x22000000), Color(0xCC000000)))),
         contentAlignment = Alignment.Center,
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
+                Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xAA000000)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Label("♛ ${Meta.crowns}", Color(0xFFFFC531), 16, FontWeight.Black)
+                }
+            }
             Label("KINGSHOT", Color(0xFFFFC531), 52, FontWeight.Black)
             Label("Défends ton royaume", Color.White, 16, FontWeight.Bold)
             Spacer(Modifier.height(28.dp))
@@ -185,7 +193,26 @@ private fun MainMenu(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (c in 0..2) ClassCard(c, c == picked, Modifier.weight(1f)) { onPick(c) }
             }
-            Spacer(Modifier.height(26.dp))
+            Spacer(Modifier.height(12.dp))
+            // permanent upgrades of the picked hero
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                for (up in 0..2) {
+                    val lv = Meta.level(picked, up)
+                    val cost = Meta.cost(picked, up)
+                    val can = lv < UP_MAX && Meta.crowns >= cost
+                    Column(
+                        Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
+                            .background(if (can) Color(0xEE2E6B34) else Color(0xAA1A2233))
+                            .clickable(enabled = can) { onBuy(up) }
+                            .padding(vertical = 6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Label("${UP_NAMES[up]} $lv/$UP_MAX", Color.White, 12, FontWeight.Black)
+                        Label(if (lv >= UP_MAX) "MAX" else "+ ♛ $cost", if (can) Color(0xFFFFC531) else Color(0xFF999999), 12, FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(20.dp))
             if (hasSave) {
                 BigButton("CONTINUER", "${CLASS_NAMES[savedClass]} · niveau $savedLevel", Color(0xFF45C34A), Color(0xFF2A8A2F), onContinue)
                 Spacer(Modifier.height(12.dp))

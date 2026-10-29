@@ -35,6 +35,30 @@ val CLASS_NAMES = arrayOf("Guerrier", "Rôdeur", "Bâtisseur")
 val ABILITY_NAMES = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
 val ABILITY_COOLDOWN = floatArrayOf(10f, 12f, 20f)
 
+// Permanent hero upgrades bought with crowns between games (the meta loop)
+const val UP_HP = 0 // +10 % health per level
+const val UP_POWER = 1 // +8 % king damage per level
+const val UP_ABILITY = 2 // -6 % ability cooldown per level
+const val UP_MAX = 10
+val UP_NAMES = arrayOf("Vie", "Force", "Capacité")
+
+/** Crowns and hero upgrades, kept across games. */
+object Meta {
+    var crowns: Int
+        get() = Storage.loadInt("crowns")
+        set(v) = Storage.saveInt("crowns", v)
+    fun level(cls: Int, up: Int) = Storage.loadInt("up_${cls}_$up")
+    fun cost(cls: Int, up: Int) = 20 + 15 * level(cls, up)
+    fun buy(cls: Int, up: Int): Boolean {
+        val lv = level(cls, up)
+        val c = cost(cls, up)
+        if (lv >= UP_MAX || crowns < c) return false
+        crowns -= c
+        Storage.saveInt("up_${cls}_$up", lv + 1)
+        return true
+    }
+}
+
 /** Coins drawn on the king's head (tall enough to leave the screen); the HUD counter shows the real total. */
 const val MAX_STACK = 360 // ~1.3 screen heights of coins; more would not be visible
 
@@ -233,6 +257,9 @@ class Game {
     var kHp = 150f
     var kMaxHp = 150f
     var heroClass = CLASS_WARRIOR
+    private var heroPower = 1f // king damage from upgrades
+    var abilityTime = 10f // cooldown of the ability after upgrades
+    var crownsWon = 0 // crowns earned by the last game (game-over panel)
     var abilityCd = 0f // seconds until the ability is ready
     var abilityFlash = 0f // > 0 right after use (visual)
     var paused = false
@@ -313,6 +340,7 @@ class Game {
     private var levelUpPending = false
     private var waveCleared = true
     var kBoost = 0f // seconds of king speed boost left (after clearing a wave)
+    var waveRewardBanner = 0f // "Vague terminée" banner
     private var rainLeft = 0 // boss coins still to drop
     private var rainX = 0f
     private var rainY = 0f
@@ -404,7 +432,9 @@ class Game {
         castleMaxHp = 600f
         kx = World.KING_START_X; ky = World.KING_START_Y
         kvx = 0f; kvy = 0f
-        kMaxHp = when (heroClass) { CLASS_WARRIOR -> 300f; CLASS_RANGER -> 110f; else -> 160f }
+        kMaxHp = when (heroClass) { CLASS_WARRIOR -> 300f; CLASS_RANGER -> 110f; else -> 160f } * (1f + 0.1f * Meta.level(heroClass, UP_HP))
+        heroPower = 1f + 0.08f * Meta.level(heroClass, UP_POWER)
+        abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
         abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1
         kHp = kMaxHp; kDead = false; coins = 0
         squad = START_SQUAD
@@ -578,7 +608,7 @@ class Game {
     /** Class ability (button); returns false while on cooldown. */
     fun useAbility(): Boolean {
         if (state != STATE_PLAY || paused || transition > 0f || kDead || abilityCd > 0f) return false
-        abilityCd = ABILITY_COOLDOWN[heroClass]
+        abilityCd = abilityTime
         abilityFlash = 0.6f
         when (heroClass) {
             CLASS_WARRIOR -> {
@@ -586,7 +616,7 @@ class Game {
                     val e = enemies[i]
                     if (!e.active || hypot(e.x - kx, e.y - ky) > 190f + e.radius) continue
                     if (e.kind != 2) e.s = max(0f, e.s - 90f) // knocked back along its road
-                    hitEnemy(i, 110f * dmgMult)
+                    hitEnemy(i, 110f * dmgMult * heroPower)
                 }
                 shake = max(shake, 9f)
                 burst(kx, ky, 20f, 50, 0xFFFFFFFFL, 520f)
@@ -597,7 +627,7 @@ class Game {
                 for (i in enemies.indices) {
                     val e = enemies[i]
                     if (!e.active || hypot(e.x - kx, e.y - ky) > 520f || n >= 60) continue
-                    fire(kx + (rnd.nextFloat() - 0.5f) * 80f, ky, 260f, i, 70f * dmgMult)
+                    fire(kx + (rnd.nextFloat() - 0.5f) * 80f, ky, 260f, i, 70f * dmgMult * heroPower)
                     n++
                 }
                 burst(kx, ky, 60f, 30, 0xFF9EE37DL, 300f)
@@ -753,6 +783,7 @@ class Game {
         if (castleAlarm > 0f) castleAlarm -= dt
         if (levelBanner > 0f) levelBanner -= dt
         if (kBoost > 0f) kBoost -= dt
+        if (waveRewardBanner > 0f) waveRewardBanner -= dt
         if (levelUpPending) levelUp()
         if (ringDirty) rebuildRing()
         if (waveBanner > 0f) waveBanner -= dt
@@ -893,7 +924,7 @@ class Game {
                     hit = i
                     kDir = dirIndex(e.x - kx, e.y - ky)
                     burst((kx + e.x) * 0.5f, (ky + e.y) * 0.5f, 30f, 4, 0xFFFFFFFFL, 160f)
-                    hitEnemy(i, 40f * dmgMult)
+                    hitEnemy(i, 40f * dmgMult * heroPower)
                 }
                 if (hit >= 0) {
                     kFireCd = 0.6f
@@ -902,7 +933,7 @@ class Game {
                 val range = if (heroClass == CLASS_RANGER) 430f else 300f
                 val t = nearestEnemy(kx, ky, range)
                 if (t >= 0) {
-                    fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 24f else 18f) * dmgMult)
+                    fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 24f else 18f) * dmgMult * heroPower)
                     kFaceRight = enemies[t].x > kx
                     if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
                     kFireCd = if (heroClass == CLASS_RANGER) 0.26f else 0.5f
@@ -1258,7 +1289,15 @@ class Game {
             return
         }
         if (enemies.any { it.active }) return
-        if (!waveCleared) { waveCleared = true; if (wave > 0) kBoost = 2f }
+        if (!waveCleared) {
+            waveCleared = true
+            if (wave > 0) {
+                kBoost = 2f
+                // wave reward: a shower of coins from the keep, growing with the wave
+                rainLeft += 4 + wave * 2; rainX = World.CASTLE_X; rainY = World.CASTLE_Y + 60f; rainRate = (4 + wave * 2) / 0.8f
+                waveRewardBanner = 2f
+            }
+        }
         waveBreak -= dt
         if (waveBreak <= 0f) {
             wave++
@@ -1452,6 +1491,8 @@ class Game {
 
     private fun gameOver() {
         Storage.saveGame(null)
+        crownsWon = wave * 2 + kills / 10 + (level - 1) * 15
+        Meta.crowns += crownsWon
         castleHp = 0f
         state = STATE_OVER
         shake = 20f

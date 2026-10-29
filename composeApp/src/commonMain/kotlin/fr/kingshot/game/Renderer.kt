@@ -869,6 +869,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             label(text.str(waveLabel(g.wave).uppercase()), w / 2f, h * 0.3f, 46f * u * pop, WHITE, min(1f, k * 3f))
         }
+        if (g.waveRewardBanner > 0f && g.levelBanner <= 0f) {
+            val k = g.waveRewardBanner / 2f
+            val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
+            label(text.str("VAGUE REPOUSSÉE !"), w / 2f, h * 0.3f, 34f * u * pop, GOLD, min(1f, k * 3f))
+            label(text.str("Butin du donjon"), w / 2f, h * 0.3f + 34f * u, 16f * u, WHITE, min(1f, k * 3f))
+        }
         if (g.bossBanner > 0f) {
             val k = g.bossBanner / 2.2f
             val pop = 1f + sin(k * 20f) * 0.05f
@@ -938,7 +944,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         circ(CLASS_COLORS[g.heroClass], abilityX, abilityY, r - 4f * u)
         drawAbilityIcon(g.heroClass, abilityX, abilityY, r * 0.55f, u)
         if (!ready) {
-            val f = (g.abilityCd / ABILITY_COOLDOWN[g.heroClass]).coerceIn(0f, 1f)
+            val f = (g.abilityCd / g.abilityTime).coerceIn(0f, 1f)
             drawArc(COOLDOWN, -90f, 360f * f, true, Offset(abilityX - r + 4f * u, abilityY - r + 4f * u), Size((r - 4f * u) * 2f, (r - 4f * u) * 2f))
             label(text.num(g.abilityCd.toInt() + 1), abilityX, abilityY, 22f * u, WHITE)
         }

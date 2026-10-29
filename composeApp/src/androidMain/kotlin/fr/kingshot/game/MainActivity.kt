@@ -18,6 +18,10 @@ actual object Storage {
     actual fun saveBest(value: Int) {
         prefs?.edit()?.putInt("best", value)?.apply()
     }
+    actual fun loadInt(key: String): Int = prefs?.getInt(key, 0) ?: 0
+    actual fun saveInt(key: String, value: Int) {
+        prefs?.edit()?.putInt(key, value)?.apply()
+    }
     actual fun loadGame(): String? = prefs?.getString("game", null)
     actual fun saveGame(value: String?) {
         prefs?.edit()?.putString("game", value)?.apply()
