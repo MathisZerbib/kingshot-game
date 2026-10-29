@@ -86,4 +86,13 @@ object SpriteData {
     val portraitBuilderGold = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
     val portraitBuilderFrost = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
     val portraitBuilderShadow = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val kingWarriorGold = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingWarriorFrost = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingWarriorShadow = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingRangerGold = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingRangerFrost = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingRangerShadow = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingBuilderGold = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingBuilderFrost = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val kingBuilderShadow = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
 }
