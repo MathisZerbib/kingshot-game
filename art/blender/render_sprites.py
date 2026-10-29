@@ -342,6 +342,12 @@ def build_materials():
     M["iron"] = mat("iron", (0.3, 0.3, 0.33), rough=0.5, metal=1.0)
     M["club"] = noise_mat("club", (0.2, 0.11, 0.05), (0.32, 0.2, 0.09), scale=4.0, rough=0.75, bump=0.3)
     M["skin_green"] = mat("skin_green", (0.45, 0.62, 0.3), rough=0.7, sss=0.1)
+    # shop skins (see SKINS)
+    M["velvet_purple"] = mat("velvet_purple", (0.3, 0.04, 0.42), rough=0.85)
+    M["velvet_ice"] = mat("velvet_ice", (0.72, 0.86, 1.0), rough=0.8)
+    M["velvet_black"] = mat("velvet_black", (0.035, 0.03, 0.045), rough=0.9)
+    M["silver"] = mat("silver", (0.86, 0.88, 0.92), rough=0.25, metal=1.0)
+    M["obsidian"] = mat("obsidian", (0.07, 0.06, 0.09), rough=0.3, metal=0.8)
 
 
 build_materials()
@@ -599,15 +605,15 @@ def build_boss():
     return c
 
 
-def build_crown(c, z=2.12, r=0.4, cushion="velvet"):
+def build_crown(c, z=2.12, r=0.4, cushion="velvet", metal="gold"):
     parts = []
-    parts.append(torus((0, 0, z), r, 0.05, M["gold"], seg=24))
-    parts.append(cyl((0, 0, z + 0.08), r, r, 0.14, M["gold"], seg=24))
+    parts.append(torus((0, 0, z), r, 0.05, M[metal], seg=24))
+    parts.append(cyl((0, 0, z + 0.08), r, r, 0.14, M[metal], seg=24))
     parts.append(sphere((0, 0, z + 0.14), (r * 0.9, r * 0.9, 0.22), M[cushion], seg=16))
     for i in range(6):
         a = i * math.pi / 3 + math.pi / 6
         x, y = math.cos(a) * (r - 0.01), math.sin(a) * (r - 0.01)
-        parts.append(cyl((x, y, z + 0.26), 0.07, 0.0, 0.26, M["gold"], seg=8))
+        parts.append(cyl((x, y, z + 0.26), 0.07, 0.0, 0.26, M[metal], seg=8))
         parts.append(sphere((x * 1.02, y * 1.02, z + 0.1), 0.045, M["ruby"], seg=10))
     for p in parts:
         c.attach(p, "head")
@@ -689,23 +695,34 @@ def build_hammer():
     return root
 
 
-def build_king_warrior():
+# Shop skins: armour / cloth colours, mantle + crown cushion material, crown metal. "gold" is the opulent one,
+# "frost" the pale ice knight, "shadow" the black-and-blood one. Game stats never change with a skin.
+SKINS = {
+    "gold": dict(armor=(1.0, 0.82, 0.3), cloth=(0.36, 0.05, 0.48), mantle="velvet_purple", metal="gold"),
+    "frost": dict(armor=(0.8, 0.88, 0.97), cloth=(0.3, 0.58, 0.95), mantle="velvet_ice", metal="silver"),
+    "shadow": dict(armor=(0.1, 0.09, 0.12), cloth=(0.5, 0.04, 0.07), mantle="velvet_black", metal="gold_dark"),
+}
+
+
+def build_king_warrior(skin=None):
     """Gold plate armour with blue details, blue mantle, sword: tanky melee king."""
-    tex = knight_texture("tex_king_w", GOLD, BLUE)
+    k = SKINS.get(skin)
+    tex = knight_texture("tex_king_w_%s" % skin, k["armor"], k["cloth"]) if k else knight_texture("tex_king_w", GOLD, BLUE)
     c = Char("Knight", {"Knight_ArmLeft", "Knight_ArmRight", "Knight_Body", "Knight_Head",
                         "Knight_LegLeft", "Knight_LegRight", "1H_Sword"}, tex)
-    build_crown(c)
-    c.attach(sphere((0, 0.12, 1.25), (0.52, 0.3, 0.2), M["velvet_blue"], seg=16), "chest")
+    build_crown(c, cushion=k["mantle"] if k else "velvet", metal=k["metal"] if k else "gold")
+    c.attach(sphere((0, 0.12, 1.25), (0.52, 0.3, 0.2), M[k["mantle"] if k else "velvet_blue"], seg=16), "chest")
     c.horse = ("horse", "mane")
     return c
 
 
-def build_king_ranger():
+def build_king_ranger(skin=None):
     """Blue hooded ranger with a gold-trimmed crown over the hood and a longbow: fast, fragile, long range."""
-    tex = rogue_texture("tex_king_r", BLUE, GOLD)
+    k = SKINS.get(skin)
+    tex = rogue_texture("tex_king_r_%s" % skin, k["cloth"], k["armor"]) if k else rogue_texture("tex_king_r", BLUE, GOLD)
     c = Char("Rogue_Hooded", {"Rogue_ArmLeft", "Rogue_ArmRight", "Rogue_Body", "Rogue_Head_Hooded", "Rogue_LegLeft",
                               "Rogue_LegRight"}, tex)
-    build_crown(c, z=2.2, r=0.42, cushion="velvet_blue")
+    build_crown(c, z=2.2, r=0.42, cushion=k["mantle"] if k else "velvet_blue", metal=k["metal"] if k else "gold")
     quiver = prop(ACC + "quiver.gltf", 1.0)
     quiver.location = (-0.2, 0.42, 1.15)
     quiver.rotation_euler = (math.radians(20), math.radians(-25), math.radians(15))
@@ -722,13 +739,14 @@ def build_king_ranger():
     return c
 
 
-def build_king_builder():
+def build_king_builder(skin=None):
     """Broad barbarian in blue cloth with a crown and a big war hammer: cheap buildings, repairs."""
-    tex = barbarian_texture("tex_king_b", BLUE)
+    k = SKINS.get(skin)
+    tex = barbarian_texture("tex_king_b_%s" % skin, k["cloth"]) if k else barbarian_texture("tex_king_b", BLUE)
     c = Char("Barbarian", {"Barbarian_ArmLeft", "Barbarian_ArmRight", "Barbarian_Body", "Barbarian_Head",
                            "Barbarian_LegLeft", "Barbarian_LegRight"}, tex)
-    build_crown(c, z=2.1, r=0.42)
-    c.attach(sphere((0, 0.12, 1.22), (0.56, 0.32, 0.2), M["leather"], seg=16), "chest")
+    build_crown(c, z=2.1, r=0.42, cushion=k["mantle"] if k else "velvet", metal=k["metal"] if k else "gold")
+    c.attach(sphere((0, 0.12, 1.22), (0.56, 0.32, 0.2), M[k["mantle"] if k else "leather"], seg=16), "chest")
 
     def weapon():
         h = build_hammer()
@@ -1187,6 +1205,8 @@ def v5_sprites():
 
 V4_NAMES = ("king_warrior", "king_ranger", "king_builder", "portrait_warrior", "portrait_ranger", "portrait_builder",
             "wall_wood", "wall_wood_v", "gate_wood_closed", "gate_wood_open", "gate_wood_closed_v", "gate_wood_open_v")
+SKIN_NAMES = tuple("%s_%s_%s" % (kind, cls, skin) for kind in ("king", "portrait") for cls in ("warrior", "ranger", "builder")
+                   for skin in ("gold", "frost", "shadow"))
 
 
 def v4_sprites():
@@ -1196,6 +1216,11 @@ def v4_sprites():
     for cls, builder in (("warrior", build_king_warrior), ("ranger", build_king_ranger), ("builder", build_king_builder)):
         if want("portrait_" + cls):
             portrait("portrait_" + cls, builder)
+        for skin in SKINS:
+            if want("king_%s_%s" % (cls, skin)):
+                king_atlas("king_%s_%s" % (cls, skin), lambda b=builder, sk=skin: b(sk))
+            if want("portrait_%s_%s" % (cls, skin)):
+                portrait("portrait_%s_%s" % (cls, skin), lambda b=builder, sk=skin: b(sk))
     for suffix, rot in (("", 0.0), ("_v", math.pi / 2)):
         if want("wall_wood" + suffix):
             clear_models()
@@ -1812,7 +1837,7 @@ if not os.environ.get("KINGSHOT_LIB"):  # render_ui.py imports this file as a li
         logo(os.path.join(TMP, "logo_fg.png"))
         sys.exit(0)
     all_sprites()
-    if ONLY is not None and any(n in ONLY for n in V4_NAMES):
+    if ONLY is not None and any(n in ONLY for n in V4_NAMES + SKIN_NAMES):
         v4_sprites()
     if ONLY is not None and any(n in ONLY for n in V5_NAMES):
         v5_sprites()
