@@ -154,6 +154,25 @@ object World {
     )
     val CHAPTER_NAMES = arrayOf("La Plaine", "La Forêt", "Les Neiges", "Le Royaume")
     const val LAST_LEVEL = 20
+
+    // Level themes: each named level plays differently (wave mix, weather, light)
+    const val TH_NONE = 0
+    const val TH_PACK = 1 // wolf packs
+    const val TH_VOLLEY = 2 // enemy archers en masse
+    const val TH_STORM = 3 // blizzard: everyone slower, snow on screen
+    const val TH_FROST = 4 // frozen ramparts: walls -30 % health, enemies 20 % slower
+    const val TH_NIGHT = 5 // darkness: only lights around the king, keep and towers
+    const val TH_SIEGE = 6 // shield bearers and rams
+    const val TH_RAMS = 7 // rams galore
+    const val TH_LAST_WALL = 8 // every road at once
+    private val LEVEL_THEMES = intArrayOf(0, 0, 0, 0, 0, 0, TH_PACK, 0, TH_VOLLEY, 0, 0, TH_STORM, TH_FROST, TH_NIGHT, 0, 0, TH_SIEGE, TH_RAMS, TH_LAST_WALL, 0)
+    val THEME_TEXT = arrayOf(
+        "", "Meute : les loups chassent en nombre", "Volées : les archers ennemis tirent de partout",
+        "Tempête : tout le monde avance plus lentement", "Gel : murs fragiles, ennemis ralentis",
+        "Nuit : on ne voit que près des lumières", "Siège : boucliers et béliers", "Béliers : protège tes portes",
+        "Dernière muraille : toutes les routes à la fois",
+    )
+    fun theme(level: Int) = if (level in 1..LAST_LEVEL) LEVEL_THEMES[level - 1] else TH_NONE
     fun levelName(level: Int) = if (level > LAST_LEVEL) "Mode infini" else LEVEL_NAMES[(level - 1).coerceIn(0, LEVEL_NAMES.size - 1)]
     /** 0 plain (1-5), 1 forest (6-10), 2 snow (11-15), 3 kingdom (16-20 and the endless mode). */
     fun chapter(level: Int) = ((level - 1) / 5).coerceIn(0, 3)

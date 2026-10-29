@@ -536,7 +536,7 @@ class Game {
     var ageChanged = false // the last level-up started a new age (banner)
     var roadAdded = false // the last level-up added a road (banner)
 
-    private fun wallMaxHp() = (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f) * (1f + 0.1f * tal[TAL_WALL_HP]) * (if (unlocked[U_GATEWORKS]) 1.5f else 1f)
+    private fun wallMaxHp() = (if (World.theme(level) == World.TH_FROST) 0.7f else 1f) * (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f) * (1f + 0.1f * tal[TAL_WALL_HP]) * (if (unlocked[U_GATEWORKS]) 1.5f else 1f)
 
     // progress gathered during the run, written to Storage in batches (flushProgress), never per frame
     private var pendKills = 0
@@ -1133,7 +1133,7 @@ class Game {
             val l = hypot(mx, my)
             if (l > 1f) { mx /= l; my /= l }
         }
-        val speed = (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED]) * (if (unlocked[U_STABLE]) 1.2f else 1f)
+        val speed = (if (World.theme(level) == World.TH_STORM) 0.85f else 1f) * (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED]) * (if (unlocked[U_STABLE]) 1.2f else 1f)
         val tvx = mx * speed
         val tvy = my * speed
         val acc = min(1f, dt * 14f)
@@ -1899,7 +1899,7 @@ class Game {
     private var waveRoadCount = 1
     private fun pickWaveRoads() {
         val n = World.paths.size
-        val want = min(n, when { level == 1 -> if (wave <= 2) 1 else 2; level <= 3 -> 2; level <= 7 -> 3; else -> 4 })
+        val want = if (World.theme(level) == World.TH_LAST_WALL) n else min(n, when { level == 1 -> if (wave <= 2) 1 else 2; level <= 3 -> 2; level <= 7 -> 3; else -> 4 })
         waveRoadCount = 0
         if (level == 1 && wave <= 2) { waveRoads[0] = 1; waveRoadCount = 1; return } // first waves: the east road only
         while (waveRoadCount < want) {
@@ -1920,6 +1920,12 @@ class Game {
     /** Wave mix: new enemy types join as the waves climb. */
     private fun pickKind(): Int {
         val r = rnd.nextFloat()
+        when (World.theme(level)) { // themed levels push their signature enemy
+            World.TH_PACK -> if (r < 0.5f) return KIND_WOLF
+            World.TH_VOLLEY -> if (r < 0.4f) return KIND_ARCHER
+            World.TH_SIEGE -> if (r < 0.25f) return KIND_SHIELD else if (r < 0.33f && walls.any { it.built }) return KIND_RAM
+            World.TH_RAMS -> if (r < 0.18f && walls.any { it.built }) return KIND_RAM
+        }
         return when {
             wave >= 8 && r < 0.05f && walls.any { it.built } -> KIND_RAM
             wave >= 6 && r < 0.15f -> KIND_SHIELD
@@ -2059,7 +2065,9 @@ class Game {
             val distToGoal = if (target == 3) hypot(World.CASTLE_X - e.x, (World.CASTLE_Y - e.y) * 1.6f) else d
             if (distToGoal > stopDist && d > 0.5f) {
                 val leap = e.kind == KIND_WOLF && target == 1 && dk < 140f
-                val step = min(e.speed * (if (leap) 1.8f else 1f) * dt, d)
+                val th = World.theme(level)
+                val slow = if (th == World.TH_STORM) 0.85f else if (th == World.TH_FROST) 0.8f else 1f
+                val step = min(e.speed * slow * (if (leap) 1.8f else 1f) * dt, d)
                 e.x += dx / d * step; e.y += dy / d * step
                 e.mdx = dx / d; e.mdy = dy / d
                 moving = true

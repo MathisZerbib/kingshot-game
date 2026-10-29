@@ -90,6 +90,8 @@ private val HUD_BUTTON = Color(0xFF3B4A6B)
 private val WAVE_RED = Color(0xFFC8342B)
 private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
+private val NIGHT = Color(0xD0050A1E)
+private val SNOW = Color(0xCCFFFFFF)
 private val ENEMY_ARROW = Color(0xFF3A2414)
 private val ALERT_RED = Color(0xFFFF4A3A)
 private const val MAX_EDGE_ARROWS = 12
@@ -354,8 +356,55 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, col, min(1f, k * 2.5f))
         }
 
+        drawWeather(g, w, h)
         drawHud(g, w, h)
     }
+
+    // ---- level weather / light (screen space, no per-frame allocation)
+    private var lightMask: ImageBitmap? = null
+
+    /** Soft round light (opaque centre fading out), punched out of the night layer. */
+    private fun lightBitmap(): ImageBitmap {
+        lightMask?.let { return it }
+        val n = 128
+        val img = ImageBitmap(n, n)
+        val c = androidx.compose.ui.graphics.Canvas(img)
+        val paint = androidx.compose.ui.graphics.Paint()
+        for (r in n / 2 downTo 1) { // concentric discs, more opaque towards the centre
+            paint.color = Color.Black.copy(alpha = (1f - r / (n / 2f)).coerceIn(0f, 1f) * 0.12f)
+            c.drawCircle(Offset(n / 2f, n / 2f), r.toFloat(), paint)
+        }
+        lightMask = img
+        return img
+    }
+
+    private fun DrawScope.drawWeather(g: Game, w: Float, h: Float) {
+        if (g.state != STATE_PLAY && g.transition <= 0f) return
+        when (World.theme(g.level)) {
+            World.TH_NIGHT -> {
+                val light = lightBitmap()
+                drawContext.canvas.saveLayer(androidx.compose.ui.geometry.Rect(0f, 0f, w, h), nightPaint)
+                drawRect(NIGHT)
+                fun hole(x: Float, y: Float, r: Float) {
+                    val sx = viewOx + x * scale; val sy = viewOy + y * scale; val rr = r * scale
+                    drawImage(light, IntOffset.Zero, IntSize(light.width, light.height), IntOffset((sx - rr).toInt(), (sy - rr).toInt()), IntSize((rr * 2).toInt(), (rr * 2).toInt()), blendMode = BlendMode.DstOut)
+                }
+                hole(g.kx, g.ky - 30f, 330f)
+                hole(World.CASTLE_X, World.CASTLE_Y - 40f, 420f)
+                for (t in g.towers) if (t.built) hole(t.x, t.y - 60f, 260f)
+                drawContext.canvas.restore()
+            }
+            World.TH_STORM, World.TH_FROST -> { // falling snow, stateless: positions from time
+                val t = g.time
+                for (i in 0 until 90) {
+                    val x = ((i * 97.3f + t * (40f + i % 7 * 12f)) % (w + 40f)) - 20f
+                    val y = ((i * 211.7f + t * (160f + i % 5 * 40f)) % (h + 40f)) - 20f
+                    circ(SNOW, x, y, 2f + (i % 3))
+                }
+            }
+        }
+    }
+    private val nightPaint = androidx.compose.ui.graphics.Paint()
 
     private fun padName(p: Pad, g: Game): String = if (p.kind == PAD_WALL && g.walls[p.ref].built) "Réparer le mur" else when (p.kind) {
         PAD_RECRUIT -> "Archer"
@@ -971,6 +1020,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.str(levelDoneLabel(g.level - 1)), w / 2f, h * 0.27f, 36f * u * pop, GOLD, a)
             label(text.str(STAR_LABELS[g.lastStars.coerceIn(0, 3)]), w / 2f, h * 0.27f + 128f * u, 30f * u * pop, GOLD, a)
             val newChapter = World.chapter(g.level) != World.chapter(g.level - 1) || g.level == World.LAST_LEVEL + 1
+            val themeTxt = World.THEME_TEXT[World.theme(g.level)]
+            if (themeTxt.isNotEmpty()) label(text.str(themeTxt), w / 2f, h * 0.27f + 160f * u, 14f * u, ALERT_RED, a)
             if (g.newUnlocks.isNotEmpty()) {
                 rr(HUD_BG, 30f * u, h * 0.27f + 96f * u, w - 60f * u, 30f * u, 15f * u)
                 label(text.str(newLabel(g.newUnlocks)), w / 2f, h * 0.27f + 111f * u, 13f * u, GOLD, a)
