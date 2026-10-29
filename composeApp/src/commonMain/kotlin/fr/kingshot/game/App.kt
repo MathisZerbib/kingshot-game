@@ -445,7 +445,7 @@ private fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, o
                 .border(3.dp, Color(0xFFD9443A), RoundedCornerShape(22.dp)).padding(22.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Label("LE DONJON EST TOMBÉ", Color(0xFFFF6A5A), 28, FontWeight.Black)
+            Label(if (game.kDead) "LE ROI EST TOMBÉ" else "LE DONJON EST TOMBÉ", Color(0xFFFF6A5A), 28, FontWeight.Black)
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Stat("Niveau", "${game.level}")

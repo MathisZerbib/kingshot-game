@@ -119,7 +119,9 @@ class Enemy {
     var bossType = 0 // 0 giant knight (wood age), 1 ogre (stone: hurls the king), 2 dark lord (royal: summons soldiers)
     var special = 0f // per-kind timer: archer reload, lord summon, wolf leap
     var elite = false // endless mode: double health and loot
+    var captain = false // aura: nearby enemies 25 % faster; kill him first
     var slam = 0f // ogre: > 0 while winding up a ground slam (seconds left)
+    var stun = 0f // ogre: seconds left winded after a slam (takes double damage)
     var mdx = 0f // last movement direction (shield bearers block arrows from the front)
     var mdy = 0f
     var atkCd = 0f
@@ -858,6 +860,8 @@ class Game {
     // ---------------------------------------------------------------- defeat: revive, retry, leave
 
     var revived = false // the one revive of this run is used
+    /** Coins the king can carry; more is lost, so hoarding does not pay. */
+    val carryCap get() = 250 + 75 * level + 100 * tal[TAL_START_COINS]
     var coinsCollected = 0
     private var checkpoint: String? = null // state at the start of the current level, for "retry"
     val reviveCost get() = max(10, coins / 2)
@@ -868,7 +872,8 @@ class Game {
         if (state != STATE_OVER || !canRevive) return
         coins -= reviveCost
         revived = true
-        castleHp = castleMaxHp * 0.5f
+        castleHp = max(castleHp, castleMaxHp * 0.5f)
+        if (kDead) { kDead = false; kHp = kMaxHp; kx = World.CASTLE_X - 150f; ky = World.CASTLE_Y + 70f }
         for (e in enemies) if (e.active && hypot(e.x - World.CASTLE_X, e.y - World.CASTLE_Y) < 520f) { e.active = false; burst(e.x, e.y, 20f, 8, 0xFFFFD84AL, 220f) }
         burst(World.CASTLE_X, World.CASTLE_Y, 60f, 60, 0xFFFFD84AL, 480f)
         shake = 10f
@@ -1233,7 +1238,8 @@ class Game {
         sway += (-kvx * 0.0016f - sway) * min(1f, dt * 6f)
 
         if (kHurtTimer > 0f) kHurtTimer -= dt
-        else if (kHp < kMaxHp) kHp = min(kMaxHp, kHp + dt * (if (unlocked[U_ALTAR]) 24f else 12f))
+        else if (kHp < kMaxHp && hypot(kx - World.CASTLE_X, ky - World.CASTLE_Y) < 320f) // heals only by the keep
+            kHp = min(kMaxHp, kHp + dt * (if (unlocked[U_ALTAR]) 24f else 12f))
 
         kFireCd -= dt
         if (kFireCd <= 0f) {
@@ -1554,8 +1560,9 @@ class Game {
         return n
     }
 
-    private fun hitEnemyRaw(i: Int, dmgIn: Float) {
+    private fun hitEnemyRaw(i: Int, dmgIn0: Float) {
         val e = enemies[i]
+        val dmgIn = if (e.stun > 0f) dmgIn0 * 2f else dmgIn0
         Audio.playVaried(Sfx.HIT_FLESH, 0.4f, 0.12f, rnd)
         val crit = rnd.nextFloat() < 0.12f
         val dmg = if (crit) dmgIn * 2f else dmgIn
@@ -1653,7 +1660,7 @@ class Game {
                     val step = (500f + c.vx) * dt
                     if (d <= step) {
                         c.active = false
-                        coins++
+                        if (coins < carryCap) coins++ // a full purse loses the extra: spend it!
                         coinsCollected++
                         pendCoins++
                         stackBump = 1f
@@ -1902,8 +1909,9 @@ class Game {
             flushProgress()
             saveGame()
             waveCleared = false
-            toSpawn = ((4 + wave * 5 / 2 + (level - 1) * 3) * DIFF_COUNT[diff]).toInt()
+            toSpawn = ((3 + wave * 2 + (level - 1) * 2) * 1.1f * DIFF_COUNT[diff]).toInt() // more demanding, not more numerous
             pickWaveRoads()
+            captainSpawned = false
             // boss on every 5th wave, and on the last wave of a level from level 5
             bossPending = wave % 5 == 0 || (goalWaves in 1..999 && levelWaves == goalWaves - 1)
             spawnTimer = 0.5f
@@ -1918,6 +1926,7 @@ class Game {
     }
 
     // roads this wave comes from: 1 then 2 at level 1, 2 at levels 2-3, 3 from level 4, 4 from level 8
+    private var captainSpawned = false
     private val waveRoads = IntArray(8)
     private var waveRoadCount = 1
     private fun pickWaveRoads() {
@@ -1971,11 +1980,11 @@ class Game {
         World.paths[e.path].sample(s, tmp)
         e.x = tmp.x + e.offX; e.y = tmp.y + e.offY
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
-        e.special = 0f; e.mdx = 0f; e.mdy = 0f
+        e.special = 0f; e.mdx = 0f; e.mdy = 0f; e.stun = 0f; e.slam = 0f
         e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
-        val hpScale = (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
+        val hpScale = (if (level <= 2) 0.85f else 1.2f) * (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
         when (kind) {
-            0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < (if (wave <= 3) 0.3f else 0.45f)) 2 else 1 }
+            0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.2f) 2 else 1 }
             KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
             KIND_WOLF -> { e.maxHp = 30f * hpScale; e.speed = 150f; e.dmg = 6f; e.radius = 14f; e.scale = 0.8f; e.coins = 1 + rnd.nextInt(2) }
             KIND_ARCHER -> { e.maxHp = 40f * hpScale; e.speed = 70f; e.dmg = 7f; e.radius = 15f; e.scale = 0.95f; e.coins = 3 }
@@ -1989,7 +1998,10 @@ class Game {
         if (kind == KIND_RAM) repeat(2) { k -> // escort
             spawnEnemy(KIND_SOLDIER, e.path, max(0f, s - 30f), e.x + (k * 2 - 1) * 40f, e.y + 20f)
         }
-        e.dmg *= (1f + 0.04f * wave) * DIFF_DMG[diff] // they hit harder as the waves climb
+        e.dmg *= (if (level <= 2) 1f else 1.3f) * (1f + 0.04f * wave) * DIFF_DMG[diff] // they hit harder as the waves climb
+        // from level 3 the first enemy of each wave is a captain: tougher, golden, speeds up those around him
+        e.captain = level >= 3 && kind != KIND_BOSS && !captainSpawned
+        if (e.captain) { captainSpawned = true; e.maxHp *= 3f; e.coins += 6 }
         e.hp = e.maxHp
         e.atkCd = 0.5f
         e.hitFlash = 0f
@@ -2025,8 +2037,13 @@ class Game {
                         burst(e.x, e.y, 10f, 40, 0xFF9DA3AAL, 420f)
                         if (!kDead && hypot(kx - e.x, ky - e.y) < OGRE_SLAM_R) damageKing(e.dmg * 2f)
                         for (w in walls) if (w.built && hypot(w.x - e.x, w.y - e.y) < OGRE_SLAM_R) { w.hp -= e.dmg * 2f; if (w.hp <= 0f) breakWall(w) }
+                        e.stun = 2f // winded after the slam: the window to hit it
                     }
                     continue // rooted while slamming
+                }
+                if (e.stun > 0f) {
+                    e.stun -= dt
+                    continue
                 }
                 e.special -= dt
                 if (e.special <= 0f && dk < 260f) { e.special = 4f; e.slam = 0.9f }
@@ -2090,7 +2107,8 @@ class Game {
             if (distToGoal > stopDist && d > 0.5f) {
                 val leap = e.kind == KIND_WOLF && target == 1 && dk < 140f
                 val th = World.theme(level)
-                val slow = if (th == World.TH_STORM) 0.85f else if (th == World.TH_FROST) 0.8f else 1f
+                var slow = if (th == World.TH_STORM) 0.85f else if (th == World.TH_FROST) 0.8f else 1f
+                for (c in enemies) if (c.active && c.captain && c !== e && hypot(c.x - e.x, c.y - e.y) < 220f) { slow *= 1.25f; break }
                 val step = min(e.speed * slow * (if (leap) 1.8f else 1f) * dt, d)
                 e.x += dx / d * step; e.y += dy / d * step
                 e.mdx = dx / d; e.mdy = dy / d
@@ -2194,6 +2212,7 @@ class Game {
         if (kHp <= 0f) {
             kDead = true
             kRespawn = 3f
+            if (diff >= 1 && level >= 3 && state == STATE_PLAY) { gameOver(); return } // levels 1-2 stay forgiving
             burst(kx, ky, 30f, 30, 0xFF2F5BD3L, 260f)
             // drop half of the coins, they can be picked up again
             val lost = coins / 2

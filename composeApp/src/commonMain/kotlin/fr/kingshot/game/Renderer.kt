@@ -90,6 +90,7 @@ private val HUD_BUTTON = Color(0xFF3B4A6B)
 private val WAVE_RED = Color(0xFFC8342B)
 private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
+private val CAPTAIN_AURA = Color(0x55FFC531)
 private const val WALL_SCALE = 1.45f // walls and gates drawn bigger than their footprint so they read at a glance
 private val TORCH = Color(0xFFFFD25A)
 private val TORCH_GLOW = Color(0x55FF9A2A)
@@ -895,14 +896,16 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private fun DrawScope.drawEnemy(e: Enemy, bigBoss: Boolean) {
         val sp = sprites ?: return
         val boss = e.kind == 2
-        val filter = if (e.hitFlash > 0f) flashFilter else if (e.elite) eliteTint else null
+        val filter = if (e.hitFlash > 0f) flashFilter else if (e.elite || e.captain) eliteTint else null
         if (boss && e.slam > 0f) { // red warning circle, filling up until the slam lands
             val k = 1f - e.slam / 0.9f
             drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R, e.y - OGRE_SLAM_R * 0.6f), Size(OGRE_SLAM_R * 2f, OGRE_SLAM_R * 1.2f), alpha = 0.18f + 0.25f * k)
             drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R * k, e.y - OGRE_SLAM_R * 0.6f * k), Size(OGRE_SLAM_R * 2f * k, OGRE_SLAM_R * 1.2f * k), alpha = 0.35f)
         }
         // new models are made at their own size: only knights (soldier/brute) and the wood-age boss use e.scale
-        val k = UNIT_SCALE * (if (e.kind == KIND_SOLDIER || e.kind == KIND_BRUTE) e.scale else 1f) * (if (boss && bigBoss) 1.15f else 1f)
+        val k = UNIT_SCALE * (if (e.kind == KIND_SOLDIER || e.kind == KIND_BRUTE) e.scale else 1f) * (if (boss && bigBoss) 1.15f else 1f) * (if (e.captain) 1.25f else 1f)
+        if (e.captain) circ(CAPTAIN_AURA, e.x, e.y, 46f) // aura ring under the captain
+        if (boss && e.stun > 0f) label(text.str("ÉTOURDI !"), e.x, e.y - 175f, 24f, GOLD) // world space: we are inside the camera transform
         enemySprite(sp, e.kind, e.bossType, e.walk, e.swing, e.dir, e.x, e.y, k, filter)
         if (boss || e.hp < e.maxHp) {
             val bw = if (boss) 110f else 34f * e.scale
