@@ -813,6 +813,42 @@ def king_atlas(name, build_rider):
     unit_atlas(name, 300, 300, 150, 268, 96, frames, KingRig())
 
 
+LEG_BONES = ["upperleg.l", "upperleg.r", "lowerleg.l", "lowerleg.r", "hips"]
+# ability "cast" pose per class: (candidate actions, fraction of the action)
+CAST = {
+    "warrior": (("2H_Melee_Attack_Spin", "1H_Melee_Attack_Slice_Diagonal", "1H_Melee_Attack_Chop"), 0.3),
+    "ranger": (("1H_Ranged_Aiming",), 0.0),
+    "builder": (("1H_Melee_Attack_Chop", "2H_Melee_Attack_Chop"), 0.12),
+}
+
+
+def cast_atlas(name, build_rider, actions, t):
+    """One 'cast' pose per direction (8 rows, 1 column): the seated rider plays an attack/aim action, legs kept in the saddle."""
+    clear_models()
+    hroot, c, pose = mounted(build_rider)
+    pose(0, False)
+    legs = c.capture(LEG_BONES)
+    action = None
+    for a in actions:
+        if any(x.name.split(".")[0] == a for x in bpy.data.actions):
+            action = a
+            break
+    if action is None:
+        raise RuntimeError("no cast action among %r" % (actions,))
+
+    class KingRig:
+        def face(self, d):
+            hroot.rotation_euler.z = d * math.pi / 4
+
+    def frame(_):
+        c.act(action)
+        c.at(t)
+        c.apply(legs)
+        bpy.context.view_layer.update()
+
+    unit_atlas(name, 300, 300, 150, 268, 96, [frame], KingRig())
+
+
 def portrait(name, build_rider, px=256):
     """Head-and-shoulders bust of the class hero, slightly turned, on a transparent background."""
     clear_models()
@@ -1207,6 +1243,7 @@ V4_NAMES = ("king_warrior", "king_ranger", "king_builder", "portrait_warrior", "
             "wall_wood", "wall_wood_v", "gate_wood_closed", "gate_wood_open", "gate_wood_closed_v", "gate_wood_open_v")
 SKIN_NAMES = tuple("%s_%s_%s" % (kind, cls, skin) for kind in ("king", "portrait") for cls in ("warrior", "ranger", "builder")
                    for skin in ("gold", "frost", "shadow"))
+CAST_NAMES = tuple("king_%s%s_cast" % (cls, sk) for cls in ("warrior", "ranger", "builder") for sk in ("", "_gold", "_frost", "_shadow"))
 
 
 def v4_sprites():
@@ -1216,7 +1253,11 @@ def v4_sprites():
     for cls, builder in (("warrior", build_king_warrior), ("ranger", build_king_ranger), ("builder", build_king_builder)):
         if want("portrait_" + cls):
             portrait("portrait_" + cls, builder)
+        if want("king_%s_cast" % cls):
+            cast_atlas("king_%s_cast" % cls, builder, *CAST[cls])
         for skin in SKINS:
+            if want("king_%s_%s_cast" % (cls, skin)):
+                cast_atlas("king_%s_%s_cast" % (cls, skin), lambda b=builder, sk=skin: b(sk), *CAST[cls])
             if want("king_%s_%s" % (cls, skin)):
                 king_atlas("king_%s_%s" % (cls, skin), lambda b=builder, sk=skin: b(sk))
             if want("portrait_%s_%s" % (cls, skin)):
@@ -1837,7 +1878,7 @@ if not os.environ.get("KINGSHOT_LIB"):  # render_ui.py imports this file as a li
         logo(os.path.join(TMP, "logo_fg.png"))
         sys.exit(0)
     all_sprites()
-    if ONLY is not None and any(n in ONLY for n in V4_NAMES + SKIN_NAMES):
+    if ONLY is not None and any(n in ONLY for n in V4_NAMES + SKIN_NAMES + CAST_NAMES):
         v4_sprites()
     if ONLY is not None and any(n in ONLY for n in V5_NAMES):
         v5_sprites()
