@@ -336,8 +336,8 @@ def build_materials():
     M["horse_brown"] = mat("horse_brown", (0.42, 0.22, 0.1), rough=0.65, sss=0.1)
     M["horse_grey"] = mat("horse_grey", (0.58, 0.58, 0.6), rough=0.65, sss=0.1)
     M["mane_dark"] = mat("mane_dark", (0.12, 0.08, 0.06), rough=0.8)
-    M["wolf"] = mat("wolf", (0.17, 0.15, 0.18), rough=0.9, sss=0.05)
-    M["wolf_dark"] = mat("wolf_dark", (0.08, 0.07, 0.09), rough=0.9)
+    M["wolf"] = mat("wolf", (0.075, 0.065, 0.085), rough=0.95, sss=0.02)
+    M["wolf_dark"] = mat("wolf_dark", (0.03, 0.025, 0.035), rough=0.95)
     M["eye_red"] = mat("eye_red", (0.9, 0.15, 0.05), rough=0.3, emit=(1.0, 0.2, 0.05), strength=1.5)
     M["iron"] = mat("iron", (0.3, 0.3, 0.33), rough=0.5, metal=1.0)
     M["club"] = noise_mat("club", (0.2, 0.11, 0.05), (0.32, 0.2, 0.09), scale=4.0, rough=0.75, bump=0.3)
@@ -1061,7 +1061,8 @@ def build_ballista():
 
 
 V5_NAMES = ("wolf", "enemy_archer", "shieldman", "ram", "ogre", "dark_lord", "lancer", "archer_elite",
-            "farm", "barracks", "ballista_top", "mine", "boulder")
+            "farm", "barracks", "ballista_top", "mine", "boulder",
+            "market", "blacksmith", "church", "stable", "watermill", "well", "lumbermill")
 
 
 def v5_sprites():
@@ -1134,6 +1135,18 @@ def v5_sprites():
             ("farm", "buildings/blue/building_windmill_blue.gltf", 2.6, 20, 2.6),
             ("barracks", "buildings/blue/building_tavern_blue.gltf", 2.7, 0, 2.0),
             ("mine", "buildings/blue/building_mine_blue.gltf", 2.6, 10, 1.6)):
+        if want(name):
+            clear_models()
+            prop(HEX + path, scale, rot_z=math.radians(rot))
+            static_sprite(name, 700, 64, center=(0, 0, h))
+    for name, path, scale, rot, h in (
+            ("market", "buildings/blue/building_market_blue.gltf", 2.6, 15, 1.8),
+            ("blacksmith", "buildings/blue/building_blacksmith_blue.gltf", 2.6, -10, 1.9),
+            ("church", "buildings/blue/building_church_blue.gltf", 2.5, 10, 2.6),
+            ("stable", "buildings/blue/building_home_B_blue.gltf", 2.6, 20, 1.8),
+            ("watermill", "buildings/blue/building_watermill_blue.gltf", 2.5, 0, 2.0),
+            ("well", "buildings/blue/building_well_blue.gltf", 2.4, 0, 1.2),
+            ("lumbermill", "buildings/blue/building_lumbermill_blue.gltf", 2.6, -15, 1.8)):
         if want(name):
             clear_models()
             prop(HEX + path, scale, rot_z=math.radians(rot))
@@ -1739,7 +1752,8 @@ def pack():
              "kingWarrior", "kingRanger", "kingBuilder", "portraitWarrior", "portraitRanger", "portraitBuilder",
              "wallWood", "wallWoodV", "gateWoodClosed", "gateWoodOpen", "gateWoodClosedV", "gateWoodOpenV",
              "wolf", "enemyArcher", "shieldman", "ram", "ogre", "darkLord", "lancer", "archerElite",
-             "farm", "barracks", "ballistaTop", "mine", "boulder"]
+             "farm", "barracks", "ballistaTop", "mine", "boulder",
+             "market", "blacksmith", "church", "stable", "watermill", "well", "lumbermill"]
     names = [n for n in order if n in existing] + [n for n in existing if n not in order]
     lines = [
         "package fr.kingshot.game",

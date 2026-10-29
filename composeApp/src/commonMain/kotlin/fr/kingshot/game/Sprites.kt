@@ -55,6 +55,26 @@ import fr.kingshot.game.resources.gate_wood_closed
 import fr.kingshot.game.resources.gate_wood_open
 import fr.kingshot.game.resources.gate_wood_closed_v
 import fr.kingshot.game.resources.gate_wood_open_v
+import fr.kingshot.game.resources.wolf
+import fr.kingshot.game.resources.enemy_archer
+import fr.kingshot.game.resources.shieldman
+import fr.kingshot.game.resources.ram
+import fr.kingshot.game.resources.ogre
+import fr.kingshot.game.resources.dark_lord
+import fr.kingshot.game.resources.lancer
+import fr.kingshot.game.resources.archer_elite
+import fr.kingshot.game.resources.farm
+import fr.kingshot.game.resources.barracks
+import fr.kingshot.game.resources.ballista_top
+import fr.kingshot.game.resources.mine
+import fr.kingshot.game.resources.boulder
+import fr.kingshot.game.resources.market
+import fr.kingshot.game.resources.blacksmith
+import fr.kingshot.game.resources.church
+import fr.kingshot.game.resources.stable
+import fr.kingshot.game.resources.watermill
+import fr.kingshot.game.resources.well
+import fr.kingshot.game.resources.lumbermill
 import org.jetbrains.compose.resources.imageResource
 
 /** Sprite atlases pre-rendered in Blender from the KayKit models (see art/blender/render_sprites.py). */
@@ -110,6 +130,26 @@ class Sprites(
     val gateWoodOpen: ImageBitmap,
     val gateWoodClosedV: ImageBitmap,
     val gateWoodOpenV: ImageBitmap,
+    val wolf: ImageBitmap,
+    val enemyArcher: ImageBitmap,
+    val shieldman: ImageBitmap,
+    val ram: ImageBitmap,
+    val ogre: ImageBitmap,
+    val darkLord: ImageBitmap,
+    val lancer: ImageBitmap,
+    val archerElite: ImageBitmap,
+    val farm: ImageBitmap,
+    val barracks: ImageBitmap,
+    val ballistaTop: ImageBitmap,
+    val mine: ImageBitmap,
+    val boulder: ImageBitmap,
+    val market: ImageBitmap,
+    val blacksmith: ImageBitmap,
+    val church: ImageBitmap,
+    val stable: ImageBitmap,
+    val watermill: ImageBitmap,
+    val well: ImageBitmap,
+    val lumbermill: ImageBitmap,
 )
 
 @Composable
@@ -165,7 +205,27 @@ fun rememberSprites(): Sprites {
     val gateWoodOpen = imageResource(Res.drawable.gate_wood_open)
     val gateWoodClosedV = imageResource(Res.drawable.gate_wood_closed_v)
     val gateWoodOpenV = imageResource(Res.drawable.gate_wood_open_v)
-    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV) {
-        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV)
+    val wolf = imageResource(Res.drawable.wolf)
+    val enemyArcher = imageResource(Res.drawable.enemy_archer)
+    val shieldman = imageResource(Res.drawable.shieldman)
+    val ram = imageResource(Res.drawable.ram)
+    val ogre = imageResource(Res.drawable.ogre)
+    val darkLord = imageResource(Res.drawable.dark_lord)
+    val lancer = imageResource(Res.drawable.lancer)
+    val archerElite = imageResource(Res.drawable.archer_elite)
+    val farm = imageResource(Res.drawable.farm)
+    val barracks = imageResource(Res.drawable.barracks)
+    val ballistaTop = imageResource(Res.drawable.ballista_top)
+    val mine = imageResource(Res.drawable.mine)
+    val boulder = imageResource(Res.drawable.boulder)
+    val market = imageResource(Res.drawable.market)
+    val blacksmith = imageResource(Res.drawable.blacksmith)
+    val church = imageResource(Res.drawable.church)
+    val stable = imageResource(Res.drawable.stable)
+    val watermill = imageResource(Res.drawable.watermill)
+    val well = imageResource(Res.drawable.well)
+    val lumbermill = imageResource(Res.drawable.lumbermill)
+    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV, wolf, enemyArcher, shieldman, ram, ogre, darkLord, lancer, archerElite, farm, barracks, ballistaTop, mine, boulder, market, blacksmith, church, stable, watermill, well, lumbermill) {
+        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV, wolf, enemyArcher, shieldman, ram, ogre, darkLord, lancer, archerElite, farm, barracks, ballistaTop, mine, boulder, market, blacksmith, church, stable, watermill, well, lumbermill)
     }
 }
