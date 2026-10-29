@@ -1,6 +1,14 @@
 package fr.kingshot.game
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.EaseOutBack
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -63,8 +71,6 @@ import org.jetbrains.compose.resources.painterResource
 // Menu screens built from the interface kit (art/ui/DA.md, mock-ups in art/ui/mockup.py).
 
 private val CLASS_ROLE = arrayOf("Corps à corps · très solide", "Tir rapide à longue portée", "Constructions -30 % · aimant")
-private val CLASS_ABILITY_SHORT = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
-private val CLASS_HP = intArrayOf(3, 1, 2)
 private val PORTRAITS = arrayOf(Res.drawable.portrait_warrior, Res.drawable.portrait_ranger, Res.drawable.portrait_builder)
 val CLASS_ICONS = arrayOf(Res.drawable.ui_icon_sword, Res.drawable.ui_icon_bow, Res.drawable.ui_icon_hammer)
 private val TALENT_ICONS = arrayOf(
@@ -80,8 +86,6 @@ fun MainMenu(
     onContinue: () -> Unit, onNew: () -> Unit, onSettings: () -> Unit, onMeta: (Int) -> Unit, onDaily: () -> Unit,
 ) {
     metaTick // re-read Meta after purchases
-    val float = rememberInfiniteTransition()
-    val bob by float.animateFloat(-4f, 4f, infiniteRepeatable(tween(1500), RepeatMode.Reverse))
     Box(Modifier.fillMaxSize()) {
         MenuBackground(picked)
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color(0x99000000), 0.22f to Color(0x00000000), 0.5f to Color(0x00000000), 1f to Color(0xCC000000))))
@@ -102,19 +106,24 @@ fun MainMenu(
                     }
                 }
             }
-            // logo
-            Column(Modifier.fillMaxWidth().offset(y = bob.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Image(painterResource(Res.drawable.ui_icon_crown), null, Modifier.size(40.dp))
-                Image(painterResource(Res.drawable.ui_logotype), "Kingshot", Modifier.fillMaxWidth(0.82f), contentScale = ContentScale.FillWidth)
-                GText("Défends ton royaume", 15, Pal.goldLight, title = true)
+            // logo: fixed, it frames the hero below
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(painterResource(Res.drawable.ui_logotype), "Kingshot", Modifier.fillMaxWidth(0.66f), contentScale = ContentScale.FillWidth)
             }
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) { Ribbon("Choisis ton héros", width = 290.dp) }
-            Spacer(Modifier.height(6.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                for (c in 0..2) HeroCard(c, c == picked, Modifier.weight(1f)) { onPick(c) }
-            }
-            Spacer(Modifier.height(12.dp))
+            // stage: the hero of the background art; swipe it to change hero
+            Box(
+                Modifier.fillMaxWidth().weight(1f).pointerInput(picked) {
+                    var dx = 0f
+                    detectHorizontalDragGestures(onDragEnd = {
+                        if (dx < -60f * density) onPick((picked + 1) % 3) else if (dx > 60f * density) onPick((picked + 2) % 3)
+                        dx = 0f
+                    }) { _, d -> dx += d }
+                },
+            )
+            HeroPicker(picked, onPick)
+            Spacer(Modifier.height(10.dp))
+            HeroPlate(picked, onPick)
+            Spacer(Modifier.height(14.dp))
             Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (hasSave) {
                     // a run exists: CONTINUER is the big button, a new game needs a second tap (it erases the run)
@@ -122,28 +131,25 @@ fun MainMenu(
                     LaunchedEffect(confirm) { if (confirm) { delay(3000); confirm = false } }
                     KitButton(
                         Res.drawable.ui_button_gold, "Continuer", "Niveau $savedLevel · ${World.levelName(savedLevel)}", Res.drawable.ui_icon_play,
-                        textColor = Pal.ink, onClick = onContinue,
+                        width = 300.dp, height = 70.dp, textColor = Pal.ink, onClick = onContinue,
                     )
                     KitButton(
-                        if (confirm) Res.drawable.ui_button_red else Res.drawable.ui_button_green,
+                        if (confirm) Res.drawable.ui_button_red else Res.drawable.ui_button_wood,
                         if (confirm) "Confirmer ?" else "Nouvelle partie",
                         if (confirm) "Efface la partie en cours" else "${CLASS_NAMES[picked]} · niveau 1",
-                        width = 220.dp, height = 52.dp,
+                        width = 230.dp, height = 50.dp,
                         onClick = { if (confirm) onNew() else confirm = true },
                     )
                 } else {
-                    KitButton(Res.drawable.ui_button_green, "Jouer", "${CLASS_NAMES[picked]} · nouvelle partie", Res.drawable.ui_icon_play, onClick = onNew)
+                    KitButton(Res.drawable.ui_button_green, "Jouer", "${CLASS_NAMES[picked]} · niveau 1", Res.drawable.ui_icon_play, width = 300.dp, height = 70.dp, onClick = onNew)
                 }
             }
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 val ready = (0 until Missions.SLOTS).count { Missions.done(it) }
                 MenuTab("Talents", Res.drawable.ui_icon_star, false, 0, Modifier.weight(1f)) { onMeta(0) }
                 MenuTab("Missions", Res.drawable.ui_icon_scroll, false, ready, Modifier.weight(1f)) { onMeta(1) }
                 MenuTab("Stats", Res.drawable.ui_icon_trophy, false, 0, Modifier.weight(1f)) { onMeta(2) }
-            }
-            if (best > 0) Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
-                GText("Record : vague $best · niveau ${maxOf(Stats.bestLevel, if (hasSave) savedLevel else 1)}", 12, Color(0xFFBFE8A8))
             }
         }
     }
@@ -184,38 +190,103 @@ private fun MenuBackground(picked: Int) {
     }
 }
 
+/** What each hero is, in the game's own numbers (Game.reset / update). */
+private val CLASS_HP_VAL = intArrayOf(300, 110, 160)
+private val CLASS_RANGE = arrayOf("Mêlée", "Longue", "Moyenne")
+private val CLASS_PERK = arrayOf("Frappe de zone", "Tir rapide", "Prix -30 %")
+private val CLASS_PERK_ICON = arrayOf(Res.drawable.ui_icon_shield, Res.drawable.ui_icon_hourglass, Res.drawable.ui_icon_coins)
+private val ABILITY_DESC = arrayOf(
+    "Dégâts et recul tout autour du roi",
+    "Une volée sur chaque ennemi à portée",
+    "Répare tous les murs et le donjon",
+)
+
+/** Three portraits: the picked one grows and glows; the others stay small and dim. */
 @Composable
-private fun HeroCard(c: Int, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
-    val sc = remember { Animatable(if (selected) 1.04f else 0.96f) }
-    val tilt = remember { Animatable(0f) }
-    val dim by animateFloatAsState(if (selected) 0f else 0.3f, tween(250))
-    LaunchedEffect(selected) {
-        if (!selected) { sc.animateTo(0.96f, tween(200)); return@LaunchedEffect }
-        if (sc.value >= 1.04f) return@LaunchedEffect // already picked at launch: no bounce
-        launch { sc.animateTo(1.08f, tween(110)); sc.animateTo(1.04f, tween(140, easing = EaseOutBack)) }
-        tilt.animateTo(6f, tween(75)); tilt.animateTo(-6f, tween(150)); tilt.animateTo(0f, tween(75))
-    }
-    val pulse = rememberInfiniteTransition().animateFloat(0.35f, 0.85f, infiniteRepeatable(tween(700), RepeatMode.Reverse))
-    Column(
-        modifier.graphicsLayer { scaleX = sc.value; scaleY = sc.value }
-            .drawWithContent { drawContent(); if (dim > 0f) drawRoundRect(Color.Black.copy(alpha = dim), cornerRadius = CornerRadius(10.dp.toPx())) }
-            .nine(Res.drawable.ui_card, IN_CARD, 0.3f)
-            .clickable { if (!selected) { Audio.play(Sfx.RECRUIT); Audio.haptic(Haptic.LIGHT) }; onClick() }
-            .padding(horizontal = 6.dp, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Box(Modifier.height(22.dp), contentAlignment = Alignment.Center) { GText(CLASS_NAMES[c], 12, Pal.goldLight, title = true) }
-        Spacer(Modifier.height(8.dp))
-        Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-            if (selected) Box(Modifier.size(66.dp).graphicsLayer { alpha = pulse.value }.clip(CircleShape).background(Color(0xAAFFD54A)))
-            Box(Modifier.size(60.dp).graphicsLayer { rotationZ = tilt.value }, contentAlignment = Alignment.Center) {
-                Image(painterResource(Res.drawable.ui_circle), null, Modifier.size(60.dp))
-                Image(painterResource(PORTRAITS[c]), null, Modifier.size(50.dp).clip(CircleShape))
+private fun HeroPicker(picked: Int, onPick: (Int) -> Unit) {
+    val pulse = rememberInfiniteTransition().animateFloat(0.45f, 0.9f, infiniteRepeatable(tween(900), RepeatMode.Reverse))
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        for (c in 0..2) {
+            val on = c == picked
+            val sc by animateFloatAsState(if (on) 1f else 0.78f, tween(260, easing = EaseOutBack))
+            val dim by animateFloatAsState(if (on) 0f else 0.45f, tween(260))
+            Box(
+                Modifier.padding(horizontal = 6.dp).size(64.dp).graphicsLayer { scaleX = sc; scaleY = sc }
+                    .clickable { if (!on) { Audio.play(Sfx.RECRUIT); Audio.haptic(Haptic.LIGHT); onPick(c) } },
+                contentAlignment = Alignment.Center,
+            ) {
+                if (on) Box(Modifier.size(64.dp).graphicsLayer { alpha = pulse.value }.clip(CircleShape).background(Color(0x99FFD54A)))
+                Image(painterResource(Res.drawable.ui_circle), null, Modifier.size(58.dp))
+                Image(painterResource(PORTRAITS[c]), CLASS_NAMES[c], Modifier.size(48.dp).clip(CircleShape)
+                    .drawWithContent { drawContent(); if (dim > 0f) drawCircle(Color.Black.copy(alpha = dim)) })
             }
         }
-        Row { for (k in 0 until 3) KitIcon(Res.drawable.ui_icon_heart, 14.dp, grey = k >= CLASS_HP[c]) }
-        GText(CLASS_ROLE[c], 9, Pal.ink, shadow = false)
-        GText(CLASS_ABILITY_SHORT[c], 10, Color(0xFF8A4A12), weight = FontWeight.Black, shadow = false)
+    }
+}
+
+/** Dark plate: name and role between arrows, three facts, then the ability. Slides in the swipe direction. */
+@Composable
+private fun HeroPlate(picked: Int, onPick: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().nine(Res.drawable.ui_panel_dark, IN_PANEL, 0.3f).padding(horizontal = 10.dp, vertical = 12.dp)) {
+        AnimatedContent(picked, transitionSpec = {
+            val fwd = (targetState - initialState + 3) % 3 == 1
+            (slideInHorizontally(tween(320, easing = FastOutSlowInEasing)) { if (fwd) it / 3 else -it / 3 } + fadeIn(tween(220))) togetherWith
+                (slideOutHorizontally(tween(220)) { if (fwd) -it / 3 else it / 3 } + fadeOut(tween(160)))
+        }) { c ->
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    ArrowButton(left = true) { onPick((c + 2) % 3) }
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        GText(CLASS_NAMES[c], 30, Pal.goldLight, title = true)
+                        GText(CLASS_ROLE[c], 14, Color(0xFFE9E2CF), weight = FontWeight.Bold)
+                    }
+                    ArrowButton(left = false) { onPick((c + 1) % 3) }
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Fact(Res.drawable.ui_icon_heart, "${CLASS_HP_VAL[c]}", "Vie", Modifier.weight(1f))
+                    Fact(CLASS_ICONS[c], CLASS_RANGE[c], "Portée", Modifier.weight(1f))
+                    Fact(CLASS_PERK_ICON[c], CLASS_PERK[c], "Atout", Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(Modifier.fillMaxWidth().padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+                        Image(painterResource(Res.drawable.ui_circle_red), null, Modifier.size(52.dp))
+                        Image(painterResource(CLASS_ICONS[c]), null, Modifier.size(28.dp))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        GText(ABILITY_NAMES[c], 17, Pal.goldLight, title = true, align = TextAlign.Start)
+                        GText(ABILITY_DESC[c], 13, Color(0xFFE9E2CF), weight = FontWeight.Bold, align = TextAlign.Start)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ArrowButton(left: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.size(48.dp).clickable { Audio.play(Sfx.CLICK); onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(painterResource(Res.drawable.ui_icon_arrow), if (left) "Héros précédent" else "Héros suivant",
+            Modifier.size(34.dp).graphicsLayer { rotationZ = if (left) 180f else 0f })
+    }
+}
+
+/** One fact about the hero: icon, value, small label under it. */
+@Composable
+private fun Fact(icon: DrawableResource, value: String, label: String, modifier: Modifier) {
+    Column(
+        modifier.background(Color(0x33000000), androidx.compose.foundation.shape.RoundedCornerShape(10.dp)).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Image(painterResource(icon), null, Modifier.size(24.dp))
+        Spacer(Modifier.height(2.dp))
+        GText(value, 14, Color.White)
+        GText(label, 11, Color(0xFFBFB59A), weight = FontWeight.Bold, shadow = false)
     }
 }
 
