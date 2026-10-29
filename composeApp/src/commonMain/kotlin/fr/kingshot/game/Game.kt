@@ -24,6 +24,12 @@ const val PAD_TOWER_ARCHER = 4
 const val START_SQUAD = 2
 const val TRANSITION_TIME = 4.2f
 const val PAD_WALL = 5
+const val PAD_FARM = 6 // +1 coin every 2 s, dropped next to the farm
+const val PAD_BARRACKS = 7 // 3 lancers holding the gate under attack
+const val PAD_MINE = 8 // doubles enemy coin drops
+const val PAD_BALLISTA = 9 // on a full tower: piercing bolt every 2 s
+const val PAD_ELITE = 10 // on a full tower: its 3 archers fuse into elites (x2.5 damage)
+const val LANCERS = 3
 
 const val MAX_SQUAD = 30
 
@@ -216,6 +222,12 @@ class Tower(val x: Float, val y: Float) {
     val dir = IntArray(TOWER_SLOTS)
     val shoot = FloatArray(TOWER_SLOTS)
     var bump = 0f
+    var ballista = false
+    var ballistaCd = 0f
+    var boltT = 0f // > 0 while the last bolt's streak is visible
+    var boltX = 0f
+    var boltY = 0f
+    var elite = false
 }
 
 class Wall(val path: Int, val s: Float) {
@@ -362,6 +374,18 @@ class Game {
     lateinit var recruitPad: Pad
     lateinit var forgePad: Pad
     lateinit var repairPad: Pad
+    lateinit var farmPad: Pad
+    lateinit var barracksPad: Pad
+    lateinit var minePad: Pad
+    var farm = false
+    private var farmTimer = 0f
+    var barracks = false
+    var mine = false
+    val lx = FloatArray(LANCERS)
+    val ly = FloatArray(LANCERS)
+    val lDir = IntArray(LANCERS)
+    val lSwing = FloatArray(LANCERS)
+    private val lCd = FloatArray(LANCERS)
 
     // Waves
     var wave = 0
@@ -447,6 +471,9 @@ class Game {
             val t = towers[i]
             pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = price(25); it.visible = !t.built })
             pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = t.built && t.archers < TOWER_SLOTS })
+            // once full, the same spot offers the ballista, then the elite fusion
+            pads.add(Pad(PAD_BALLISTA, t.x, t.y + 125f, i).also { it.cost = price(70); it.visible = t.built && t.archers >= TOWER_SLOTS && !t.ballista })
+            pads.add(Pad(PAD_ELITE, t.x, t.y + 125f, i).also { it.cost = price(90); it.visible = t.built && t.archers >= TOWER_SLOTS && t.ballista && !t.elite })
         }
         for (i in fromWall until walls.size) {
             val w = walls[i]
@@ -508,8 +535,12 @@ class Game {
         recruitPad = Pad(PAD_RECRUIT, 720f, 1600f).also { it.level = squad; it.cost = recruitCost(squad) }
         forgePad = Pad(PAD_FORGE, 560f, 1640f).also { it.cost = forgeCost(0); it.visible = false }
         repairPad = Pad(PAD_REPAIR, 1170f, 1800f).also { it.cost = price(15); it.visible = false }
+        farmPad = Pad(PAD_FARM, World.FARM_X, World.FARM_Y).also { it.cost = price(30) }
+        barracksPad = Pad(PAD_BARRACKS, World.BARRACKS_X, World.BARRACKS_Y).also { it.cost = price(60); it.visible = false }
+        minePad = Pad(PAD_MINE, World.MINE_X, World.MINE_Y).also { it.cost = price(150); it.visible = false }
+        farm = false; barracks = false; mine = false; farmTimer = 0f
         pads.clear()
-        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad)
+        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad); pads.add(farmPad); pads.add(barracksPad); pads.add(minePad)
         addMapPads(0, 0)
     }
 
@@ -620,6 +651,7 @@ class Game {
         for (t in towers) if (t.built) t.bump = 1f
         recruitPad.cost = recruitCost(recruitPad.level)
         forgePad.cost = forgeCost(forgePad.level)
+        if (!mine) minePad.visible = true
         checkpoint = saveString()
         Storage.saveGame(checkpoint)
         kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
@@ -813,6 +845,8 @@ class Game {
         sb.append(";")
         for (w in walls) sb.append(if (w.built) w.hp else -1f).append(",")
         sb.append(";").append(heroClass)
+        sb.append(";").append(if (farm) 1 else 0).append(if (barracks) 1 else 0).append(if (mine) 1 else 0).append(";")
+        for (t in towers) sb.append(if (t.elite) 2 else if (t.ballista) 1 else 0)
         return sb.toString()
     }
 
@@ -848,6 +882,17 @@ class Game {
                 PAD_TOWER -> p.visible = !towers[p.ref].built
                 PAD_TOWER_ARCHER -> p.visible = towers[p.ref].built && towers[p.ref].archers < TOWER_SLOTS
                 PAD_WALL -> p.visible = !walls[p.ref].built
+                else -> {}
+            }
+            val b = f.getOrNull(15) ?: ""
+            farm = b.getOrNull(0) == '1'; barracks = b.getOrNull(1) == '1'; mine = b.getOrNull(2) == '1'
+            val tf = f.getOrNull(16) ?: ""
+            for (i in towers.indices) { val c = tf.getOrNull(i) ?: '0'; towers[i].ballista = c >= '1'; towers[i].elite = c == '2' }
+            farmPad.visible = !farm; barracksPad.visible = farm && !barracks; minePad.visible = level >= 2 && !mine
+            if (barracks) for (k in 0 until LANCERS) { lx[k] = World.BARRACKS_X + (k - 1) * 30f; ly[k] = World.BARRACKS_Y }
+            for (p in pads) when (p.kind) {
+                PAD_BALLISTA -> p.visible = towers[p.ref].built && towers[p.ref].archers >= TOWER_SLOTS && !towers[p.ref].ballista
+                PAD_ELITE -> p.visible = towers[p.ref].ballista && !towers[p.ref].elite
             }
             for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
             waveBreak = 5f
@@ -903,6 +948,7 @@ class Game {
             updateWaves(dt)
             updateEnemies(dt)
             updateTowers(dt)
+            updateBuildings(dt)
             updatePads(dt)
             if (abilityCd > 0f) abilityCd -= dt
             if (abilityFlash > 0f) abilityFlash -= dt
@@ -1126,7 +1172,7 @@ class Game {
                     val ox = t.x + (a - 1) * 20f
                     val target = nearestEnemy(ox, t.y, if (age >= 2) 456f else 380f)
                     if (target >= 0) {
-                        fire(ox, t.y, 128f, target, 26f * dmgMult * (if (age >= 3) 1.5f else 1f))
+                        fire(ox, t.y, 128f, target, 26f * dmgMult * (if (age >= 3) 1.5f else 1f) * (if (t.elite) 2.5f else 1f))
                         Audio.playVaried(Sfx.SHOOT, 0.35f, 0.1f, rnd)
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
@@ -1135,6 +1181,86 @@ class Game {
                     } else t.cd[a] = 0.1f
                 }
             }
+        }
+    }
+
+    private fun updateBuildings(dt: Float) {
+        if (farm) {
+            farmTimer += dt
+            if (farmTimer >= 2f) { farmTimer -= 2f; dropCoin(World.FARM_X + 40f, World.FARM_Y + 10f) }
+        }
+        if (barracks) updateLancers(dt)
+        for (t in towers) {
+            if (t.boltT > 0f) t.boltT -= dt
+            if (!t.built || !t.ballista) continue
+            t.ballistaCd -= dt
+            if (t.ballistaCd > 0f) continue
+            val target = nearestEnemy(t.x, t.y, 540f)
+            if (target < 0) { t.ballistaCd = 0.2f; continue }
+            t.ballistaCd = 2f
+            // piercing bolt: the first 3 enemies along the line
+            val e0 = enemies[target]
+            val dx = e0.x - t.x
+            val dy = e0.y - t.y
+            val d = hypot(dx, dy).coerceAtLeast(1f)
+            val ux = dx / d
+            val uy = dy / d
+            var pierced = 0
+            for (i in enemies.indices) {
+                val e = enemies[i]
+                if (!e.active || pierced >= 3) continue
+                val rx = e.x - t.x
+                val ry = e.y - t.y
+                val along = rx * ux + ry * uy
+                if (along < 0f || along > 560f || abs(rx * uy - ry * ux) > 30f + e.radius) continue
+                hitEnemy(i, 90f * dmgMult)
+                pierced++
+            }
+            t.boltT = 0.18f; t.boltX = t.x + ux * 560f; t.boltY = t.y + uy * 560f
+            Audio.play(Sfx.SHOOT, 0.9f, 0.6f)
+        }
+    }
+
+    /** Lancers hold the line just inside the wall closest to an enemy (or in front of the keep). */
+    private fun updateLancers(dt: Float) {
+        var gx = World.CASTLE_X
+        var gy = World.CASTLE_Y + 120f
+        var best = Float.MAX_VALUE
+        for (w in walls) {
+            if (!w.built) continue
+            for (e in enemies) {
+                if (!e.active) continue
+                val d = hypot(e.x - w.x, e.y - w.y)
+                if (d < best && d < 600f) {
+                    best = d
+                    // a step inside the wall, towards the keep
+                    val cx = World.CASTLE_X - w.x
+                    val cy = World.CASTLE_Y - w.y
+                    val cl = hypot(cx, cy).coerceAtLeast(1f)
+                    gx = w.x + cx / cl * 50f; gy = w.y + cy / cl * 50f
+                }
+            }
+        }
+        for (k in 0 until LANCERS) {
+            val tx = gx + (k - 1) * 34f
+            val ty = gy + (k % 2) * 14f
+            val dx = tx - lx[k]
+            val dy = ty - ly[k]
+            val d = hypot(dx, dy)
+            if (d > 4f) {
+                val step = min(170f * dt, d)
+                lx[k] += dx / d * step; ly[k] += dy / d * step
+                lDir[k] = dirIndex(dx, dy)
+            }
+            if (lSwing[k] > 0f) lSwing[k] -= dt * 3f
+            lCd[k] -= dt
+            if (lCd[k] > 0f) continue
+            val t = nearestEnemy(lx[k], ly[k], 100f)
+            if (t < 0) { lCd[k] = 0.15f; continue }
+            lDir[k] = dirIndex(enemies[t].x - lx[k], enemies[t].y - ly[k])
+            lSwing[k] = 1f
+            hitEnemy(t, 32f * dmgMult)
+            lCd[k] = 0.7f
         }
     }
 
@@ -1241,8 +1367,8 @@ class Game {
         if (e.kind == 2) { slowMo = 0.8f; Audio.haptic(Haptic.HEAVY) } // boss down: brief slow motion
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
-        if (e.kind == 2) { rainLeft += e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
-        else repeat(e.coins) { dropCoin(e.x, e.y) }
+        if (e.kind == 2) { rainLeft += if (mine) e.coins * 2 else e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
+        else repeat(if (mine) e.coins * 2 else e.coins) { dropCoin(e.x, e.y) }
         if (e.kind == 2) shake = 14f
     }
 
@@ -1428,9 +1554,42 @@ class Game {
                 if (t.archers < TOWER_SLOTS) t.archers++
                 t.bump = 0.6f
                 p.level++
-                if (t.archers >= TOWER_SLOTS) p.visible = false
+                if (t.archers >= TOWER_SLOTS) {
+                    p.visible = false
+                    pads.firstOrNull { it.kind == PAD_BALLISTA && it.ref == p.ref }?.visible = true
+                }
                 burst(t.x, t.y, 120f, 14, 0xFF6FB7FFL, 180f)
                 if (levelDone()) levelUpPending = true
+            }
+            PAD_FARM -> {
+                Audio.play(Sfx.BUILD)
+                farm = true; p.visible = false
+                barracksPad.visible = true
+                burst(p.x, p.y, 20f, 26, 0xFF9EE37DL, 260f)
+            }
+            PAD_BARRACKS -> {
+                Audio.play(Sfx.RECRUIT)
+                barracks = true; p.visible = false
+                for (k in 0 until LANCERS) { lx[k] = p.x + (k - 1) * 30f; ly[k] = p.y; lCd[k] = 0f }
+                burst(p.x, p.y, 20f, 26, 0xFF6FB7FFL, 260f)
+            }
+            PAD_MINE -> {
+                Audio.play(Sfx.FORGE)
+                mine = true; p.visible = false
+                burst(p.x, p.y, 20f, 40, 0xFFFFD84AL, 320f)
+            }
+            PAD_BALLISTA -> {
+                Audio.play(Sfx.FORGE)
+                val t = towers[p.ref]
+                t.ballista = true; t.bump = 1f; p.visible = false
+                pads.firstOrNull { it.kind == PAD_ELITE && it.ref == p.ref }?.visible = true
+                burst(t.x, t.y, 100f, 24, 0xFFA4683AL, 260f)
+            }
+            PAD_ELITE -> {
+                Audio.play(Sfx.LEVEL_UP, 0.8f)
+                val t = towers[p.ref]
+                t.elite = true; t.bump = 1f; p.visible = false
+                burst(t.x, t.y, 120f, 30, 0xFFFFD84AL, 300f)
             }
             PAD_WALL -> {
                 Audio.play(Sfx.BUILD)

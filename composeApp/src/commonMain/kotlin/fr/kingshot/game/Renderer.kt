@@ -51,6 +51,8 @@ private const val K_COIN = 9
 private const val K_PROP = 10
 private const val K_RING = 11
 private const val K_CORPSE = 12
+private const val K_BUILDING = 13 // idx 0 farm, 1 barracks, 2 mine
+private const val K_LANCER = 14
 
 // One palette per level, cycling: spring, autumn, winter (grass, dark patch, light patch, cliff top, cliff top light)
 private val SEASONS = arrayOf(
@@ -353,6 +355,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         PAD_REPAIR -> "Réparer le donjon"
         PAD_TOWER -> "Tour"
         PAD_TOWER_ARCHER -> "1 archer → tour"
+        PAD_FARM -> "Ferme  +or"
+        PAD_BARRACKS -> "Caserne  3 lanciers"
+        PAD_MINE -> "Mine  butin x2"
+        PAD_BALLISTA -> "Baliste"
+        PAD_ELITE -> "Archers d'élite"
         else -> "Palissade"
     }
 
@@ -534,6 +541,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val ringStride = if (g.age >= 2) 2 else 1
         for (k in 0 until g.ringCount) if (k % ringStride == 0 && vis(g.ringX[k], g.ringY[k])) n = push(n, g.ringY[k], K_RING, k)
         n = push(n, World.HOUSE_Y, K_HOUSE, 0)
+        if (g.farm) n = push(n, World.FARM_Y, K_BUILDING, 0)
+        if (g.barracks) {
+            n = push(n, World.BARRACKS_Y, K_BUILDING, 1)
+            for (k in 0 until LANCERS) if (vis(g.lx[k], g.ly[k])) n = push(n, g.ly[k], K_LANCER, k)
+        }
+        if (g.mine) n = push(n, World.MINE_Y, K_BUILDING, 2)
         n = push(n, World.CASTLE_Y, K_CASTLE, 0)
         for (k in g.towers.indices) if (g.towers[k].built) n = push(n, g.towers[k].y, K_TOWER, k)
         for (k in g.walls.indices) if (g.walls[k].built) n = push(n, g.walls[k].y, K_WALL, k)
@@ -558,6 +571,14 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_WALL -> drawWall(g.walls[idx], g.age)
                 K_ENEMY -> drawEnemy(g.enemies[idx])
                 K_CORPSE -> drawCorpse(g.corpses[idx])
+                K_BUILDING -> drawBuilding(idx)
+                K_LANCER -> {
+                    val sp = sprites
+                    if (sp != null) {
+                        val col = if (g.lSwing[idx] > 0f) 7 + ((1f - g.lSwing[idx]) * 3f).toInt().coerceIn(0, 2) else 0
+                        sprite(sp.archer, SpriteData.archer, col, g.lDir[idx], g.lx[idx], g.ly[idx], UNIT_SCALE * 1.05f, lancerTint)
+                    }
+                }
                 K_ARCHER -> drawArcher(g, idx)
                 K_KING -> drawKing(g)
                 K_COIN -> drawGroundCoin(g.coinsOnGround[idx])
@@ -627,6 +648,29 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
     }
 
+    // placeholder looks for the new buildings until their own models land
+    private val farmTint = ColorFilter.tint(Color(0x6670C040), BlendMode.SrcAtop)
+    private val barracksTint = ColorFilter.tint(Color(0x66C04040), BlendMode.SrcAtop)
+    private val lancerTint = ColorFilter.tint(Color(0x884060D0), BlendMode.SrcAtop)
+    private val eliteTint = ColorFilter.tint(Color(0x88FFD84A), BlendMode.SrcAtop)
+
+    private fun DrawScope.drawBuilding(idx: Int) {
+        val sp = sprites ?: return
+        when (idx) {
+            0 -> {
+                sprite(sp.house, SpriteData.house, 0, 0, World.FARM_X, World.FARM_Y - 20f, 0.7f, farmTint)
+                for (k in 0 until 4) sprite(sp.tuft0, SpriteData.tuft0, 0, 0, World.FARM_X - 60f + k * 34f, World.FARM_Y + 40f, 1.3f) // crops
+            }
+            1 -> sprite(sp.house, SpriteData.house, 0, 0, World.BARRACKS_X, World.BARRACKS_Y - 20f, 0.8f, barracksTint)
+            else -> {
+                sprite(sp.rock1, SpriteData.rock1, 0, 0, World.MINE_X, World.MINE_Y, 2.4f)
+                sprite(sp.rock0, SpriteData.rock0, 0, 0, World.MINE_X + 40f, World.MINE_Y + 10f, 1.6f)
+                drawCoinIcon(World.MINE_X - 10f, World.MINE_Y - 34f, 12f) // gold vein
+                drawCoinIcon(World.MINE_X + 18f, World.MINE_Y - 22f, 9f)
+            }
+        }
+    }
+
     private fun DrawScope.drawProp(x: Float, y: Float, kind: Float) {
         val sp = sprites ?: return
         when (kind) {
@@ -664,8 +708,13 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val top = t.y - (if (age >= 3) 96f else 80f) * b
         for (a in 0 until t.archers) {
             val col = if (t.shoot[a] > 0f) 7 + ((0.32f - t.shoot[a]) / 0.32f * 3f).toInt().coerceIn(0, 2) else 0
-            sprite(sp.archer, SpriteData.archer, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE)
+            sprite(sp.archer, SpriteData.archer, col, t.dir[a], t.x + (a - 1) * 24f, top + (a % 2) * 8f, UNIT_SCALE, if (t.elite) eliteTint else null)
         }
+        if (t.ballista) { // crossbow on the platform (placeholder)
+            line(PLANK_DARK, t.x - 30f, top - 30f, t.x + 30f, top - 30f, 7f)
+            line(PLANK, t.x, top - 44f, t.x, top - 12f, 6f)
+        }
+        if (t.boltT > 0f) line(WHITE, t.x, top - 30f, t.boltX, t.boltY - 30f, 5f * (t.boltT / 0.18f))
     }
 
     private fun DrawScope.drawWall(w: Wall, age: Int) {

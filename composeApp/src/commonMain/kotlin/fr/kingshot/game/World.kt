@@ -72,6 +72,14 @@ object World {
     const val HOUSE_X = 690f
     const val HOUSE_Y = 1440f
 
+    // base buildings (pads), chosen clear of every road of every level and of the enclosure
+    const val FARM_X = 470f
+    const val FARM_Y = 1560f
+    const val BARRACKS_X = 800f
+    const val BARRACKS_Y = 1900f
+    const val MINE_X = 1300f
+    const val MINE_Y = 1800f
+
     const val KING_START_X = 820f
     const val KING_START_Y = 1720f
 
@@ -338,7 +346,7 @@ object World {
             1200f, 1705f, PROP_CRATE, 1228f, 1690f, PROP_BARREL, 860f, 1850f, PROP_LUMBER, 1250f, 1960f, PROP_TENT,
             880f, 1560f, PROP_BARREL,
         )
-        val pads = floatArrayOf(720f, 1600f, 560f, 1640f, 1170f, 1800f, KING_START_X, KING_START_Y)
+        val pads = floatArrayOf(720f, 1600f, 560f, 1640f, 1170f, 1800f, KING_START_X, KING_START_Y, FARM_X, FARM_Y, BARRACKS_X, BARRACKS_Y, MINE_X, MINE_Y)
         var j = 0
         while (j < camp.size) {
             val x = camp[j]; val y = camp[j + 1]
