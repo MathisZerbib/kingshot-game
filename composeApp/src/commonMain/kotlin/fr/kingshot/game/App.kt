@@ -272,7 +272,7 @@ private fun MainMenu(
             }
             if (best > 0) {
                 Spacer(Modifier.height(10.dp))
-                Label("Record : vague $best · niveau ${Stats.bestLevel}", Color(0xFF9EE37D), 14, FontWeight.Bold)
+                Label("Record : vague $best · niveau ${maxOf(Stats.bestLevel, if (hasSave) savedLevel else 1)}", Color(0xFF9EE37D), 14, FontWeight.Bold)
             }
         }
     }

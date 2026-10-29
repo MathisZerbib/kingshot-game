@@ -898,6 +898,7 @@ class Game {
             heroClass = f.getOrNull(14)?.toIntOrNull()?.coerceIn(0, 2) ?: CLASS_WARRIOR
             reset()
             level = f[1].toInt()
+            if (level > Stats.bestLevel) Storage.saveInt("st_best_level", level) // games saved before the stats existed
             World.load(level)
             buildMap()
             addMapPads(3, 3)
