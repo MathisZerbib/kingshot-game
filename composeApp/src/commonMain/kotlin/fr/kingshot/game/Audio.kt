@@ -92,7 +92,7 @@ expect class AudioEngine() {
  */
 object Audio {
     /** Discreet mix on by default: fewer, quieter effects and the music in the background. */
-    var discreet = true
+    val discreet: Boolean get() = !Prefs.sfxFull
     const val COMBAT_BUDGET = 3
     private const val MASTER_SFX = 0.8f
     private const val MUSIC_DISCREET = 0.42f

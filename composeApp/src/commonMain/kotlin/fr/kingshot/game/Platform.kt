@@ -18,6 +18,10 @@ object Prefs {
     var musicOff: Boolean
         get() = Storage.loadInt("music_off") == 1
         set(v) = Storage.saveInt("music_off", if (v) 1 else 0)
+    /** Full sound mix; default (0) is the discreet mix. */
+    var sfxFull: Boolean
+        get() = Storage.loadInt("sfx_full") == 1
+        set(v) = Storage.saveInt("sfx_full", if (v) 1 else 0)
     var vibrationOff: Boolean
         get() = Storage.loadInt("vib_off") == 1
         set(v) = Storage.saveInt("vib_off", if (v) 1 else 0)

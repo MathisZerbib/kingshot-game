@@ -28,6 +28,7 @@ actual class AudioEngine actual constructor() {
     private var track = Music.NONE
     private var sfxVol = 1f
     private var musicVol = 1f
+    private val handler = android.os.Handler(android.os.Looper.getMainLooper())
     private var pausedByApp = false
 
     private fun cacheFile(name: String, data: ByteArray): File? {
@@ -72,7 +73,9 @@ actual class AudioEngine actual constructor() {
                         .build(),
                 )
                 setDataSource(f.path)
-                isLooping = true
+                // battle music breathes: 20 s of silence between loops (menu and boss keep looping)
+                isLooping = track != Music.BATTLE
+                setOnCompletionListener { mp -> handler.postDelayed({ if (player === mp && !pausedByApp) runCatching { mp.start() } }, 20_000) }
                 setVolume(musicVol, musicVol)
                 prepare()
                 if (!pausedByApp) start()

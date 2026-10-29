@@ -174,6 +174,7 @@ fun PausePanel(game: Game, onResume: () -> Unit, onSettings: () -> Unit, onMenu:
         KitButton(Res.drawable.ui_button_blue, "Réglages", icon = Res.drawable.ui_icon_gear, width = 220.dp, height = 52.dp, onClick = onSettings)
         KitButton(Res.drawable.ui_button_wood, "Menu principal", icon = Res.drawable.ui_icon_flag, width = 220.dp, height = 52.dp, onClick = onMenu)
         KitToggle("Sons", !Prefs.sfxOff, dark = true) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
+        KitToggle("Sons complets", Prefs.sfxFull, dark = true) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
         KitToggle("Musique", !Prefs.musicOff, dark = true) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
         KitToggle("Vibrations", !Prefs.vibrationOff, dark = true) { Prefs.vibrationOff = !it; tick++ }
     }
@@ -186,6 +187,7 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
     tick
     KitPanel("Réglages", onDismiss = onClose) {
         KitToggle("Sons", !Prefs.sfxOff) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
+        KitToggle("Sons complets", Prefs.sfxFull) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
         KitToggle("Musique", !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
         KitToggle("Vibrations", !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
         KitToggle("Fluidité max (sinon 60 Hz)", !Prefs.cap60) { Prefs.cap60 = !it; tick++ }

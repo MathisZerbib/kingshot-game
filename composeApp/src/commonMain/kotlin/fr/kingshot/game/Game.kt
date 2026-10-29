@@ -1728,7 +1728,7 @@ class Game {
                         if (!c.auto) {
                             coinCombo = if (time - lastCoinTime < 0.6f) coinCombo + 1 else 0
                             lastCoinTime = time
-                            Audio.play(Sfx.COIN, 0.5f, 0.9f + min(coinCombo, 15) * 0.025f) // Audio drops repeats within 0.12 s
+                            if (!Audio.discreet) Audio.play(Sfx.COIN, 0.5f, 0.9f + min(coinCombo, 15) * 0.025f) // discreet mix: coins are silent
                             if (coins % 10 == 0) Audio.haptic(Haptic.LIGHT)
                         }
                     } else {
