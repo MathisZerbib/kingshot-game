@@ -157,7 +157,20 @@ class FloatText {
     var value = 0
     var life = 0f
     var big = false
+    var kind = 0 // 0 normal hit (white), 1 critical (yellow), 2 damage taken by the king (red)
 }
+
+/** A fallen enemy: tips over, sinks and fades, then disappears. */
+class Corpse {
+    var active = false
+    var x = 0f
+    var y = 0f
+    var kind = 0
+    var dir = 0
+    var scale = 1f
+    var t = 0f // 0 .. CORPSE_TIME
+}
+const val CORPSE_TIME = 0.6f
 
 class Pad(val kind: Int, val x: Float, val y: Float, val ref: Int = -1) {
     var cost = 0
@@ -315,6 +328,8 @@ class Game {
     val flyCoins = Array(80) { FlyCoin() }
     val particles = Array(700) { Particle() }
     val texts = Array(90) { FloatText() }
+    val corpses = Array(60) { Corpse() }
+    private var slowMo = 0f // real seconds of 0.4x time left
 
     var towers = emptyArray<Tower>(); private set
     var walls = emptyArray<Wall>(); private set
@@ -443,6 +458,9 @@ class Game {
         dmgLevel = 0
         wave = 0; waveBreak = 6f; toSpawn = 0; bossPending = false
         kills = 0; time = 0f; newRecord = false
+        revived = false; coinsCollected = 0; slowMo = 0f
+        tutorial = if (Storage.loadInt("tuto_done") == 1) 4 else 0
+        for (c in corpses) c.active = false
         camX = kx; camY = ky
         for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i]; aDir[i] = 0; aShoot[i] = 0f; acd[i] = 0.3f }
         for (e in enemies) e.active = false
@@ -569,7 +587,8 @@ class Game {
         for (t in towers) if (t.built) t.bump = 1f
         recruitPad.cost = recruitCost(recruitPad.level)
         forgePad.cost = forgeCost(forgePad.level)
-        saveGame()
+        checkpoint = saveString()
+        Storage.saveGame(checkpoint)
         kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
         camX = kx; camY = ky
         for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
@@ -648,6 +667,7 @@ class Game {
     fun start(cls: Int = heroClass) {
         val save = Storage.loadGame()
         if (save == null || !restore(save)) { heroClass = cls; reset() }
+        checkpoint = save ?: saveString()
         state = STATE_PLAY
     }
 
@@ -656,7 +676,74 @@ class Game {
         Storage.saveGame(null)
         heroClass = cls
         reset()
+        checkpoint = saveString()
         state = STATE_PLAY
+    }
+
+    // ---------------------------------------------------------------- defeat: revive, retry, leave
+
+    var revived = false // the one revive of this run is used
+    var coinsCollected = 0
+    private var checkpoint: String? = null // state at the start of the current level, for "retry"
+    val reviveCost get() = max(10, coins / 2)
+    val canRevive get() = !revived && coins >= reviveCost
+
+    /** Pay half the coins: the keep stands again at 50 % and the enemies at its gates are swept away. */
+    fun revive() {
+        if (state != STATE_OVER || !canRevive) return
+        coins -= reviveCost
+        revived = true
+        castleHp = castleMaxHp * 0.5f
+        for (e in enemies) if (e.active && hypot(e.x - World.CASTLE_X, e.y - World.CASTLE_Y) < 520f) { e.active = false; burst(e.x, e.y, 20f, 8, 0xFFFFD84AL, 220f) }
+        burst(World.CASTLE_X, World.CASTLE_Y, 60f, 60, 0xFFFFD84AL, 480f)
+        shake = 10f
+        state = STATE_PLAY
+    }
+
+    /** Ends the run for good: half the coins in hand go to the treasure. */
+    private fun finishRun() {
+        treasureWon = (coins + rainLeft) / 2
+        Meta.treasure += treasureWon
+        coins = 0; rainLeft = 0
+    }
+
+    /** Back to the start of the current level (same hero, the treasure gets its share first). */
+    fun retryLevel() {
+        finishRun()
+        val cp = checkpoint
+        if (cp == null || !restore(cp)) reset()
+        Storage.saveGame(cp)
+        state = STATE_PLAY
+    }
+
+    fun quitRun() {
+        if (state == STATE_OVER) finishRun()
+        toMenu()
+    }
+
+    // ---------------------------------------------------------------- first-game tutorial
+
+    /** 0 move, 1 pick up gold, 2 recruit, 3 build a tower, 4 done (persisted). */
+    var tutorial = 4
+    private fun updateTutorial() {
+        if (tutorial >= 4 || state != STATE_PLAY) return
+        val next = when (tutorial) {
+            0 -> hypot(kx - World.KING_START_X, ky - World.KING_START_Y) > 140f
+            1 -> coinsCollected > 0
+            2 -> squad > START_SQUAD
+            else -> towers.any { it.built }
+        }
+        if (next) {
+            tutorial++
+            if (tutorial >= 4) Storage.saveInt("tuto_done", 1)
+        }
+    }
+
+    /** Pad the tutorial points at, or null. */
+    val tutorialTarget: Pad? get() = when (tutorial) {
+        2 -> recruitPad
+        3 -> pads.firstOrNull { it.visible && it.kind == PAD_TOWER }
+        else -> null
     }
 
     val savedClass: Int get() = Storage.loadGame()?.split(";")?.getOrNull(14)?.toIntOrNull() ?: CLASS_WARRIOR
@@ -677,7 +764,9 @@ class Game {
     // ---------------------------------------------------------------- save
     // shortcut: plain "k=v" text, written at each wave start and level-up; a format change just drops old saves.
 
-    private fun saveGame() {
+    private fun saveGame() = Storage.saveGame(saveString())
+
+    private fun saveString(): String {
         val sb = StringBuilder("v1")
         sb.append(";").append(level).append(";").append(wave).append(";").append(coins + rainLeft).append(";").append(squad)
         sb.append(";").append(dmgLevel).append(";").append(castleMaxHp).append(";").append(castleHp)
@@ -687,7 +776,7 @@ class Game {
         sb.append(";")
         for (w in walls) sb.append(if (w.built) w.hp else -1f).append(",")
         sb.append(";").append(heroClass)
-        Storage.saveGame(sb.toString())
+        return sb.toString()
     }
 
     private fun restore(s: String): Boolean {
@@ -745,7 +834,9 @@ class Game {
     // ---------------------------------------------------------------- update
 
     fun update(dtIn: Float) {
-        val dt = dtIn.coerceIn(0f, 1f / 20f)
+        val dtReal = dtIn.coerceIn(0f, 1f / 20f)
+        if (slowMo > 0f) slowMo -= dtReal
+        val dt = if (slowMo > 0f) dtReal * 0.4f else dtReal
         fpsFrames++
         fpsTime += dtIn
         if (fpsTime >= 0.5f) {
@@ -785,6 +876,8 @@ class Game {
         updateFlyCoins(dt)
         updateParticles(dt)
         updateTexts(dt)
+        for (c in corpses) if (c.active) { c.t += dt; if (c.t >= CORPSE_TIME) c.active = false }
+        updateTutorial()
         if (shake > 0f) shake = max(0f, shake - dt * 30f)
         if (castleFlash > 0f) castleFlash -= dt
         if (castleAlarm > 0f) castleAlarm -= dt
@@ -1058,8 +1151,10 @@ class Game {
         }
     }
 
-    private fun hitEnemy(i: Int, dmg: Float) {
+    private fun hitEnemy(i: Int, dmgIn: Float) {
         val e = enemies[i]
+        val crit = rnd.nextFloat() < 0.12f
+        val dmg = if (crit) dmgIn * 2f else dmgIn
         e.hp -= dmg
         e.hitFlash = 0.09f
         // tiny knockback
@@ -1069,7 +1164,7 @@ class Game {
             val d = hypot(dx, dy).coerceAtLeast(1f)
             e.x += dx / d * 3f; e.y += dy / d * 3f
         }
-        text(e.x, e.y, 40f * e.scale + 10f, dmg.toInt(), e.kind == 2)
+        text(e.x, e.y, 40f * e.scale + 10f, dmg.toInt(), e.kind == 2 || crit, if (crit) 1 else 0)
         if (e.kind == 2) shake = max(shake, 3f)
         if (e.hp <= 0f) killEnemy(e)
     }
@@ -1077,6 +1172,10 @@ class Game {
     private fun killEnemy(e: Enemy) {
         e.active = false
         kills++
+        corpses.firstOrNull { !it.active }?.let { c ->
+            c.active = true; c.x = e.x; c.y = e.y; c.kind = e.kind; c.dir = e.dir; c.scale = e.scale; c.t = 0f
+        }
+        if (e.kind == 2) slowMo = 0.8f // boss down: brief slow motion
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
         if (e.kind == 2) { rainLeft += e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
@@ -1143,6 +1242,7 @@ class Game {
                     if (d <= step) {
                         c.active = false
                         coins++
+                        coinsCollected++
                         stackBump = 1f
                     } else {
                         c.x += dx / d * step; c.y += dy / d * step; c.z += dz / d * step
@@ -1411,6 +1511,7 @@ class Game {
                 when {
                     target == 1 && dk < reach + 16f -> {
                         damageKing(e.dmg)
+                        if (e.kind == 2) shake = max(shake, 9f)
                         e.faceRight = dkx > 0f
                         e.dir = dirIndex(dkx, dky)
                         e.atkCd = 1.1f; e.swing = 1f
@@ -1483,6 +1584,7 @@ class Game {
 
     private fun damageKing(d: Float) {
         kHp -= d
+        text(kx, ky, 90f, d.toInt(), false, 2)
         kHurtTimer = 3f
         shake = max(shake, 3f)
         if (kHp <= 0f) {
@@ -1498,9 +1600,7 @@ class Game {
 
     private fun gameOver() {
         Storage.saveGame(null)
-        // half of the coins in hand go to the permanent treasure
-        treasureWon = (coins + rainLeft) / 2
-        Meta.treasure += treasureWon
+        treasureWon = (coins + rainLeft) / 2 // shown on the panel; banked by finishRun()
         castleHp = 0f
         state = STATE_OVER
         shake = 20f
@@ -1560,7 +1660,7 @@ class Game {
         }
     }
 
-    private fun text(x: Float, y: Float, z: Float, v: Int, big: Boolean) {
+    private fun text(x: Float, y: Float, z: Float, v: Int, big: Boolean, kind: Int = 0) {
         val t = texts.firstOrNull { !it.active } ?: return
         t.active = true
         t.x = x + (rnd.nextFloat() - 0.5f) * 20f
@@ -1569,6 +1669,7 @@ class Game {
         t.value = v
         t.life = 0.8f
         t.big = big
+        t.kind = kind
     }
 
     private fun updateTexts(dt: Float) {

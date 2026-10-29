@@ -50,6 +50,7 @@ private const val K_KING = 8
 private const val K_COIN = 9
 private const val K_PROP = 10
 private const val K_RING = 11
+private const val K_CORPSE = 12
 
 // One palette per level, cycling: spring, autumn, winter (grass, dark patch, light patch, cliff top, cliff top light)
 private val SEASONS = arrayOf(
@@ -333,7 +334,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val k = t.life / 0.8f
             val pop = if (k > 0.8f) 1f + (k - 0.8f) * 3f else 1f
             val px = (if (t.big) 34f else 24f) * scale * pop
-            label(text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, if (t.big) Color(0xFFFFD84A) else WHITE, min(1f, k * 2.5f))
+            val col = when (t.kind) { 1 -> Color(0xFFFFD84A); 2 -> ALERT_RED; else -> if (t.big) Color(0xFFFFD84A) else WHITE }
+            label(text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, col, min(1f, k * 2.5f))
         }
 
         drawHud(g, w, h)
@@ -530,6 +532,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (k in g.towers.indices) if (g.towers[k].built) n = push(n, g.towers[k].y, K_TOWER, k)
         for (k in g.walls.indices) if (g.walls[k].built) n = push(n, g.walls[k].y, K_WALL, k)
         for (k in g.enemies.indices) { val e = g.enemies[k]; if (e.active && vis(e.x, e.y)) n = push(n, e.y, K_ENEMY, k) }
+        for (k in g.corpses.indices) { val c = g.corpses[k]; if (c.active && vis(c.x, c.y)) n = push(n, c.y - 2f, K_CORPSE, k) }
         for (k in 0 until g.squad) if (vis(g.ax[k], g.ay[k])) n = push(n, g.ay[k], K_ARCHER, k)
         if (!g.kDead && g.state != STATE_MENU) n = push(n, g.ky, K_KING, 0)
         for (k in g.coinsOnGround.indices) { val c = g.coinsOnGround[k]; if (c.active && vis(c.x, c.y)) n = push(n, c.y - 1f, K_COIN, k) }
@@ -548,6 +551,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_TOWER -> drawTower(g.towers[idx], g.age)
                 K_WALL -> drawWall(g.walls[idx], g.age)
                 K_ENEMY -> drawEnemy(g.enemies[idx])
+                K_CORPSE -> drawCorpse(g.corpses[idx])
                 K_ARCHER -> drawArcher(g, idx)
                 K_KING -> drawKing(g)
                 K_COIN -> drawGroundCoin(g.coinsOnGround[idx])
@@ -558,16 +562,29 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     // ------------------------------------------------------------ sprites
 
     /** Draws one atlas cell with its anchor (feet) at world (x, y); [k] scales the model. */
-    private fun DrawScope.sprite(img: ImageBitmap, info: SpriteInfo, col: Int, row: Int, x: Float, y: Float, k: Float, filter: ColorFilter? = null) {
+    private fun DrawScope.sprite(img: ImageBitmap, info: SpriteInfo, col: Int, row: Int, x: Float, y: Float, k: Float, filter: ColorFilter? = null, alpha: Float = 1f) {
         if (img.width < info.w * info.cols || img.height < info.h * info.rows) return
         val s = k / info.ppu
         withTransform({
             translate(x - info.ax * s, y - info.ay * s)
             scale(s, s, Offset.Zero)
         }) {
-            drawImage(img, IntOffset(col * info.w, row * info.h), IntSize(info.w, info.h), IntOffset.Zero, IntSize(info.w, info.h), colorFilter = filter)
+            drawImage(img, IntOffset(col * info.w, row * info.h), IntSize(info.w, info.h), IntOffset.Zero, IntSize(info.w, info.h), alpha = alpha, colorFilter = filter)
         }
     }
+
+    /** Fallen enemy: tips over away from the camera, sinks a little and fades out. */
+    private fun DrawScope.drawCorpse(c: Corpse) {
+        val sp = sprites ?: return
+        val f = c.t / CORPSE_TIME
+        val tip = min(1f, f * 3f)
+        val a = 1f - f * f
+        withTransform({ rotate((if (c.dir % 8 < 4) -1f else 1f) * 75f * tip, Offset(c.x, c.y)) }) {
+            if (c.kind == 2) sprite(sp.boss, SpriteData.boss, 0, c.dir, c.x, c.y + f * 12f, UNIT_SCALE, hitTint, a)
+            else sprite(sp.knight, SpriteData.knight, 0, c.dir, c.x, c.y + f * 12f, UNIT_SCALE * c.scale, hitTint, a)
+        }
+    }
+    private val hitTint = ColorFilter.tint(Color(0x55FFFFFF), BlendMode.SrcAtop)
 
     private fun walkFrame(phase: Float, frames: Int): Int {
         val f = ((phase / (2f * PI.toFloat())) * frames).toInt() % frames
@@ -883,9 +900,22 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         if (g.state == STATE_PLAY && g.kDead) {
             label(text.str("Le roi est tombé..."), w / 2f, h * 0.45f, 26f * u, WHITE)
         }
-        if (g.state == STATE_PLAY && g.wave <= 1 && g.squad <= START_SQUAD) {
-            label(text.str("Tue les chevaliers, ramasse l'or,"), w / 2f, h - 150f * u, 16f * u, WHITE)
-            label(text.str("puis dépose-le sur les chantiers"), w / 2f, h - 128f * u, 16f * u, WHITE)
+        if (g.state == STATE_PLAY && g.tutorial < 4 && g.transition <= 0f) {
+            val msg = when (g.tutorial) {
+                0 -> "Glisse le doigt pour bouger le roi"
+                1 -> "Tue les chevaliers et ramasse leur or"
+                2 -> "Marche sur le chantier Archer pour recruter"
+                else -> "Construis une tour : reste sur son chantier"
+            }
+            val by = h - 150f * u
+            rr(HUD_BG, 24f * u, by - 18f * u, w - 48f * u, 36f * u, 18f * u)
+            label(text.str(msg), w / 2f, by, 13.5f * u * (1f + 0.04f * sin(g.time * 5f)), WHITE)
+            val p = g.tutorialTarget
+            if (p != null) {
+                val sx = viewOx + p.x * scale
+                val sy = viewOy + (p.y - Pad.HALF - 30f) * scale - (8f + 8f * sin(g.time * 7f)) * u
+                withTransform({ translate(sx, sy); rotate(90f, Offset.Zero); scale(22f * u, 22f * u, Offset.Zero) }) { drawPath(edgeArrow, GOLD) }
+            }
         }
         // fps
         label(text.str(fpsLabel(g.fps)), 34f * u, h - 16f * u, 11f * u, Color(0xCCFFFFFF), outlined = false)

@@ -152,11 +152,10 @@ fun App() {
                 onNew = { game.newGame(picked); focus.requestFocus() },
                 onSettings = { settingsOpen = true },
             )
-            uiState == STATE_OVER -> Panel("LE DONJON EST TOMBÉ", "Niveau ${game.level} · vague ${game.wave} · ${game.kills} ennemis vaincus",
-                (if (game.newRecord) "Nouveau record !  " else "") + "+${game.treasureWon} pièces au trésor · trésor ${Meta.treasure}",
-                "REJOUER", { game.newGame(game.heroClass); focus.requestFocus() }, "Menu", { game.toMenu() })
+            uiState == STATE_OVER -> DefeatPanel(game, onRevive = { game.revive(); focus.requestFocus() },
+                onRetry = { game.retryLevel(); focus.requestFocus() }, onMenu = { game.quitRun(); metaTick++ })
             pausedUi -> Panel("PAUSE", "${CLASS_NAMES[game.heroClass]} · niveau ${game.level} · vague ${game.wave}", "Partie sauvegardée à chaque vague",
-                "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.toMenu() }, third = "Réglages", onThird = { settingsOpen = true })
+                "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.quitRun() }, third = "Réglages", onThird = { settingsOpen = true })
         }
         if (settingsOpen) SettingsPanel(onReset = { game.best = 0; metaTick++ }) { settingsOpen = false }
     }
@@ -317,6 +316,48 @@ private fun Panel(
                 BigButton(third, null, Color(0xFF4A5A7A), Color(0xFF2E3A52), onThird, small = true)
             }
         }
+    }
+}
+
+@Composable
+private fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, onMenu: () -> Unit) {
+    Box(Modifier.fillMaxSize().background(Color(0xAA000000)), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.padding(24.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xF21F2A40))
+                .border(3.dp, Color(0xFFD9443A), RoundedCornerShape(22.dp)).padding(22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Label("LE DONJON EST TOMBÉ", Color(0xFFFF6A5A), 28, FontWeight.Black)
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Stat("Niveau", "${game.level}")
+                Stat("Vague", "${game.wave}")
+                Stat("Ennemis", "${game.kills}")
+                Stat("Or ramassé", "${game.coinsCollected}")
+            }
+            Spacer(Modifier.height(10.dp))
+            if (game.newRecord) Label("Nouveau record !", Color(0xFF9EE37D), 15, FontWeight.Black)
+            Label("En partant : +${game.treasureWon} pièces au trésor", Color(0xFFFFC531), 13, FontWeight.Bold)
+            Spacer(Modifier.height(16.dp))
+            if (game.canRevive) {
+                BigButton("REVIVRE", "Coûte ${game.reviveCost} pièces · une seule fois", Color(0xFFFFB627), Color(0xFFC77E00), onRevive)
+                Spacer(Modifier.height(10.dp))
+            }
+            BigButton("RÉESSAYER LE NIVEAU", null, Color(0xFF45C34A), Color(0xFF2A8A2F), onRetry, small = true)
+            Spacer(Modifier.height(10.dp))
+            BigButton("Menu", null, Color(0xFF4A5A7A), Color(0xFF2E3A52), onMenu, small = true)
+        }
+    }
+}
+
+@Composable
+private fun Stat(name: String, value: String) {
+    Column(
+        Modifier.clip(RoundedCornerShape(12.dp)).background(Color(0x33FFFFFF)).padding(horizontal = 10.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Label(value, Color.White, 20, FontWeight.Black)
+        Label(name, Color(0xFFCCCCCC), 10, FontWeight.Bold)
     }
 }
 
