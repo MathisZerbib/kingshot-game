@@ -6,6 +6,7 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlin.random.Random
 
 const val PROP_TENT = 0f
@@ -123,59 +124,92 @@ object World {
     /** Props in the depth sort (x, y, kind): see PROP_* ; camp clutter near the base plus bushes and stumps. */
     var props = FloatArray(0); private set
 
-    /** Extra road directions seen from the castle (degrees, 0 = east, -90 = north), between the level-1 roads and clear of the base pads. */
-    private val extraAngles = floatArrayOf(-100f, -42f, 75f)
+    /**
+     * Hand-made levels. Each level keeps everything before it and adds one road with its own landmark:
+     * 2 = northern forest (road through a cliff pass and a dense wood), 3 = eastern gorge (road squeezed between
+     * two cliffs), 4 = southern river (crossed by both southern roads on bridges). Level 5+ keeps the level-4 map.
+     */
+    val LEVEL_NAMES = arrayOf("La Vallée", "La Forêt du Nord", "Le Col de l'Est", "La Rivière du Sud", "Le Royaume")
+    fun levelName(level: Int) = LEVEL_NAMES[(level - 1).coerceIn(0, LEVEL_NAMES.size - 1)]
+
+    private val extraRoads = arrayOf(
+        floatArrayOf(380f, -80f, 470f, 320f, 610f, 720f, 770f, 1060f, 915f, 1380f, 985f, 1560f),
+        floatArrayOf(2100f, 520f, 1800f, 660f, 1560f, 900f, 1360f, 1150f, 1160f, 1440f, 1060f, 1580f),
+        floatArrayOf(1290f, 2500f, 1200f, 2120f, 1060f, 1900f, 1030f, 1752f),
+    )
+    private val extraTowers = arrayOf(floatArrayOf(470f, 960f), floatArrayOf(1580f, 1160f), floatArrayOf(1420f, 1990f))
+    private val extraWallFractions = floatArrayOf(0.62f, 0.55f, 0.4f)
+    /** Cliffs added by each new level (x, y, w, d, height), shaping its landmark. */
+    private val extraCliffs = arrayOf(
+        arrayOf(floatArrayOf(-40f, -40f, 330f, 560f, 210f), floatArrayOf(580f, -40f, 300f, 360f, 180f)),
+        arrayOf(floatArrayOf(1640f, 360f, 440f, 210f, 170f), floatArrayOf(1720f, 820f, 380f, 250f, 160f)),
+        arrayOf(),
+    )
+    /** Forest clusters added by each level (x, y, radius, trees). */
+    private val extraForests = arrayOf(
+        floatArrayOf(420f, 760f, 150f, 12f, 820f, 780f, 130f, 9f, 300f, 1120f, 150f, 10f, 700f, 420f, 110f, 7f),
+        floatArrayOf(1500f, 520f, 120f, 7f, 1900f, 1180f, 110f, 6f),
+        floatArrayOf(400f, 2050f, 140f, 9f, 1700f, 2150f, 140f, 9f),
+    )
+    /** Southern river (level 4+): polyline and half width; the roads cross it on bridges. */
+    private val riverPts = floatArrayOf(-80f, 2300f, 300f, 2240f, 700f, 2275f, 1000f, 2230f, 1300f, 2270f, 1700f, 2220f, 2080f, 2260f)
+    const val RIVER_HALF = 38f
+    var river = FloatArray(0); private set
+    var forests = FloatArray(0); private set
 
     init {
         decorate(7)
     }
 
-    /**
-     * The map persists and grows: level N keeps every road, tower spot and palisade of level N-1 and adds one new
-     * road (up to 6) with its own tower spot and palisade. Cliffs on a new road are removed.
-     */
+    /** The map persists and grows: level N keeps every road, tower spot and palisade of level N-1 and adds the next hand-made road. */
     fun load(level: Int) {
-        val extra = min(level - 1, extraAngles.size)
+        val extra = min(level - 1, extraRoads.size)
         paths = paths1; towerSpots = towerSpots1; wallFractions = wallFractions1; decoRoads = decoRoads1; cliffs = cliffs1
-        val v = Vec(); val tg = Vec()
+        var fr = FloatArray(0)
         for (k in 0 until extra) {
-            val rnd = Random(1000 + k) // per road, so a road looks the same at every later level
-            val a = (extraAngles[k] + (rnd.nextFloat() - 0.5f) * 8f) * PI.toFloat() / 180f
-            val dx = cos(a); val dy = sin(a)
-            // distance from the castle to the map edge (+80 outside) along the ray
-            val tx = if (dx > 0.001f) (W + 80f - CASTLE_X) / dx else if (dx < -0.001f) (-80f - CASTLE_X) / dx else 1e9f
-            val ty = if (dy > 0.001f) (H + 80f - CASTLE_Y) / dy else if (dy < -0.001f) (-80f - CASTLE_Y) / dy else 1e9f
-            val len = min(tx, ty)
-            val wig = (if (rnd.nextBoolean()) 1f else -1f) * (50f + rnd.nextFloat() * 40f)
-            val pts = FloatArray(10)
-            for (i in 0..4) {
-                val f = 1f - i / 4f // 1 = edge, 0 = castle
-                val d = 100f + (len - 100f) * f
-                val off = if (i == 0 || i == 4) 0f else wig * sin(f * PI.toFloat())
-                pts[i * 2] = (CASTLE_X + dx * d - dy * off).let { if (i == 0) it else it.coerceIn(60f, W - 60f) }
-                pts[i * 2 + 1] = (CASTLE_Y + dy * d + dx * off).let { if (i == 0) it else it.coerceIn(60f, H - 60f) }
-            }
-            val path = GamePath(pts)
+            val path = GamePath(extraRoads[k])
             paths = paths + path
-            // tower beside the new road: first spot clear of every road and of the castle
-            var bx = 0f; var by = 0f; var found = false
-            for (f in floatArrayOf(0.58f, 0.5f, 0.66f, 0.42f, 0.74f)) {
-                for (side in floatArrayOf(1f, -1f)) {
-                    if (found) break
-                    path.sample(path.length * f, v); path.tangent(path.length * f, tg)
-                    val x = (v.x - tg.y * 150f * side).coerceIn(120f, W - 120f)
-                    val y = (v.y + tg.x * 150f * side).coerceIn(160f, H - 120f)
-                    if (hypot(x - CASTLE_X, y - CASTLE_Y) > 260f && distToRoads(x, y) > 115f && !insideCliff(x, y, 60f)) { bx = x; by = y; found = true }
-                    if (!found && f == 0.58f && side == 1f) { bx = x; by = y } // fallback
-                }
-                if (found) break
-            }
-            towerSpots = towerSpots + floatArrayOf(bx, by)
-            wallFractions = wallFractions + 0.5f
-            cliffs = cliffs.filter { pathClear(it, path, 60f) }.toTypedArray()
+            towerSpots = towerSpots + extraTowers[k]
+            wallFractions = wallFractions + extraWallFractions[k]
+            cliffs = cliffs.filter { pathClear(it, path, 70f) }.toTypedArray() + extraCliffs[k]
+            fr = fr + extraForests[k]
         }
+        forests = fr
+        river = if (level >= 4) riverPts else FloatArray(0)
         decorate(7)
         version++
+    }
+
+    /** True in the river, except on the bridges (where a road crosses). */
+    fun inRiver(x: Float, y: Float): Boolean {
+        val r = river
+        var i = 0
+        var inside = false
+        while (i + 3 < r.size) {
+            if (segDist(x, y, r[i], r[i + 1], r[i + 2], r[i + 3]) < RIVER_HALF) { inside = true; break }
+            i += 2
+        }
+        return inside && distToRoads(x, y) > 52f
+    }
+
+    /** On the river's water line itself (ignoring bridges): where the renderer puts bridges. */
+    fun inRiverCore(x: Float, y: Float) = inRiverBand(x, y, -10f)
+
+    private fun inRiverBand(x: Float, y: Float, margin: Float): Boolean {
+        val r = river
+        var i = 0
+        while (i + 3 < r.size) {
+            if (segDist(x, y, r[i], r[i + 1], r[i + 2], r[i + 3]) < RIVER_HALF + margin) return true
+            i += 2
+        }
+        return false
+    }
+
+    private fun segDist(x: Float, y: Float, x0: Float, y0: Float, x1: Float, y1: Float): Float {
+        val sx = x1 - x0; val sy = y1 - y0
+        val l2 = sx * sx + sy * sy
+        val t = if (l2 > 0f) (((x - x0) * sx + (y - y0) * sy) / l2).coerceIn(0f, 1f) else 0f
+        return hypot(x - (x0 + sx * t), y - (y0 + sy * t))
     }
 
     private fun pathClear(c: FloatArray, p: GamePath, margin: Float): Boolean {
@@ -224,7 +258,22 @@ object World {
         val rnd = Random(seed)
         val t = ArrayList<Float>()
         var tries = 0
-        while (t.size < 46 * 3 && tries < 4000) {
+        var fi = 0
+        while (fi + 3 < forests.size) {
+            val cx = forests[fi]; val cy = forests[fi + 1]; val cr = forests[fi + 2]
+            var placed = 0
+            var ft = 0
+            while (placed < forests[fi + 3].toInt() && ft++ < 200) {
+                val a = rnd.nextFloat() * 2f * PI.toFloat()
+                val d = sqrt(rnd.nextFloat()) * cr
+                val x = cx + cos(a) * d; val y = cy + sin(a) * d * 0.8f
+                if (!isFreeForDecor(x, y, 90f)) continue
+                t.add(x); t.add(y); t.add(0.9f + rnd.nextFloat() * 0.6f)
+                placed++
+            }
+            fi += 4
+        }
+        while (t.size < (46 + forests.size / 4 * 9) * 3 && tries < 4000) {
             tries++
             val x = rnd.nextFloat() * W
             val y = rnd.nextFloat() * H
@@ -253,7 +302,7 @@ object World {
             tries++
             val x = rnd.nextFloat() * W
             val y = rnd.nextFloat() * H
-            if (insideCliff(x, y, 10f) || distToRoads(x, y) < 62f) continue
+            if (insideCliff(x, y, 10f) || distToRoads(x, y) < 62f || (river.isNotEmpty() && inRiverBand(x, y, 6f))) continue
             tf.add(x); tf.add(y); tf.add(0.7f + rnd.nextFloat() * 0.7f)
         }
         tufts = tf.toFloatArray()
@@ -263,7 +312,7 @@ object World {
             tries++
             val cx = rnd.nextFloat() * W
             val cy = rnd.nextFloat() * H
-            if (insideCliff(cx, cy, 30f) || distToRoads(cx, cy) < 90f || hypot(cx - CASTLE_X, cy - CASTLE_Y) < 220f || nearDecoRoad(cx, cy, 80f)) continue
+            if (insideCliff(cx, cy, 30f) || distToRoads(cx, cy) < 90f || hypot(cx - CASTLE_X, cy - CASTLE_Y) < 220f || nearDecoRoad(cx, cy, 80f) || (river.isNotEmpty() && inRiverBand(cx, cy, 20f))) continue
             val col = rnd.nextInt(3).toFloat()
             repeat(5) { fl.add(cx + (rnd.nextFloat() - 0.5f) * 50f); fl.add(cy + (rnd.nextFloat() - 0.5f) * 30f); fl.add(col) }
         }
@@ -321,6 +370,7 @@ object World {
 
     private fun isFreeForDecor(x: Float, y: Float, clearance: Float): Boolean {
         if (insideCliff(x, y, 30f)) return false
+        if (river.isNotEmpty() && inRiverBand(x, y, 30f)) return false
         // keep the base area clear
         if (hypot(x - CASTLE_X, y - CASTLE_Y) < 520f) return false
         val v = Vec()

@@ -61,6 +61,11 @@ private val FLOWERS = arrayOf(Color(0xFFFFFFFF), Color(0xFFFFD84A), Color(0xFFFF
 private val FLOWER_HEART = Color(0xFFFFB12B)
 private val DIRT_LIGHT = Color(0xFFE6C493)
 private val PEBBLE = Color(0xFFB9A88F)
+private val RIVER_BANK = Color(0xFF7FA35A)
+private val RIVER_WATER = Color(0xFF3E9AD6)
+private val RIVER_LIGHT = Color(0xFF8FD3F7)
+private val PLANK = Color(0xFFA0703F)
+private val PLANK_DARK = Color(0xFF6E4A27)
 private val PEBBLE_DARK = Color(0x33000000)
 private val DIRT = Color(0xFFDDB57F)
 private val DIRT_EDGE = Color(0xFFCDA36C)
@@ -160,6 +165,15 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private val revealPath = Path()
     private val revealMeasure = PathMeasure()
 
+    // river path and bridge spots (x, y, road tangent), rebuilt with the roads
+    private var riverPath: Path? = null
+    private val riverBank = Stroke(width = World.RIVER_HALF * 2f + 18f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val riverWater = Stroke(width = World.RIVER_HALF * 2f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val riverShine = Stroke(width = World.RIVER_HALF * 0.7f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+    private val bridges = FloatArray(4 * 8)
+    private var bridgeCount = 0
+    private var time = 0f
+
     private fun syncTiles() {
         val sp = sprites ?: return
         if (tilesOf === sp) return
@@ -197,6 +211,23 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             roads.add(polyPath(FloatArray(n) { r[it * 2] }, FloatArray(n) { r[it * 2 + 1] }))
         }
         // same roads at 2x: tiles are drawn under scale(0.5) so a 512 px texture covers 256 world units at full detail
+        val rv = World.river
+        riverPath = if (rv.size < 4) null else Path().apply { moveTo(rv[0], rv[1]); var k = 2; while (k < rv.size) { lineTo(rv[k], rv[k + 1]); k += 2 } }
+        bridgeCount = 0
+        if (rv.size >= 4) {
+            val v = Vec(); val tg = Vec()
+            for (p in World.paths) {
+                var sd = 0f
+                var was = false
+                while (sd <= p.length && bridgeCount < 8) {
+                    p.sample(sd, v)
+                    val wet = World.inRiverCore(v.x, v.y)
+                    if (wet && !was) { p.tangent(sd + 30f, tg); bridges[bridgeCount * 4] = v.x + tg.x * 30f; bridges[bridgeCount * 4 + 1] = v.y + tg.y * 30f; bridges[bridgeCount * 4 + 2] = tg.x; bridges[bridgeCount * 4 + 3] = tg.y; bridgeCount++ }
+                    was = wet
+                    sd += 10f
+                }
+            }
+        }
         roads2.clear()
         for (p in World.paths) roads2.add(polyPath(FloatArray(p.n) { p.xs[it] * 2f }, FloatArray(p.n) { p.ys[it] * 2f }))
         for (r in World.decoRoads) {
@@ -264,6 +295,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val vt = cy - halfH - 60f
         val vb = cy + halfH + 260f
 
+        time = g.time
         syncRoads()
         syncTiles()
         revealIdx = g.revealRoad
@@ -335,6 +367,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             }
             i += 4
         }
+        if (riverPath != null) {
+            drawPath(riverPath!!, RIVER_BANK, style = riverBank)
+            drawPath(riverPath!!, RIVER_WATER, style = riverWater)
+            drawPath(riverPath!!, RIVER_LIGHT, alpha = 0.5f + 0.2f * sin(time * 1.5f), style = riverShine)
+        }
         if (rb != null) {
             withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
                 for (k in roads2.indices) drawPath(if (k == revealIdx) revealPath else roads2[k], DIRT_EDGE, alpha = 0.55f, style = roadEdge2) // soft border
@@ -345,6 +382,21 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             for (r in roads) drawPath(r, DIRT_EDGE, style = roadStrokeEdge)
             for (r in roads) drawPath(r, DIRT, style = roadStroke)
             for (r in roads) drawPath(r, DIRT_LIGHT, style = roadCenterStroke)
+        }
+        // wooden bridges where roads cross the river
+        val bx = bridges
+        i = 0
+        while (i < bridgeCount) {
+            val x = bx[i * 4]; val y = bx[i * 4 + 1]; val tx = bx[i * 4 + 2]; val ty = bx[i * 4 + 3]
+            if (x > vl - 100f && x < vr + 100f && y > vt - 100f && y < vb + 100f) {
+                for (k in -3..3) { // planks across the road, rails on both sides
+                    val px = x + tx * k * 14f; val py = y + ty * k * 14f
+                    line(PLANK, px - ty * 50f, py + tx * 50f, px + ty * 50f, py - tx * 50f, 11f)
+                }
+                line(PLANK_DARK, x - ty * 52f - tx * 56f, y + tx * 52f - ty * 56f, x - ty * 52f + tx * 56f, y + tx * 52f + ty * 56f, 7f)
+                line(PLANK_DARK, x + ty * 52f - tx * 56f, y - tx * 52f - ty * 56f, x + ty * 52f + tx * 56f, y - tx * 52f + ty * 56f, 7f)
+            }
+            i++
         }
         val pb = World.pebbles
         i = 0
@@ -745,7 +797,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val lw = 112f * u
             rr(HUD_BG, lx, top + 4f * u, lw, 44f * u, 12f * u)
             label(text.str(CLASS_NAMES[g.heroClass]), lx + lw / 2f, top + 15f * u, 13f * u, WHITE, outlined = false)
-            label(text.str(ageLabel(g.age)), lx + lw / 2f, top + 28f * u, 10f * u, GOLD, outlined = false)
+            label(text.str(World.levelName(g.level)), lx + lw / 2f, top + 28f * u, 10f * u, GOLD, outlined = false)
             rr(HUD_TRACK, lx + 8f * u, top + 37f * u, lw - 16f * u, 6f * u, 3f * u)
             rr(GOLD, lx + 8f * u, top + 37f * u, (lw - 16f * u) * g.levelProgress, 6f * u, 3f * u)
             // --- top-right: coins and pause
@@ -808,7 +860,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 label(text.str(if (g.age >= 3) "ÂGE ROYAL !" else "ÂGE DE PIERRE !"), w / 2f, h * 0.27f + 44f * u, 30f * u * pop, WHITE, a)
                 label(text.str(if (g.age >= 3) "Tours royales · dégâts ×1,5 · château royal" else "Remparts de pierre avec portes · tours de pierre"), w / 2f, h * 0.27f + 76f * u, 14f * u, WHITE, a)
             } else {
-                label(text.str(if (g.roadAdded) "Nouvelle route à défendre !" else "Les monstres se renforcent !"), w / 2f, h * 0.27f + 40f * u, 20f * u, WHITE, a)
+                label(text.str(World.levelName(g.level)), w / 2f, h * 0.27f + 44f * u, 30f * u * pop, WHITE, a)
+                label(text.str(if (g.roadAdded) "Nouvelle route à défendre !" else "Les monstres se renforcent !"), w / 2f, h * 0.27f + 76f * u, 15f * u, WHITE, a)
             }
         }
         if (g.waveBanner > 0f && g.levelBanner <= 0f) {

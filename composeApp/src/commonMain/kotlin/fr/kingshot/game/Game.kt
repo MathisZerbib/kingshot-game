@@ -816,6 +816,11 @@ class Game {
         var ny = ky + kvy * dt
         nx = nx.coerceIn(40f, World.W - 40f)
         ny = ny.coerceIn(60f, World.H - 40f)
+        if (World.river.isNotEmpty() && World.inRiver(nx, ny)) {
+            if (!World.inRiver(nx, ky)) ny = ky
+            else if (!World.inRiver(kx, ny)) nx = kx
+            else { nx = kx; ny = ky }
+        }
         if (World.insideCliff(nx, ny, 18f)) {
             if (!World.insideCliff(nx, ky, 18f)) ny = ky
             else if (!World.insideCliff(kx, ny, 18f)) nx = kx
