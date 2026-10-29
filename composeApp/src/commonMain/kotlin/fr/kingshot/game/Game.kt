@@ -456,6 +456,9 @@ class Game {
     private var payStreak = 0
     private var payTime = 0f
     private var payAcc = 0f
+    private var payStartLeft = 0 // amount this payment run aims at (sets its speed)
+    private var brokeTime = 0f // seconds with nothing affordable (triggers a loot caravan)
+    var caravanBanner = 0f
     private var coinCombo = 0 // pickups in a row, for the rising pitch of the grouped coin sound
     private var lastCoinTime = -10f
 
@@ -1318,7 +1321,32 @@ class Game {
         }
     }
 
+    /** Cheapest visible coin site, or -1. */
+    private fun cheapestSite(): Int {
+        var best = -1
+        for (p in pads) if (p.visible && p.kind != PAD_TOWER_ARCHER) { val c = p.cost - p.paid; if (best < 0 || c < best) best = c }
+        return best
+    }
+
+    /** Pad the player should go for next (levels 1-3 objective sign), or null. */
+    val objective: Pad? get() {
+        if (level > 3 || tutorial < 4) return null
+        for (k in intArrayOf(PAD_TOWER, PAD_TOWER_ARCHER, PAD_WALL)) for (p in pads) if (p.visible && p.kind == k) return p
+        return null
+    }
+
     private fun updateBuildings(dt: Float) {
+        // never stuck: if nothing is affordable for 15 s between waves, a loot caravan drops coins by the king
+        val cheapest = cheapestSite()
+        if (cheapest > coins && enemies.none { it.active }) brokeTime += dt else brokeTime = 0f
+        if (brokeTime > 15f) {
+            brokeTime = 0f
+            val n = max(10, cheapest - coins + 5)
+            rainLeft += n; rainX = kx + 60f; rainY = ky; rainRate = n / 1f
+            caravanBanner = 2.5f
+            Audio.play(Sfx.VICTORY, 0.6f)
+        }
+        if (caravanBanner > 0f) caravanBanner -= dt
         if (unlocked[U_MILL]) {
             millTimer += dt
             if (millTimer >= 2f) { millTimer -= 2f; dropCoin(World.SPOT_A_X + 40f, World.SPOT_A_Y + 10f) }
@@ -1648,6 +1676,7 @@ class Game {
             payStreak = 0
             payTime = 0f
             payAcc = 0f
+            payStartLeft = 0
             return
         }
         payTimer -= dt
@@ -1655,9 +1684,12 @@ class Game {
         if (payStreak == 0) Audio.play(Sfx.COIN_STACK, 0.7f) // one "till" sound when paying starts
         payStreak = 1
         payTime += dt
-        // the more is left to pay, the faster it flows (8 to 60 coins/s), and it speeds up while you stay on the pad
+        // any site pays out in about 1.2 s whatever its price (min 12/s, max 400/s), after a short 0.3 s ramp;
+        // without enough coins, everything you carry goes in the same time and the bar stays where it got
         val left = onPad.cost - onPad.paid - onPad.pending
-        payAcc += min(60f, max(8f, left * 2.5f) * (1f + payTime)) * dt
+        if (payStartLeft == 0) payStartLeft = min(left, coins)
+        val ramp = min(1f, payTime / 0.3f)
+        payAcc += min(400f, max(12f, payStartLeft / 1.2f)) * ramp * ramp * dt
         val n = min(payAcc.toInt(), min(left, coins))
         payAcc -= payAcc.toInt()
         if (n <= 0) return
@@ -1689,6 +1721,7 @@ class Game {
     }
 
     internal fun complete(p: Pad) {
+        shake = max(shake, 4f) // short punch on every purchase
         if (p.kind != PAD_TOWER_ARCHER) pendBuilds++
         p.paid = 0
         p.pending = 0

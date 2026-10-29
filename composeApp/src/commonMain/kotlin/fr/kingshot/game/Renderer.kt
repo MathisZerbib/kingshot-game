@@ -199,6 +199,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     var sprites: Sprites? = null
     private var scale = 1f
     private val portraitClip = Path()
+    private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
     private var viewTop = 0f // world y of the top of the view, to stop the coin stack where it leaves the screen
     private var viewOx = 0f // world -> screen offset of the current frame, for the HUD
     private var viewOy = 0f
@@ -340,7 +341,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val sx = ox + p.x * scale
             val sy = oy + p.y * scale
             if (sx < -200 || sx > w + 200 || sy < -200 || sy > h + 200) continue
-            val pop = 1f + p.bump * 0.25f
+            val pop = 1f + p.bump * 0.5f
             label(text.num(p.cost - p.paid), sx + 18f * scale, sy - 4f * scale, 34f * scale * pop, WHITE)
             label(text.str(padName(p, g)), sx, sy + (Pad.HALF + 16f) * scale, 17f * scale, WHITE)
         }
@@ -502,8 +503,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val y0 = p.y - hs
         val size = hs * 2f
         rr(PAD_BG, x0, y0, size, size, 14f)
-        val frac = (p.paid.toFloat() / p.cost).coerceIn(0f, 1f)
-        if (frac > 0f) rr(PAD_FILL, x0, y0, size * frac, size, 14f)
+        val frac = ((p.paid + p.pending).toFloat() / p.cost).coerceIn(0f, 1f)
+        if (frac > 0f) {
+            rr(PAD_FILL, x0, y0, size * (p.paid.toFloat() / p.cost).coerceIn(0f, 1f), size, 14f)
+            // fast-filling ring around the site while paying
+            drawArc(GOLD, -90f, 360f * frac, false, Offset(p.x - hs - 14f, p.y - hs - 14f), Size(hs * 2f + 28f, hs * 2f + 28f), style = payRing)
+        }
         val k = 22f * s
         val lw = 5f
         line(PAD_LINE, x0, y0 + k, x0, y0 + 6f, lw); line(PAD_LINE, x0 + 6f, y0, x0 + k, y0, lw)
@@ -991,6 +996,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.str("VAGUE REPOUSSÉE !"), w / 2f, h * 0.3f, 34f * u * pop, GOLD, min(1f, k * 3f))
             label(text.str("Butin du donjon"), w / 2f, h * 0.3f + 34f * u, 16f * u, WHITE, min(1f, k * 3f))
         }
+        if (g.caravanBanner > 0f) {
+            val k = g.caravanBanner / 2.5f
+            label(text.str("CARAVANE DE BUTIN !"), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
+        }
         if (g.bossBanner > 0f) {
             val k = g.bossBanner / 2.2f
             val pop = 1f + sin(k * 20f) * 0.05f
@@ -998,6 +1007,16 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
         if (g.state == STATE_PLAY && g.kDead) {
             label(text.str("Le roi est tombé..."), w / 2f, h * 0.45f, 26f * u, WHITE)
+        }
+        val obj = g.objective
+        if (g.state == STATE_PLAY && obj != null && g.transition <= 0f) {
+            val msg = when (obj.kind) { PAD_TOWER -> "Objectif : construis une tour"; PAD_TOWER_ARCHER -> "Objectif : poste un archer sur la tour"; else -> "Objectif : ferme la route avec une palissade" }
+            val by = h - 150f * u
+            rr(HUD_BG, 24f * u, by - 18f * u, w - 48f * u, 36f * u, 18f * u)
+            label(text.str(msg), w / 2f, by, 13.5f * u, GOLD)
+            val sx = viewOx + obj.x * scale
+            val sy = viewOy + (obj.y - Pad.HALF - 30f) * scale - (8f + 8f * sin(g.time * 7f)) * u
+            withTransform({ translate(sx, sy); rotate(90f, Offset.Zero); scale(22f * u, 22f * u, Offset.Zero) }) { drawPath(edgeArrow, GOLD) }
         }
         if (g.state == STATE_PLAY && g.tutorial < 4 && g.transition <= 0f) {
             val msg = when (g.tutorial) {
