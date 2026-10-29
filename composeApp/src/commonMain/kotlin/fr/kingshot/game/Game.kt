@@ -662,6 +662,11 @@ class Game {
     val savedClass: Int get() = Storage.loadGame()?.split(";")?.getOrNull(14)?.toIntOrNull() ?: CLASS_WARRIOR
     val savedLevel: Int get() = Storage.loadGame()?.split(";")?.getOrNull(1)?.toIntOrNull() ?: 1
 
+    /** App left the screen: pause the run and save it. */
+    fun onBackground() {
+        if (state == STATE_PLAY && transition <= 0f) { paused = true; saveGame() }
+    }
+
     fun toMenu() {
         paused = false
         state = STATE_MENU

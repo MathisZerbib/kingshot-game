@@ -91,6 +91,8 @@ fun App() {
         }
     }
     LaunchedEffect(Unit) { focus.requestFocus() }
+    LaunchedEffect(game) { PlatformHooks.onBackground = { game.onBackground() } }
+    var settingsOpen by remember { mutableStateOf(false) }
 
     Box(
         Modifier
@@ -148,13 +150,15 @@ fun App() {
                 metaTick = metaTick, onBuy = { up -> if (Meta.buy(picked, up)) metaTick++ },
                 onContinue = { game.start(); focus.requestFocus() },
                 onNew = { game.newGame(picked); focus.requestFocus() },
+                onSettings = { settingsOpen = true },
             )
             uiState == STATE_OVER -> Panel("LE DONJON EST TOMBÉ", "Niveau ${game.level} · vague ${game.wave} · ${game.kills} ennemis vaincus",
                 (if (game.newRecord) "Nouveau record !  " else "") + "+${game.treasureWon} pièces au trésor · trésor ${Meta.treasure}",
                 "REJOUER", { game.newGame(game.heroClass); focus.requestFocus() }, "Menu", { game.toMenu() })
             pausedUi -> Panel("PAUSE", "${CLASS_NAMES[game.heroClass]} · niveau ${game.level} · vague ${game.wave}", "Partie sauvegardée à chaque vague",
-                "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.toMenu() })
+                "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.toMenu() }, third = "Réglages", onThird = { settingsOpen = true })
         }
+        if (settingsOpen) SettingsPanel(onReset = { game.best = 0; metaTick++ }) { settingsOpen = false }
     }
 }
 
@@ -177,6 +181,7 @@ private val CLASS_HP = intArrayOf(3, 1, 2)
 private fun MainMenu(
     hasSave: Boolean, savedLevel: Int, savedClass: Int, best: Int,
     picked: Int, onPick: (Int) -> Unit, metaTick: Int, onBuy: (Int) -> Unit, onContinue: () -> Unit, onNew: () -> Unit,
+    onSettings: () -> Unit,
 ) {
     metaTick // read so a purchase recomposes the menu
     Box(
@@ -184,8 +189,12 @@ private fun MainMenu(
         contentAlignment = Alignment.Center,
     ) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
-                Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xAA000000)).padding(horizontal = 12.dp, vertical = 6.dp)) {
+            Box(Modifier.fillMaxWidth()) {
+                Box(Modifier.align(Alignment.CenterStart).clip(RoundedCornerShape(16.dp)).background(Color(0xAA000000)).clickable(onClick = onSettings)
+                    .padding(horizontal = 12.dp, vertical = 6.dp)) {
+                    Label("⚙ Réglages", Color.White, 16, FontWeight.Black)
+                }
+                Box(Modifier.align(Alignment.CenterEnd).clip(RoundedCornerShape(16.dp)).background(Color(0xAA000000)).padding(horizontal = 12.dp, vertical = 6.dp)) {
                     Label("Trésor ● ${Meta.treasure}", Color(0xFFFFC531), 16, FontWeight.Black)
                 }
             }
@@ -284,7 +293,10 @@ private fun BigButton(text: String, sub: String?, color: Color, shade: Color, on
 }
 
 @Composable
-private fun Panel(title: String, subtitle: String, info: String, button: String, onClick: () -> Unit, second: String, onSecond: () -> Unit) {
+private fun Panel(
+    title: String, subtitle: String, info: String, button: String, onClick: () -> Unit, second: String, onSecond: () -> Unit,
+    third: String? = null, onThird: () -> Unit = {},
+) {
     Box(Modifier.fillMaxSize().background(Color(0x99000000)), contentAlignment = Alignment.Center) {
         Column(
             Modifier.padding(24.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xEE1F2A40))
@@ -300,6 +312,56 @@ private fun Panel(title: String, subtitle: String, info: String, button: String,
             BigButton(button, null, Color(0xFF45C34A), Color(0xFF2A8A2F), onClick)
             Spacer(Modifier.height(10.dp))
             BigButton(second, null, Color(0xFF4A5A7A), Color(0xFF2E3A52), onSecond, small = true)
+            if (third != null) {
+                Spacer(Modifier.height(10.dp))
+                BigButton(third, null, Color(0xFF4A5A7A), Color(0xFF2E3A52), onThird, small = true)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
+    var tick by remember { mutableIntStateOf(0) }
+    var confirmReset by remember { mutableStateOf(false) }
+    tick // re-read Prefs after each change
+    Box(Modifier.fillMaxSize().background(Color(0xAA000000)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.padding(24.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xF21F2A40))
+                .border(3.dp, Color(0xFFFFC531), RoundedCornerShape(22.dp)).clickable(enabled = false) {}.padding(20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Label("RÉGLAGES", Color(0xFFFFC531), 28, FontWeight.Black)
+            Spacer(Modifier.height(14.dp))
+            Toggle("Sons", !Prefs.sfxOff) { Prefs.sfxOff = !it; tick++ }
+            Toggle("Musique", !Prefs.musicOff) { Prefs.musicOff = !it; tick++ }
+            Toggle("Vibrations", !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
+            Toggle("Fluidité max (sinon 60 Hz, économise la batterie)", !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
+            Spacer(Modifier.height(14.dp))
+            BigButton(
+                if (confirmReset) "CONFIRMER ?" else "Remettre à zéro", if (confirmReset) "Trésor, améliorations, record et partie" else "la progression",
+                if (confirmReset) Color(0xFFD9443A) else Color(0xFF4A5A7A), if (confirmReset) Color(0xFF8E2620) else Color(0xFF2E3A52),
+                { if (confirmReset) { Prefs.resetProgress(); confirmReset = false; onReset() } else confirmReset = true }, small = true,
+            )
+            Spacer(Modifier.height(10.dp))
+            BigButton("FERMER", null, Color(0xFF45C34A), Color(0xFF2A8A2F), onClose, small = true)
+        }
+    }
+}
+
+@Composable
+private fun Toggle(text: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.width(280.dp).padding(vertical = 5.dp).clip(RoundedCornerShape(12.dp)).background(Color(0x33FFFFFF))
+            .clickable { onChange(!on) }.padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.weight(1f)) { BasicText(text, style = TextStyle(color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.Bold)) }
+        Box(
+            Modifier.width(52.dp).height(28.dp).clip(RoundedCornerShape(14.dp)).background(if (on) Color(0xFF45C34A) else Color(0xFF59627A)),
+            contentAlignment = if (on) Alignment.CenterEnd else Alignment.CenterStart,
+        ) {
+            Box(Modifier.padding(3.dp).size(22.dp).clip(CircleShape).background(Color.White))
         }
     }
 }

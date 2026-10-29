@@ -38,19 +38,25 @@ class MainActivity : ComponentActivity() {
             hide(WindowInsetsCompat.Type.systemBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
-        requestHighestRefreshRate()
+        PlatformHooks.applyFrameCap = { cap -> requestRefreshRate(cap) }
+        requestRefreshRate(Prefs.cap60)
         setContent { App() }
     }
 
-    /** Ask for the fastest display mode (90/120/144 Hz) at the current resolution. */
+    override fun onPause() {
+        PlatformHooks.onBackground?.invoke()
+        super.onPause()
+    }
+
+    /** Ask for the fastest display mode (90/120/144 Hz) at the current resolution, or the 60 Hz one when capped. */
     @Suppress("DEPRECATION")
-    private fun requestHighestRefreshRate() {
+    private fun requestRefreshRate(cap60: Boolean) {
         val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) display else windowManager.defaultDisplay
         display ?: return
         val current = display.mode
-        val best = display.supportedModes
+        val modes = display.supportedModes
             .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
-            .maxByOrNull { it.refreshRate } ?: return
+        val best = (if (cap60) modes.minByOrNull { kotlin.math.abs(it.refreshRate - 60f) } else modes.maxByOrNull { it.refreshRate }) ?: return
         window.attributes = window.attributes.also {
             it.preferredDisplayModeId = best.modeId
             it.preferredRefreshRate = best.refreshRate
