@@ -150,7 +150,7 @@ fun App() {
                 onNew = { game.newGame(picked); focus.requestFocus() },
             )
             uiState == STATE_OVER -> Panel("LE DONJON EST TOMBÉ", "Niveau ${game.level} · vague ${game.wave} · ${game.kills} ennemis vaincus",
-                (if (game.newRecord) "Nouveau record !  " else "") + "+${game.crownsWon} couronnes · total ${Meta.crowns}",
+                (if (game.newRecord) "Nouveau record !  " else "") + "+${game.treasureWon} pièces au trésor · trésor ${Meta.treasure}",
                 "REJOUER", { game.newGame(game.heroClass); focus.requestFocus() }, "Menu", { game.toMenu() })
             pausedUi -> Panel("PAUSE", "${CLASS_NAMES[game.heroClass]} · niveau ${game.level} · vague ${game.wave}", "Partie sauvegardée à chaque vague",
                 "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.toMenu() })
@@ -186,7 +186,7 @@ private fun MainMenu(
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterEnd) {
                 Box(Modifier.clip(RoundedCornerShape(16.dp)).background(Color(0xAA000000)).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    Label("♛ ${Meta.crowns}", Color(0xFFFFC531), 16, FontWeight.Black)
+                    Label("Trésor ● ${Meta.treasure}", Color(0xFFFFC531), 16, FontWeight.Black)
                 }
             }
             Image(painterResource(Res.drawable.logo), null, Modifier.size(110.dp))
@@ -204,7 +204,7 @@ private fun MainMenu(
                 for (up in 0..2) {
                     val lv = Meta.level(picked, up)
                     val cost = Meta.cost(picked, up)
-                    val can = lv < UP_MAX && Meta.crowns >= cost
+                    val can = lv < UP_MAX && Meta.treasure >= cost
                     Column(
                         Modifier.weight(1f).clip(RoundedCornerShape(12.dp))
                             .background(if (can) Color(0xEE2E6B34) else Color(0xAA1A2233))
@@ -213,7 +213,7 @@ private fun MainMenu(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Label("${UP_NAMES[up]} $lv/$UP_MAX", Color.White, 12, FontWeight.Black)
-                        Label(if (lv >= UP_MAX) "MAX" else "+ ♛ $cost", if (can) Color(0xFFFFC531) else Color(0xFF999999), 12, FontWeight.Bold)
+                        Label(if (lv >= UP_MAX) "MAX" else "+ ● $cost", if (can) Color(0xFFFFC531) else Color(0xFF999999), 12, FontWeight.Bold)
                     }
                 }
             }

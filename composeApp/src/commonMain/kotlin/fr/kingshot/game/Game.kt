@@ -35,25 +35,25 @@ val CLASS_NAMES = arrayOf("Guerrier", "Rôdeur", "Bâtisseur")
 val ABILITY_NAMES = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
 val ABILITY_COOLDOWN = floatArrayOf(10f, 12f, 20f)
 
-// Permanent hero upgrades bought with crowns between games (the meta loop)
+// Permanent hero upgrades bought from the treasure (coins kept between games): the meta loop
 const val UP_HP = 0 // +10 % health per level
 const val UP_POWER = 1 // +8 % king damage per level
 const val UP_ABILITY = 2 // -6 % ability cooldown per level
 const val UP_MAX = 10
 val UP_NAMES = arrayOf("Vie", "Force", "Capacité")
 
-/** Crowns and hero upgrades, kept across games. */
+/** Treasure (coins kept from past games) and hero upgrades, kept across games. */
 object Meta {
-    var crowns: Int
-        get() = Storage.loadInt("crowns")
-        set(v) = Storage.saveInt("crowns", v)
+    var treasure: Int
+        get() = Storage.loadInt("treasure")
+        set(v) = Storage.saveInt("treasure", v)
     fun level(cls: Int, up: Int) = Storage.loadInt("up_${cls}_$up")
     fun cost(cls: Int, up: Int) = 20 + 15 * level(cls, up)
     fun buy(cls: Int, up: Int): Boolean {
         val lv = level(cls, up)
         val c = cost(cls, up)
-        if (lv >= UP_MAX || crowns < c) return false
-        crowns -= c
+        if (lv >= UP_MAX || treasure < c) return false
+        treasure -= c
         Storage.saveInt("up_${cls}_$up", lv + 1)
         return true
     }
@@ -259,7 +259,7 @@ class Game {
     var heroClass = CLASS_WARRIOR
     private var heroPower = 1f // king damage from upgrades
     var abilityTime = 10f // cooldown of the ability after upgrades
-    var crownsWon = 0 // crowns earned by the last game (game-over panel)
+    var treasureWon = 0 // coins sent to the treasure by the last game (game-over panel)
     var abilityCd = 0f // seconds until the ability is ready
     var abilityFlash = 0f // > 0 right after use (visual)
     var paused = false
@@ -549,6 +549,8 @@ class Game {
         ageChanged = age != oldAge
         coins += rainLeft; rainLeft = 0
         for (c in coinsOnGround) if (c.active) { c.active = false; coins++ }
+        // finishing a level banks all the coins in hand into the treasure (and the game goes on with them)
+        Meta.treasure += coins
         for (f in flyCoins) if (f.active) { f.active = false; coins++ }
         for (e in enemies) e.active = false
         for (a in arrows) a.active = false
@@ -1491,8 +1493,9 @@ class Game {
 
     private fun gameOver() {
         Storage.saveGame(null)
-        crownsWon = wave * 2 + kills / 10 + (level - 1) * 15
-        Meta.crowns += crownsWon
+        // half of the coins in hand go to the permanent treasure
+        treasureWon = (coins + rainLeft) / 2
+        Meta.treasure += treasureWon
         castleHp = 0f
         state = STATE_OVER
         shake = 20f
