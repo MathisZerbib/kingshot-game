@@ -1,6 +1,10 @@
 package fr.kingshot.game
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
+import fr.kingshot.game.resources.Res
+import fr.kingshot.game.resources.logo
+import org.jetbrains.compose.resources.painterResource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -185,7 +189,8 @@ private fun MainMenu(
                     Label("♛ ${Meta.crowns}", Color(0xFFFFC531), 16, FontWeight.Black)
                 }
             }
-            Label("KINGSHOT", Color(0xFFFFC531), 52, FontWeight.Black)
+            Image(painterResource(Res.drawable.logo), null, Modifier.size(110.dp))
+            Label("KINGSHOT", Color(0xFFFFC531), 48, FontWeight.Black)
             Label("Défends ton royaume", Color.White, 16, FontWeight.Bold)
             Spacer(Modifier.height(28.dp))
             Label("Choisis ton héros", Color.White, 18, FontWeight.Black)
