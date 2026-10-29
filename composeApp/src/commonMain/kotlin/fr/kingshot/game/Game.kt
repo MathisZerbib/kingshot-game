@@ -432,7 +432,21 @@ class Game {
     private var keepCd = 0f
     var newUnlocks = "" // names unlocked by the last level-up ("NOUVEAU : ..." panel)
     var newUnlockId = -1 // building shown on the level-up card (UNLOCK index, UNLOCK_MINE_CARD, or -1)
-    var chestActive = false
+    var chestActive = false // (unused in the world: the chest lives in the victory panel)
+    var victoryOpen = false // end-of-level panel shown; the game waits
+    private var chestOpened = false
+    val chestCoins get() = 20 + 10 * (level - 1)
+    val chestTreasure get() = 25 * (level - 1)
+
+    /** Victory panel chest: a burst of coins for this run and a share for the treasure (once). */
+    fun openChest() {
+        if (chestOpened) return
+        chestOpened = true
+        rainLeft += chestCoins; rainX = kx + 40f; rainY = ky; rainRate = chestCoins / 0.8f
+        Meta.treasure += chestTreasure
+        Audio.play(Sfx.LEVEL_UP)
+        Audio.haptic(Haptic.MEDIUM)
+    }
     var chestX = 0f
     var chestY = 0f
     var chestBanner = 0f
@@ -588,7 +602,7 @@ class Game {
         World.load(1)
         buildMap()
         rainLeft = 0
-        chestActive = false; newUnlockId = -1
+        chestActive = false; newUnlockId = -1; victoryOpen = false; chestOpened = false
         wallLost = false; levelStart = 0f; lastStars = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
         for (t in tal.indices) tal[t] = Talents.level(t)
@@ -778,8 +792,7 @@ class Game {
         newUnlockId = -1
         for (u in UNLOCK_NAMES.indices) if (UNLOCK_LEVEL[u] == level) { newUnlockId = u; break }
         if (level == 2) newUnlockId = UNLOCK_MINE_CARD
-        // a reward chest waits by the keep: walk onto it to open it
-        chestActive = true; chestX = World.KING_START_X + 90f; chestY = World.KING_START_Y - 40f
+        chestOpened = false // the end-of-level panel offers the chest
         checkpoint = saveString()
         Storage.saveGame(checkpoint)
         kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
@@ -819,7 +832,7 @@ class Game {
             p.bump = 1f; burst(p.x, p.y, 10f, 20, 0xFFFFD84AL, 260f)
         }
         if (t >= 0.25f && before < 0.25f) for (k in CONFETTI.indices) burst(kx, ky - 80f, 140f, 16, CONFETTI[k], 600f)
-        if (transition <= 0f) { camZoom = 1f; revealRoad = -1 }
+        if (transition <= 0f) { camZoom = 1f; revealRoad = -1; victoryOpen = true }
     }
 
     /** Class ability (button); returns false while on cooldown. */
@@ -1081,7 +1094,7 @@ class Game {
             updateParticles(dt)
             return
         }
-        if (paused) return
+        if (paused || victoryOpen) return
         if (transition > 0f) {
             updateTransition(dt)
             updateParticles(dt)

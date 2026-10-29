@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageShader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.TileMode
@@ -206,6 +207,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     /** Pre-rendered 3D sprite atlases; null until loaded. */
     var sprites: Sprites? = null
+    /** Interface kit images for the HUD (art/ui), set by App. */
+    var hud: HudImages? = null
     private var scale = 1f
     private val portraitClip = Path()
     private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
@@ -1056,9 +1059,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val pr = 25f * u
             val pcx = 12f * u + pr
             val pcy = top + pr
-            circ(HUD_SHADOW, pcx, pcy + 3f * u, pr + 3f * u)
-            circ(GOLD_DARK, pcx, pcy, pr + 3f * u)
-            circ(CLASS_COLORS[g.heroClass], pcx, pcy, pr)
+            val ui = hud
+            if (ui != null) img(ui.circle, pcx, pcy, pr * 1.25f) else {
+                circ(HUD_SHADOW, pcx, pcy + 3f * u, pr + 3f * u)
+                circ(GOLD_DARK, pcx, pcy, pr + 3f * u)
+            }
+            circ(CLASS_COLORS[g.heroClass], pcx, pcy, pr * 0.9f)
             val sp = sprites
             if (sp != null) {
                 portraitClip.reset()
@@ -1075,38 +1081,54 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.num(g.level), bcx, bcy, 13f * u, Color(0xFF4A2A00), outlined = false)
             val lx = pcx + pr + 8f * u
             val lw = 112f * u
-            rr(HUD_BG, lx, top + 4f * u, lw, 44f * u, 12f * u)
+            if (ui != null) nineSlice(ui.panelDark, IN_PANEL, lx, top + 2f * u, lw, 48f * u, 0.12f * u) else rr(HUD_BG, lx, top + 4f * u, lw, 44f * u, 12f * u)
             label(text.str(CLASS_NAMES[g.heroClass]), lx + lw / 2f, top + 15f * u, 13f * u, WHITE, outlined = false)
             label(text.str(World.levelName(g.level)), lx + lw / 2f, top + 28f * u, 10f * u, GOLD, outlined = false)
-            rr(HUD_TRACK, lx + 8f * u, top + 37f * u, lw - 16f * u, 6f * u, 3f * u)
-            rr(GOLD, lx + 8f * u, top + 37f * u, (lw - 16f * u) * g.levelProgress, 6f * u, 3f * u)
+            if (ui != null) bar(ui, ui.barGold, lx + 8f * u, top + 35f * u, lw - 16f * u, 8f * u, g.levelProgress) else {
+                rr(HUD_TRACK, lx + 8f * u, top + 37f * u, lw - 16f * u, 6f * u, 3f * u)
+                rr(GOLD, lx + 8f * u, top + 37f * u, (lw - 16f * u) * g.levelProgress, 6f * u, 3f * u)
+            }
             val nu = g.nextUnlock
             if (nu >= 0) label(text.str(nextLabel(nu)), lx + lw / 2f, top + 56f * u, 9.5f * u, WHITE)
             // --- top-right: coins and pause
             val ph = 34f * u
             val pauseR = 17f * u
             pauseX = w - 12f * u - pauseR; pauseY = top + pauseR; pauseRadius = pauseR + 8f * u
-            circ(HUD_SHADOW, pauseX, pauseY + 3f * u, pauseR)
-            circ(HUD_BUTTON, pauseX, pauseY, pauseR)
-            rr(WHITE, pauseX - 6f * u, pauseY - 7f * u, 4f * u, 14f * u, 1.5f * u)
-            rr(WHITE, pauseX + 2f * u, pauseY - 7f * u, 4f * u, 14f * u, 1.5f * u)
+            if (ui != null) { img(ui.circle, pauseX, pauseY, pauseR * 1.15f); img(ui.pause, pauseX, pauseY, pauseR * 0.7f) } else {
+                circ(HUD_SHADOW, pauseX, pauseY + 3f * u, pauseR)
+                circ(HUD_BUTTON, pauseX, pauseY, pauseR)
+                rr(WHITE, pauseX - 6f * u, pauseY - 7f * u, 4f * u, 14f * u, 1.5f * u)
+                rr(WHITE, pauseX + 2f * u, pauseY - 7f * u, 4f * u, 14f * u, 1.5f * u)
+            }
             val pw = 96f * u
             val px = pauseX - pauseR - 8f * u - pw
-            rr(HUD_BG, px, top + 1f * u, pw, ph, ph / 2f)
-            drawCoinIcon(px + ph / 2f, top + 1f * u + ph / 2f, ph * 0.46f)
+            if (ui != null) {
+                nineSlice(ui.pill, IN_PILL, px, top + 1f * u, pw, ph, ph / 90f)
+                img(ui.coins, px + ph / 2f + 2f * u, top + 1f * u + ph / 2f, ph * 0.42f)
+            } else {
+                rr(HUD_BG, px, top + 1f * u, pw, ph, ph / 2f)
+                drawCoinIcon(px + ph / 2f, top + 1f * u + ph / 2f, ph * 0.46f)
+            }
             label(text.num(g.coins), px + pw * 0.6f, top + 1f * u + ph / 2f, 22f * u * (1f + g.stackBump * 0.18f), WHITE)
             // --- centre: wave pill and keep health
             val by = top + 62f * u
             val wpw = 112f * u
-            rr(HUD_SHADOW, w / 2f - wpw / 2f, by + 2f * u, wpw, 24f * u, 12f * u)
-            rr(WAVE_RED, w / 2f - wpw / 2f, by, wpw, 24f * u, 12f * u)
-            label(text.str(waveLabel(g.wave).uppercase()), w / 2f, by + 12f * u, 14f * u, WHITE)
+            if (ui != null) {
+                nineSlice(ui.ribbonBlue, IN_RIBBON, w / 2f - wpw * 0.75f, by - 6f * u, wpw * 1.5f, 32f * u, 32f * u / 170f)
+                label(text.str(waveLabel(g.wave).uppercase()), w / 2f, by + 8f * u, 13f * u, Color(0xFFFFE896))
+            } else {
+                rr(HUD_SHADOW, w / 2f - wpw / 2f, by + 2f * u, wpw, 24f * u, 12f * u)
+                rr(WAVE_RED, w / 2f - wpw / 2f, by, wpw, 24f * u, 12f * u)
+                label(text.str(waveLabel(g.wave).uppercase()), w / 2f, by + 12f * u, 14f * u, WHITE)
+            }
             val bw = min(w * 0.55f, 220f * u)
             val bx = w / 2f - bw / 2f
             val hy = by + 30f * u
-            rr(HUD_BG, bx - 3f * u, hy - 3f * u, bw + 6f * u, 13f * u, 6.5f * u)
             val frac = (g.castleHp / g.castleMaxHp).coerceIn(0f, 1f)
-            rr(if (frac > 0.35f) HP_GREEN else HP_RED, bx, hy, bw * frac, 7f * u, 3.5f * u)
+            if (ui != null) bar(ui, if (frac > 0.35f) ui.barGreen else ui.barRed, bx, hy - 3f * u, bw, 12f * u, frac) else {
+                rr(HUD_BG, bx - 3f * u, hy - 3f * u, bw + 6f * u, 13f * u, 6.5f * u)
+                rr(if (frac > 0.35f) HP_GREEN else HP_RED, bx, hy, bw * frac, 7f * u, 3.5f * u)
+            }
             label(text.str("Donjon"), w / 2f, hy + 17f * u, 11f * u, WHITE)
             // wave countdown
             if (g.toSpawn == 0 && !g.bossPending && g.waveBreak < 7f && g.waveBreak > 0f && g.enemies.none { it.active }) {
@@ -1138,7 +1160,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             val a = min(1f, g.levelBanner * 2f)
             label(text.str(levelDoneLabel(g.level - 1)), w / 2f, h * 0.27f, 36f * u * pop, GOLD, a)
-            label(text.str(STAR_LABELS[g.lastStars.coerceIn(0, 3)]), w / 2f, h * 0.27f + 128f * u, 30f * u * pop, GOLD, a)
+
             val newChapter = World.chapter(g.level) != World.chapter(g.level - 1) || g.level == World.LAST_LEVEL + 1
             val themeTxt = World.THEME_TEXT[World.theme(g.level)]
             if (themeTxt.isNotEmpty()) label(text.str(themeTxt), w / 2f, h * 0.27f + 160f * u, 14f * u, ALERT_RED, a)
@@ -1146,7 +1168,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 rr(HUD_BG, 30f * u, h * 0.27f + 96f * u, w - 60f * u, 30f * u, 15f * u)
                 label(text.str(newLabel(g.newUnlocks)), w / 2f, h * 0.27f + 111f * u, 13f * u, GOLD, a)
             }
-            if (g.newUnlockId >= 0) drawUnlockCard(g, w, h, u, a, pop)
+
             if (newChapter) label(text.str(if (g.isEndless) "MODE INFINI !" else "CHAPITRE ${World.chapter(g.level) + 1} : " + World.CHAPTER_NAMES[World.chapter(g.level)].uppercase()),
                 w / 2f, h * 0.27f - 40f * u, 20f * u, WHITE, a)
             if (g.ageChanged) {
@@ -1254,6 +1276,16 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
     }
 
+    /** Square image centred on (x, y) with half-size [r]. */
+    private fun DrawScope.img(im: ImageBitmap, x: Float, y: Float, r: Float) =
+        drawImage(im, IntOffset.Zero, IntSize(im.width, im.height), IntOffset((x - r).toInt(), (y - r).toInt()), IntSize((r * 2).toInt(), (r * 2).toInt()), filterQuality = FilterQuality.High)
+
+    private fun DrawScope.bar(ui: HudImages, fill: ImageBitmap, x: Float, y: Float, w: Float, h: Float, frac: Float) {
+        nineSlice(ui.barTrack, IN_BAR, x, y, w, h, h / 44f)
+        val fw = w * frac.coerceIn(0f, 1f)
+        if (fw > 2f) nineSlice(fill, IN_BAR, x, y, fw, h, h / 44f)
+    }
+
     /** Hit areas of the HUD buttons, in screen pixels (read by App's touch handler). */
     var pauseX = -1000f; var pauseY = -1000f; var pauseRadius = 0f
     var abilityX = -1000f; var abilityY = -1000f; var abilityRadius = 0f
@@ -1263,10 +1295,16 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         abilityX = w - 18f * u - r; abilityY = h - 46f * u - r; abilityRadius = r + 10f * u
         val ready = g.abilityCd <= 0f
         if (ready) circ(GOLD, abilityX, abilityY, r + (5f + 3f * sin(g.time * 6f)) * u) // ready glow
-        circ(HUD_SHADOW, abilityX, abilityY + 4f * u, r)
-        circ(GOLD_DARK, abilityX, abilityY, r)
-        circ(CLASS_COLORS[g.heroClass], abilityX, abilityY, r - 4f * u)
-        drawAbilityIcon(g.heroClass, abilityX, abilityY, r * 0.55f, u)
+        val ui = hud
+        if (ui != null) {
+            img(ui.circleRed, abilityX, abilityY, r * 1.12f)
+            img(ui.classIcons[g.heroClass], abilityX, abilityY, r * 0.62f)
+        } else {
+            circ(HUD_SHADOW, abilityX, abilityY + 4f * u, r)
+            circ(GOLD_DARK, abilityX, abilityY, r)
+            circ(CLASS_COLORS[g.heroClass], abilityX, abilityY, r - 4f * u)
+            drawAbilityIcon(g.heroClass, abilityX, abilityY, r * 0.55f, u)
+        }
         if (!ready) {
             val f = (g.abilityCd / g.abilityTime).coerceIn(0f, 1f)
             drawArc(COOLDOWN, -90f, 360f * f, true, Offset(abilityX - r + 4f * u, abilityY - r + 4f * u), Size((r - 4f * u) * 2f, (r - 4f * u) * 2f))
