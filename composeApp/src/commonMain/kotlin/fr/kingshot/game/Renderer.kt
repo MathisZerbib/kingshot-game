@@ -91,6 +91,7 @@ private val WAVE_RED = Color(0xFFC8342B)
 private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
 private val CAPTAIN_AURA = Color(0x55FFC531)
+private val CARD_BG = Color(0xF21F2A40)
 private val LOCK = Color(0xFFE0C068)
 private const val WALL_SCALE = 1.45f // walls and gates drawn bigger than their footprint so they read at a glance
 private val TORCH = Color(0xFFFFD25A)
@@ -209,6 +210,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private var scale = 1f
     private val portraitClip = Path()
     private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
+    private val cardBorder = Stroke(width = 6f)
     private val lockStroke = Stroke(width = 6f)
     private var viewTop = 0f // world y of the top of the view, to stop the coin stack where it leaves the screen
     private var viewOx = 0f // world -> screen offset of the current frame, for the HUD
@@ -408,6 +410,39 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     }
 
     /** Unexplored land: a mist beyond the explored radius, receding as levels go by. */
+    /** "NOUVEAU" card at the level-up: the unlocked building, big, with its name and effect. */
+    private fun DrawScope.drawUnlockCard(g: Game, w: Float, h: Float, u: Float, a: Float, pop: Float) {
+        val sp = sprites ?: return
+        val cw = 230f * u
+        val chh = 210f * u
+        val cx = w / 2f
+        val cy = h * 0.66f
+        rr(HUD_SHADOW, cx - cw / 2f, cy - chh / 2f + 6f * u, cw, chh, 22f * u)
+        rr(CARD_BG, cx - cw / 2f, cy - chh / 2f, cw, chh, 22f * u)
+        drawRoundRect(GOLD, Offset(cx - cw / 2f, cy - chh / 2f), Size(cw, chh), CornerRadius(22f * u, 22f * u), style = cardBorder, alpha = a)
+        label(text.str("NOUVEAU !"), cx, cy - chh / 2f + 20f * u, 20f * u * pop, GOLD, a)
+        // the building itself, scaled to fit the card
+        val id = g.newUnlockId
+        withTransform({ translate(cx, cy + 30f * u); scale(u * 0.55f, u * 0.55f, Offset.Zero) }) {
+            when (id) {
+                U_STABLE -> sprite(sp.stable, SpriteData.stable, 0, 0, 0f, 0f, 1f)
+                U_ALTAR -> sprite(sp.church, SpriteData.church, 0, 0, 0f, 0f, 1f)
+                U_MILL -> sprite(sp.watermill, SpriteData.watermill, 0, 0, 0f, 0f, 1f)
+                U_MARKET -> sprite(sp.market, SpriteData.market, 0, 0, 0f, 0f, 1f)
+                U_TREASURY -> sprite(sp.well, SpriteData.well, 0, 0, 0f, 0f, 1.4f, eliteTint)
+                U_GATEWORKS -> sprite(sp.blacksmith, SpriteData.blacksmith, 0, 0, 0f, 0f, 1f)
+                U_STATUE -> sprite(sp.lumbermill, SpriteData.lumbermill, 0, 0, 0f, 0f, 1f, eliteTint)
+                U_KEEP3 -> sprite(sp.towerRoyal, SpriteData.towerRoyal, 0, 0, 0f, 0f, 0.8f)
+                UNLOCK_MINE_CARD -> sprite(sp.mine, SpriteData.mine, 0, 0, 0f, 0f, 1f)
+                else -> sprite(sp.towerStone, SpriteData.towerStone, 0, 0, 0f, 0f, 0.8f)
+            }
+        }
+        val name = if (id == UNLOCK_MINE_CARD) "Mine et Caserne" else UNLOCK_NAMES[id]
+        val desc = if (id == UNLOCK_MINE_CARD) "butin x1,5 · 3 lanciers" else UNLOCK_DESC[id]
+        label(text.str(name), cx, cy + chh / 2f - 42f * u, 18f * u, WHITE, a)
+        label(text.str(desc), cx, cy + chh / 2f - 20f * u, 12f * u, GOLD, a)
+    }
+
     private fun DrawScope.drawFog(g: Game, w: Float, h: Float) {
         if (g.fogR <= 0f) return
         val sx = viewOx + World.CASTLE_X * scale
@@ -658,6 +693,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             for (k in 0 until LANCERS) if (vis(g.lx[k], g.ly[k])) n = push(n, g.ly[k], K_LANCER, k)
         }
         if (g.mine) n = push(n, World.MINE_Y, K_BUILDING, 2)
+        if (g.chestActive) n = push(n, g.chestY, K_BUILDING, 5)
         if (g.lastUnlock(0) >= 0) n = push(n, World.SPOT_A_Y, K_BUILDING, 3)
         if (g.lastUnlock(1) >= 0) n = push(n, World.SPOT_B_Y, K_BUILDING, 4)
         n = push(n, World.CASTLE_Y, K_CASTLE, 0)
@@ -780,6 +816,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                     U_KEEP3 -> sprite(sp.towerRoyal, SpriteData.towerRoyal, 0, 0, x, y, 0.9f)
                     else -> sprite(sp.towerStone, SpriteData.towerStone, 0, 0, x, y, 0.9f) // keep II, banner
                 }
+            }
+            5 -> { // level chest: bobbing golden crate with a glow
+                val bob = sin(g.time * 4f) * 6f
+                circ(CAPTAIN_AURA, g.chestX, g.chestY, 44f + 6f * sin(g.time * 6f))
+                sprite(sp.crate, SpriteData.crate, 0, 0, g.chestX, g.chestY - 8f + bob, 2.2f, eliteTint)
             }
             0 -> sprite(sp.farm, SpriteData.farm, 0, 0, World.FARM_X, World.FARM_Y, 1f)
             1 -> sprite(sp.barracks, SpriteData.barracks, 0, 0, World.BARRACKS_X, World.BARRACKS_Y, 1f)
@@ -1103,6 +1144,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 rr(HUD_BG, 30f * u, h * 0.27f + 96f * u, w - 60f * u, 30f * u, 15f * u)
                 label(text.str(newLabel(g.newUnlocks)), w / 2f, h * 0.27f + 111f * u, 13f * u, GOLD, a)
             }
+            if (g.newUnlockId >= 0) drawUnlockCard(g, w, h, u, a, pop)
             if (newChapter) label(text.str(if (g.isEndless) "MODE INFINI !" else "CHAPITRE ${World.chapter(g.level) + 1} : " + World.CHAPTER_NAMES[World.chapter(g.level)].uppercase()),
                 w / 2f, h * 0.27f - 40f * u, 20f * u, WHITE, a)
             if (g.ageChanged) {
@@ -1123,6 +1165,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             label(text.str("VAGUE REPOUSSÉE !"), w / 2f, h * 0.3f, 34f * u * pop, GOLD, min(1f, k * 3f))
             label(text.str("Butin du donjon"), w / 2f, h * 0.3f + 34f * u, 16f * u, WHITE, min(1f, k * 3f))
+        }
+        if (g.chestBanner > 0f) {
+            val k = g.chestBanner / 2.5f
+            label(text.str("COFFRE OUVERT !"), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
         }
         if (g.caravanBanner > 0f) {
             val k = g.caravanBanner / 2.5f

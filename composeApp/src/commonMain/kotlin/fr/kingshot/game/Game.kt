@@ -50,6 +50,7 @@ const val U_BANNER = 6 // squad and towers shoot 20 % faster
 const val U_KEEP3 = 7 // keep +50 % health and 4 keep archers
 const val U_TREASURY = 8 // +5 % of the coins in hand at each wave (max 100)
 const val U_GATEWORKS = 9 // walls +50 % health
+const val UNLOCK_MINE_CARD = 100 // level-2 card: mine and barracks
 val UNLOCK_SPOT = intArrayOf(0, 0, 0, 0, 0, 1, 1, 1, 1, 1)
 val UNLOCK_LEVEL = intArrayOf(3, 5, 7, 9, 11, 4, 6, 8, 10, 12)
 val UNLOCK_COST = intArrayOf(120, 160, 200, 260, 300, 180, 220, 320, 300, 280)
@@ -430,6 +431,11 @@ class Game {
     private var millTimer = 0f
     private var keepCd = 0f
     var newUnlocks = "" // names unlocked by the last level-up ("NOUVEAU : ..." panel)
+    var newUnlockId = -1 // building shown on the level-up card (UNLOCK index, UNLOCK_MINE_CARD, or -1)
+    var chestActive = false
+    var chestX = 0f
+    var chestY = 0f
+    var chestBanner = 0f
     var farm = false
     private var farmTimer = 0f
     var barracks = false
@@ -582,6 +588,7 @@ class Game {
         World.load(1)
         buildMap()
         rainLeft = 0
+        chestActive = false; newUnlockId = -1
         wallLost = false; levelStart = 0f; lastStars = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
         for (t in tal.indices) tal[t] = Talents.level(t)
@@ -768,6 +775,11 @@ class Game {
         for (u in UNLOCK_NAMES.indices) if (UNLOCK_LEVEL[u] == level) { if (sb.isNotEmpty()) sb.append(" · "); sb.append(UNLOCK_NAMES[u]) }
         if (level == 2) { if (sb.isNotEmpty()) sb.append(" · "); sb.append("Mine · Caserne") }
         newUnlocks = sb.toString()
+        newUnlockId = -1
+        for (u in UNLOCK_NAMES.indices) if (UNLOCK_LEVEL[u] == level) { newUnlockId = u; break }
+        if (level == 2) newUnlockId = UNLOCK_MINE_CARD
+        // a reward chest waits by the keep: walk onto it to open it
+        chestActive = true; chestX = World.KING_START_X + 90f; chestY = World.KING_START_Y - 40f
         checkpoint = saveString()
         Storage.saveGame(checkpoint)
         kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
@@ -1400,6 +1412,17 @@ class Game {
             Audio.play(Sfx.VICTORY, 0.6f)
         }
         if (caravanBanner > 0f) caravanBanner -= dt
+        if (chestBanner > 0f) chestBanner -= dt
+        if (chestActive && !kDead && hypot(kx - chestX, ky - chestY) < 60f) { // open the level chest
+            chestActive = false
+            val n = 20 + 10 * level
+            rainLeft += n; rainX = chestX; rainY = chestY; rainRate = n / 0.8f
+            Meta.treasure += 25 * level
+            chestBanner = 2.5f
+            burst(chestX, chestY, 30f, 50, 0xFFFFD84AL, 380f)
+            Audio.play(Sfx.LEVEL_UP)
+            Audio.haptic(Haptic.MEDIUM)
+        }
         if (unlocked[U_MILL]) {
             millTimer += dt
             if (millTimer >= 2f) { millTimer -= 2f; dropCoin(World.SPOT_A_X + 40f, World.SPOT_A_Y + 10f) }
