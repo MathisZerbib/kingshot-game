@@ -390,26 +390,6 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         return img
     }
 
-    private var holeMask: ImageBitmap? = null
-
-    /** Clear disc with a soft rim (opaque inside 80 % of the radius), punched out of the fog layer. */
-    private fun holeBitmap(): ImageBitmap {
-        holeMask?.let { return it }
-        val n = 256
-        val img = ImageBitmap(n, n)
-        val c = androidx.compose.ui.graphics.Canvas(img)
-        val paint = androidx.compose.ui.graphics.Paint()
-        paint.color = Color.Black
-        c.drawCircle(Offset(n / 2f, n / 2f), n * 0.4f, paint)
-        for (r in (n / 2) downTo (n * 2 / 5)) { // soft rim
-            paint.color = Color.Black.copy(alpha = 0.09f)
-            c.drawCircle(Offset(n / 2f, n / 2f), r.toFloat(), paint)
-        }
-        holeMask = img
-        return img
-    }
-
-    /** Unexplored land: a mist beyond the explored radius, receding as levels go by. */
     /** "NOUVEAU" card at the level-up: the unlocked building, big, with its name and effect. */
     private fun DrawScope.drawUnlockCard(g: Game, w: Float, h: Float, u: Float, a: Float, pop: Float) {
         val sp = sprites ?: return
@@ -443,18 +423,43 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         label(text.str(desc), cx, cy + chh / 2f - 20f * u, 12f * u, GOLD, a)
     }
 
+    private var fogRing: ImageBitmap? = null
+
+    /** Mist outside a soft-rimmed clear disc (clear up to 80 % of the radius), built once: no layer per frame. */
+    private fun fogRingBitmap(): ImageBitmap {
+        fogRing?.let { return it }
+        val n = 256
+        val img = ImageBitmap(n, n)
+        val c = androidx.compose.ui.graphics.Canvas(img)
+        val paint = androidx.compose.ui.graphics.Paint()
+        paint.color = FOG
+        c.drawRect(androidx.compose.ui.geometry.Rect(0f, 0f, n.toFloat(), n.toFloat()), paint)
+        paint.blendMode = BlendMode.DstOut
+        for (r in (n / 2) downTo (n * 2 / 5)) { // soft rim
+            paint.color = Color.Black.copy(alpha = 0.09f)
+            c.drawCircle(Offset(n / 2f, n / 2f), r.toFloat(), paint)
+        }
+        paint.color = Color.Black
+        c.drawCircle(Offset(n / 2f, n / 2f), n * 0.4f, paint)
+        fogRing = img
+        return img
+    }
+
+    /** Unexplored land: a mist beyond the explored radius, receding as levels go by. */
     private fun DrawScope.drawFog(g: Game, w: Float, h: Float) {
         if (g.fogR <= 0f) return
         val sx = viewOx + World.CASTLE_X * scale
         val sy = viewOy + World.CASTLE_Y * scale
-        val rr = g.fogR * scale / 0.8f // the mask is clear up to 80 % of its radius
-        if (sx - rr * 0.8f < 0f || sx + rr * 0.8f > w || sy - rr * 0.8f < 0f || sy + rr * 0.8f > h) {
-            val hole = holeBitmap()
-            drawContext.canvas.saveLayer(androidx.compose.ui.geometry.Rect(0f, 0f, w, h), nightPaint)
-            drawRect(FOG)
-            drawImage(hole, IntOffset.Zero, IntSize(hole.width, hole.height), IntOffset((sx - rr).toInt(), (sy - rr).toInt()), IntSize((rr * 2).toInt(), (rr * 2).toInt()), blendMode = BlendMode.DstOut)
-            drawContext.canvas.restore()
-        }
+        val rr = g.fogR * scale / 0.8f // the ring is clear up to 80 % of its radius
+        if (sx - rr * 0.8f >= 0f && sx + rr * 0.8f <= w && sy - rr * 0.8f >= 0f && sy + rr * 0.8f <= h) return // fog not on screen
+        val ring = fogRingBitmap()
+        val l = sx - rr; val t = sy - rr; val r = sx + rr; val b = sy + rr
+        drawImage(ring, IntOffset.Zero, IntSize(ring.width, ring.height), IntOffset(l.toInt(), t.toInt()), IntSize((rr * 2).toInt(), (rr * 2).toInt()))
+        // plain mist beyond the ring's square
+        if (t > 0f) drawRect(FOG, Offset(0f, 0f), Size(w, t))
+        if (b < h) drawRect(FOG, Offset(0f, b), Size(w, h - b))
+        if (l > 0f) drawRect(FOG, Offset(0f, max(0f, t)), Size(l, min(h, b) - max(0f, t)))
+        if (r < w) drawRect(FOG, Offset(r, max(0f, t)), Size(w - r, min(h, b) - max(0f, t)))
     }
 
     private fun DrawScope.drawWeather(g: Game, w: Float, h: Float) {
