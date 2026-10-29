@@ -1,0 +1,154 @@
+{
+ "ui_button_gold": {
+  "w": 480,
+  "h": 150,
+  "left": 40,
+  "top": 40,
+  "right": 40,
+  "bottom": 52
+ },
+ "ui_button_green": {
+  "w": 480,
+  "h": 150,
+  "left": 40,
+  "top": 40,
+  "right": 40,
+  "bottom": 52
+ },
+ "ui_button_blue": {
+  "w": 480,
+  "h": 150,
+  "left": 40,
+  "top": 40,
+  "right": 40,
+  "bottom": 52
+ },
+ "ui_button_red": {
+  "w": 480,
+  "h": 150,
+  "left": 40,
+  "top": 40,
+  "right": 40,
+  "bottom": 52
+ },
+ "ui_button_grey": {
+  "w": 480,
+  "h": 150,
+  "left": 40,
+  "top": 40,
+  "right": 40,
+  "bottom": 52
+ },
+ "ui_button_wood": {
+  "w": 480,
+  "h": 150,
+  "left": 40,
+  "top": 40,
+  "right": 40,
+  "bottom": 52
+ },
+ "ui_panel": {
+  "w": 600,
+  "h": 600,
+  "left": 58,
+  "top": 58,
+  "right": 58,
+  "bottom": 58
+ },
+ "ui_panel_dark": {
+  "w": 600,
+  "h": 600,
+  "left": 58,
+  "top": 58,
+  "right": 58,
+  "bottom": 58
+ },
+ "ui_card": {
+  "w": 360,
+  "h": 520,
+  "left": 46,
+  "top": 104,
+  "right": 46,
+  "bottom": 46
+ },
+ "ui_ribbon_red": {
+  "w": 800,
+  "h": 170,
+  "left": 142,
+  "top": 40,
+  "right": 142,
+  "bottom": 40
+ },
+ "ui_ribbon_blue": {
+  "w": 800,
+  "h": 170,
+  "left": 142,
+  "top": 40,
+  "right": 142,
+  "bottom": 40
+ },
+ "ui_bar_track": {
+  "w": 400,
+  "h": 44,
+  "left": 24,
+  "top": 20,
+  "right": 24,
+  "bottom": 20
+ },
+ "ui_bar_gold": {
+  "w": 400,
+  "h": 44,
+  "left": 24,
+  "top": 20,
+  "right": 24,
+  "bottom": 20
+ },
+ "ui_bar_blue": {
+  "w": 400,
+  "h": 44,
+  "left": 24,
+  "top": 20,
+  "right": 24,
+  "bottom": 20
+ },
+ "ui_bar_red": {
+  "w": 400,
+  "h": 44,
+  "left": 24,
+  "top": 20,
+  "right": 24,
+  "bottom": 20
+ },
+ "ui_bar_green": {
+  "w": 400,
+  "h": 44,
+  "left": 24,
+  "top": 20,
+  "right": 24,
+  "bottom": 20
+ },
+ "ui_tab_on": {
+  "w": 320,
+  "h": 110,
+  "left": 34,
+  "top": 34,
+  "right": 34,
+  "bottom": 10
+ },
+ "ui_tab_off": {
+  "w": 320,
+  "h": 110,
+  "left": 34,
+  "top": 34,
+  "right": 34,
+  "bottom": 10
+ },
+ "ui_pill": {
+  "w": 300,
+  "h": 90,
+  "left": 47,
+  "top": 43,
+  "right": 47,
+  "bottom": 43
+ }
+}
