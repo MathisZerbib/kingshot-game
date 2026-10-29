@@ -93,6 +93,7 @@ class Enemy {
     var kind = 0 // see KIND_* (2 = boss, its look/behaviour in bossType)
     var bossType = 0 // 0 giant knight (wood age), 1 ogre (stone: hurls the king), 2 dark lord (royal: summons soldiers)
     var special = 0f // per-kind timer: archer reload, lord summon, wolf leap
+    var elite = false // endless mode: double health and loot
     var mdx = 0f // last movement direction (shield bearers block arrows from the front)
     var mdy = 0f
     var atkCd = 0f
@@ -636,6 +637,8 @@ class Game {
 
     /** Share of this level's construction done (towers, their archers, walls): the HUD progress bar. */
     val levelProgress: Float get() {
+        if (isEndless) return (wave % 10) / 10f
+        if (level >= 5) return (levelWaves.toFloat() / goalWaves).coerceIn(0f, 1f)
         var done = 0
         var total = 0
         for (t in towers) { total += 1 + TOWER_SLOTS; if (t.built) done += 1 + t.archers }
@@ -643,7 +646,12 @@ class Game {
         return if (total == 0) 0f else done.toFloat() / total
     }
 
-    private fun levelDone(): Boolean =
+    /** Levels 1-4: build everything. Level 5+: hold out [goalWaves] waves (the last one brings the boss); endless after 20. */
+    var levelWaves = 0 // waves cleared in this level
+    val goalWaves get() = if (level <= 4) 0 else if (level > World.LAST_LEVEL) Int.MAX_VALUE else 3 + level / 4
+    val isEndless get() = level > World.LAST_LEVEL
+
+    private fun levelDone(): Boolean = level <= 4 &&
         towers.all { it.built && it.archers >= TOWER_SLOTS } && walls.all { it.built && it.hp > 0f }
 
     /** Next level: bank loose coins, clear the field, grow the map (everything built stays), maybe enter a new age. */
@@ -651,6 +659,7 @@ class Game {
         levelUpPending = false
         val oldAge = age
         level++
+        levelWaves = 0
         pendXp += 50
         flushProgress()
         Missions.reach(MIS_LEVEL, level)
@@ -876,6 +885,7 @@ class Game {
         sb.append(";")
         for (w in walls) sb.append(if (w.built) w.hp else -1f).append(",")
         sb.append(";").append(heroClass)
+        sb.append(";").append(levelWaves)
         sb.append(";").append(if (farm) 1 else 0).append(if (barracks) 1 else 0).append(if (mine) 1 else 0).append(";")
         for (t in towers) sb.append(if (t.elite) 2 else if (t.ballista) 1 else 0)
         return sb.toString()
@@ -915,9 +925,12 @@ class Game {
                 PAD_WALL -> p.visible = !walls[p.ref].built
                 else -> {}
             }
-            val b = f.getOrNull(15) ?: ""
+            // saves from before the chapters have no levelWaves field: they have the 3-digit buildings field at 15
+            val shift = if ((f.getOrNull(15)?.length ?: 0) == 3 || f.getOrNull(15).isNullOrEmpty()) 0 else 1
+            levelWaves = if (shift == 1) f[15].toIntOrNull() ?: 0 else 0
+            val b = f.getOrNull(15 + shift) ?: ""
             farm = b.getOrNull(0) == '1'; barracks = b.getOrNull(1) == '1'; mine = b.getOrNull(2) == '1'
-            val tf = f.getOrNull(16) ?: ""
+            val tf = f.getOrNull(16 + shift) ?: ""
             for (i in towers.indices) { val c = tf.getOrNull(i) ?: '0'; towers[i].ballista = c >= '1'; towers[i].elite = c == '2' }
             farmPad.visible = !farm; barracksPad.visible = farm && !barracks; minePad.visible = level >= 2 && !mine
             if (barracks) for (k in 0 until LANCERS) { lx[k] = World.BARRACKS_X + (k - 1) * 30f; ly[k] = World.BARRACKS_Y }
@@ -1401,7 +1414,7 @@ class Game {
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
         if (e.kind == 2) { rainLeft += if (mine) e.coins * 2 else e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
-        else repeat(if (mine) e.coins * 2 else e.coins) { dropCoin(e.x, e.y) }
+        else repeat((if (mine) e.coins * 2 else e.coins) * (if (e.elite) 2 else 1)) { dropCoin(e.x, e.y) }
         if (e.kind == 2) shake = 14f
     }
 
@@ -1664,6 +1677,10 @@ class Game {
         if (enemies.any { it.active }) return
         if (!waveCleared) {
             waveCleared = true
+            if (wave > 0 && level >= 5) {
+                levelWaves++
+                if (levelWaves >= goalWaves) levelUpPending = true
+            }
             if (wave > 0) {
                 kBoost = 2f
                 // wave reward: a shower of coins from the keep, growing with the wave
@@ -1680,7 +1697,8 @@ class Game {
             saveGame()
             waveCleared = false
             toSpawn = 3 + wave * 2
-            bossPending = wave % 5 == 0
+            // boss on every 5th wave, and on the last wave of a level from level 5
+            bossPending = wave % 5 == 0 || (goalWaves in 1..999 && levelWaves == goalWaves - 1)
             spawnTimer = 0.5f
             waveBanner = 2.2f
             waveBreak = 7f
@@ -1723,7 +1741,8 @@ class Game {
         e.x = tmp.x + e.offX; e.y = tmp.y + e.offY
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
         e.special = 0f; e.mdx = 0f; e.mdy = 0f
-        val hpScale = 1f + (wave - 1) * 0.17f
+        e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
+        val hpScale = (1f + (wave - 1) * 0.17f) * (if (e.elite) 2f else 1f)
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.4f) 3 else 2 }
             KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }

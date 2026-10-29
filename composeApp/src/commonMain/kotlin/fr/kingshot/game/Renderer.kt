@@ -59,7 +59,10 @@ private val SEASONS = arrayOf(
     arrayOf(Color(0xFF8DC24F), Color(0xFF7DB443), Color(0xFF9CCD5C), Color(0xFF86A83F), Color(0xFF94B54A), Color(0xFF5E9A2E)),
     arrayOf(Color(0xFFC2B25A), Color(0xFFB2A04C), Color(0xFFD0BF68), Color(0xFFAE9A45), Color(0xFFBCA851), Color(0xFF9A7F33)),
     arrayOf(Color(0xFFE4ECEF), Color(0xFFD2DDE3), Color(0xFFF1F5F7), Color(0xFFD8E2E7), Color(0xFFE8EEF1), Color(0xFFAFC0CA)),
+    arrayOf(Color(0xFF5F9E3A), Color(0xFF4F8C30), Color(0xFF6DAD45), Color(0xFF5A8A34), Color(0xFF679A3D), Color(0xFF3E7A24)),
 )
+/** Ground palette per chapter: plain = spring, forest = deep green, snow = winter, kingdom = golden autumn. */
+private val CHAPTER_SEASON = intArrayOf(0, 3, 2, 1)
 private val FLOWERS = arrayOf(Color(0xFFFFFFFF), Color(0xFFFFD84A), Color(0xFFFF8FB4))
 private val FLOWER_HEART = Color(0xFFFFB12B)
 private val DIRT_LIGHT = Color(0xFFE6C493)
@@ -308,7 +311,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             revealMeasure.setPath(roads2[revealIdx], false)
             revealMeasure.getSegment(0f, revealMeasure.length * g.revealT, revealPath, true)
         }
-        season = SEASONS[(g.level - 1) % SEASONS.size]
+        season = SEASONS[CHAPTER_SEASON[World.chapter(g.level)]]
         drawRect(season[0])
         withTransform({
             translate(ox, oy)
@@ -569,7 +572,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_CASTLE -> drawCastle(g)
                 K_TOWER -> drawTower(g.towers[idx], g.age)
                 K_WALL -> drawWall(g.walls[idx], g.age)
-                K_ENEMY -> drawEnemy(g.enemies[idx])
+                K_ENEMY -> drawEnemy(g.enemies[idx], g.level % 5 == 0)
                 K_CORPSE -> drawCorpse(g.corpses[idx])
                 K_BUILDING -> drawBuilding(idx)
                 K_LANCER -> {
@@ -795,13 +798,13 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     )
     private val bossTints = arrayOf(null, ColorFilter.tint(Color(0x9950A040), BlendMode.SrcAtop), ColorFilter.tint(Color(0xA05A2A90), BlendMode.SrcAtop))
 
-    private fun DrawScope.drawEnemy(e: Enemy) {
+    private fun DrawScope.drawEnemy(e: Enemy, bigBoss: Boolean) {
         val sp = sprites ?: return
         val boss = e.kind == 2
-        val filter = if (e.hitFlash > 0f) flashFilter else if (boss) bossTints[e.bossType.coerceIn(0, 2)] else kindTints[e.kind.coerceIn(0, kindTints.size - 1)]
+        val filter = if (e.hitFlash > 0f) flashFilter else if (boss) bossTints[e.bossType.coerceIn(0, 2)] else if (e.elite) eliteTint else kindTints[e.kind.coerceIn(0, kindTints.size - 1)]
         if (boss) {
             val col = if (e.swing > 0f) 4 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 4)
-            sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE * (if (e.bossType == 1) 1.15f else 1f), filter)
+            sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE * (if (e.bossType == 1) 1.15f else 1f) * (if (bigBoss) 1.15f else 1f), filter)
         } else {
             val col = if (e.swing > 0f) 6 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 6)
             sprite(sp.knight, SpriteData.knight, col, e.dir, e.x, e.y, UNIT_SCALE * e.scale, filter)
@@ -938,6 +941,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             val a = min(1f, g.levelBanner * 2f)
             label(text.str(levelDoneLabel(g.level - 1)), w / 2f, h * 0.27f, 36f * u * pop, GOLD, a)
+            val newChapter = World.chapter(g.level) != World.chapter(g.level - 1) || g.level == World.LAST_LEVEL + 1
+            if (newChapter) label(text.str(if (g.isEndless) "MODE INFINI !" else "CHAPITRE ${World.chapter(g.level) + 1} : " + World.CHAPTER_NAMES[World.chapter(g.level)].uppercase()),
+                w / 2f, h * 0.27f - 40f * u, 20f * u, WHITE, a)
             if (g.ageChanged) {
                 label(text.str(if (g.age >= 3) "ÂGE ROYAL !" else "ÂGE DE PIERRE !"), w / 2f, h * 0.27f + 44f * u, 30f * u * pop, WHITE, a)
                 label(text.str(if (g.age >= 3) "Tours royales · dégâts ×1,5 · château royal" else "Remparts de pierre avec portes · tours de pierre"), w / 2f, h * 0.27f + 76f * u, 14f * u, WHITE, a)

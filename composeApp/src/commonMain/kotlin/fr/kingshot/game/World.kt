@@ -137,8 +137,26 @@ object World {
      * 2 = northern forest (road through a cliff pass and a dense wood), 3 = eastern gorge (road squeezed between
      * two cliffs), 4 = southern river (crossed by both southern roads on bridges). Level 5+ keeps the level-4 map.
      */
-    val LEVEL_NAMES = arrayOf("La Vallée", "La Forêt du Nord", "Le Col de l'Est", "La Rivière du Sud", "Le Royaume")
-    fun levelName(level: Int) = LEVEL_NAMES[(level - 1).coerceIn(0, LEVEL_NAMES.size - 1)]
+    val LEVEL_NAMES = arrayOf(
+        // chapter 1, the plain: the map grows road by road
+        "La Vallée", "La Forêt du Nord", "Le Col de l'Est", "La Rivière du Sud", "Le Seigneur de la Plaine",
+        // chapter 2, the forest
+        "L'Orée", "Les Loups des Bois", "La Clairière", "Les Archers Verts", "Le Cœur de la Forêt",
+        // chapter 3, the snow
+        "Le Premier Gel", "La Tempête", "Les Remparts Gelés", "La Nuit Blanche", "L'Ogre des Neiges",
+        // chapter 4, the kingdom
+        "Les Bannières", "Le Siège", "Les Béliers", "La Dernière Muraille", "Le Seigneur Noir",
+    )
+    val CHAPTER_NAMES = arrayOf("La Plaine", "La Forêt", "Les Neiges", "Le Royaume")
+    const val LAST_LEVEL = 20
+    fun levelName(level: Int) = if (level > LAST_LEVEL) "Mode infini" else LEVEL_NAMES[(level - 1).coerceIn(0, LEVEL_NAMES.size - 1)]
+    /** 0 plain (1-5), 1 forest (6-10), 2 snow (11-15), 3 kingdom (16-20 and the endless mode). */
+    fun chapter(level: Int) = ((level - 1) / 5).coerceIn(0, 3)
+    /** Extra woods for the forest chapter. */
+    private val chapterForests = floatArrayOf(
+        250f, 620f, 160f, 14f, 1500f, 700f, 150f, 12f, 1750f, 1450f, 130f, 10f, 300f, 1400f, 140f, 12f,
+        1650f, 2050f, 120f, 9f, 500f, 2150f, 120f, 9f, 1200f, 420f, 120f, 9f,
+    )
 
     private val extraRoads = arrayOf(
         floatArrayOf(380f, -80f, 470f, 320f, 610f, 720f, 770f, 1060f, 915f, 1380f, 985f, 1560f),
@@ -182,6 +200,7 @@ object World {
             cliffs = cliffs.filter { pathClear(it, path, 70f) }.toTypedArray() + extraCliffs[k]
             fr = fr + extraForests[k]
         }
+        if (chapter(level) == 1) fr = fr + chapterForests
         forests = fr
         river = if (level >= 4) riverPts else FloatArray(0)
         decorate(7)
