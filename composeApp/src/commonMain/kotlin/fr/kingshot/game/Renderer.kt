@@ -93,10 +93,9 @@ private val PAD_DIM = Color(0x66000000)
 private val CAPTAIN_AURA = Color(0x55FFC531)
 private val CARD_BG = Color(0xF21F2A40)
 private val LOCK = Color(0xFFE0C068)
-private const val WALL_SCALE = 1.45f // walls and gates drawn bigger than their footprint so they read at a glance
+private const val WALL_SCALE = 1f // the v2 wall/gate sprites are already drawn tall and chunky
 private val TORCH = Color(0xFFFFD25A)
 private val TORCH_GLOW = Color(0x55FF9A2A)
-private val GATE_BANNER = Color(0xFF2F5BD3)
 private val NIGHT = Color(0xD0050A1E)
 private val FOG = Color(0xE6DCE6E8)
 private val SNOW = Color(0xCCFFFFFF)
@@ -902,20 +901,18 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                     if (closedA > 0.01f) sprite(if (vertical) sp.gateWoodClosedV else sp.gateWoodClosed, if (vertical) SpriteData.gateWoodClosedV else SpriteData.gateWoodClosed, 0, 0, x, y, b, filter, closedA)
                     if (openA > 0.01f) sprite(if (vertical) sp.gateWoodOpenV else sp.gateWoodOpen, if (vertical) SpriteData.gateWoodOpenV else SpriteData.gateWoodOpen, 0, 0, x, y, b, filter, openA)
                 }
-                // gate marker: two flickering torches on the posts and a blue banner on top
-                val px = if (vertical) 0f else 52f
-                val py = if (vertical) 52f else 0f
-                val top = y - 95f * b / WALL_SCALE
+                // flickering flames on the gate's lanterns (the banner is part of the sprite)
+                val off = if (stone) 51f else 35f // lanterns 1.6 m (stone) / 1.1 m (wood) from the centre
+                val px = if (vertical) 0f else off
+                val py = if (vertical) off else 0f
+                val top = y - 64f * b
                 for (sgn in -1..1 step 2) {
                     val tx = x + px * sgn
                     val ty = top + py * sgn
                     val fl = 0.8f + 0.2f * sin(g.time * 17f + sgn * 2f)
                     circ(TORCH_GLOW, tx, ty - 6f, 16f * fl)
                     circ(TORCH, tx, ty - 6f, 6f * fl)
-                    line(PLANK_DARK, tx, ty, tx, ty + 22f, 4f)
                 }
-                rr(GATE_BANNER, x - 16f, top - 46f, 32f, 26f, 4f)
-                line(PLANK_DARK, x, top - 50f, x, top - 18f, 3f)
             } else {
                 if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, b, filter, alpha)
                 else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, b, filter, alpha)
