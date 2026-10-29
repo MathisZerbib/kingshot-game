@@ -819,37 +819,61 @@ def portrait(name, build_rider, px=256):
 
 
 def build_palisade(gate=None):
-    """A 2.8 m wooden palisade segment along X (same footprint as wall_stone). gate: None, 'closed' or 'open'."""
+    """A 2.8 m wooden palisade segment along X (same footprint as wall_stone), v2: tall thick logs, walkway beam,
+    and for gates two log towers with a platform, a lintel banner and a lantern so the gate reads at a glance.
+    gate: None, 'closed' or 'open'."""
     L = 2.8
     wood, dark, cut = M["wood"], M["wood_dark"], M["wood_cut"]
 
-    def log(x, h, r=0.15, parent=None, i=0):
-        cyl((x, 0, h / 2), r, r * 0.9, h, wood if i % 2 else dark, parent, seg=10)
-        cyl((x, 0, h + 0.12), r * 0.9, 0.0, 0.26, cut, parent, seg=10)
+    def log(x, h, r=0.19, parent=None, i=0, y=0.0):
+        cyl((x, y, h / 2), r, r * 0.92, h, wood if i % 2 else dark, parent, seg=10)
+        cyl((x, y, h + 0.14), r * 0.92, 0.0, 0.3, cut, parent, seg=10)
 
     if gate is None:
-        n = 9
+        n = 8
         for i in range(n):
-            x = -L / 2 + 0.155 + i * (L - 0.31) / (n - 1)
-            log(x, 1.45 + 0.06 * ((i * 7) % 3), i=i)
-        for z in (0.5, 1.1):
-            box((0, 0.17, z), (L, 0.09, 0.14), dark, bevel=0.01)
-        for x in (-L / 2 + 0.155, L / 2 - 0.155):
-            for z in (0.5, 1.1):
-                torus((x, 0.03, z), 0.2, 0.028, M["rope"], rot=(0, math.pi / 2, 0), seg=14)
+            x = -L / 2 + 0.19 + i * (L - 0.38) / (n - 1)
+            log(x, 2.05 + 0.08 * ((i * 7) % 3), i=i)
+        for z in (0.7, 1.55):
+            box((0, 0.21, z), (L, 0.1, 0.16), dark, bevel=0.01)
+        for x in (-L / 2 + 0.19, L / 2 - 0.19):
+            for z in (0.7, 1.55):
+                torus((x, 0.03, z), 0.24, 0.03, M["rope"], rot=(0, math.pi / 2, 0), seg=14)
+        # sharpened stakes leaning outwards (north = +Y is the enemy side)
+        for i in range(4):
+            x = -L / 2 + 0.45 + i * (L - 0.9) / 3
+            cyl((x, 0.42, 0.55), 0.06, 0.0, 1.1, cut, rot=(math.radians(-38), 0, 0), seg=8)
         return
+    # gate towers: four logs each, a platform with a plank rail and a peaked roof
     for sx in (-1, 1):
-        log(sx * (L / 2 - 0.19), 2.05, r=0.19)
-    box((0, 0, 2.22), (L, 0.34, 0.2), dark, bevel=0.02)
-    box((0, 0.02, 2.42), (0.9, 0.3, 0.2), wood, bevel=0.02)
+        tx = sx * (L / 2 - 0.3)
+        for (dx, dy) in ((-0.2, -0.2), (0.2, -0.2), (-0.2, 0.2), (0.2, 0.2)):
+            log(tx + dx, 3.0, r=0.14, i=int(dx > 0), y=dy)
+        box((tx, 0, 2.3), (0.82, 0.82, 0.12), dark, bevel=0.01)
+        for (dx, dy, sz) in ((0, -0.4, (0.82, 0.06, 0.4)), (0, 0.4, (0.82, 0.06, 0.4)), (-0.4, 0, (0.06, 0.82, 0.4)), (0.4, 0, (0.06, 0.82, 0.4))):
+            box((tx + dx, dy, 2.55), sz, wood)
+        cyl((tx, 0, 3.35), 0.62, 0.0, 0.7, M["roof_wood"] if "roof_wood" in M else dark, seg=4, rot=(0, 0, math.radians(45)))
+    # lintel with the team banner
+    box((0, 0, 2.45), (L - 0.6, 0.36, 0.22), dark, bevel=0.02)
+    box((0, -0.24, 1.98), (1.0, 0.04, 0.72), M["velvet_blue"], bevel=0.0)
+    cyl((0, -0.24, 2.36), 0.03, 0.03, 1.1, M["gold"], rot=(0, math.pi / 2, 0), seg=8)
+    sphere((0, -0.24, 2.36), 0.06, M["gold"], seg=8)
+    # lanterns hanging from the towers' platforms, on the player's side
     for sx in (-1, 1):
-        hinge = empty("hinge", (sx * (L / 2 - 0.4), 0, 0))
+        lx = sx * (L / 2 - 0.3)
+        cyl((lx, -0.55, 2.2), 0.012, 0.012, 0.22, M["iron"], seg=6)
+        box((lx, -0.55, 2.0), (0.16, 0.16, 0.22), M["iron"], bevel=0.01)
+        sphere((lx, -0.55, 2.0), 0.075, mat("lantern", (1.0, 0.75, 0.3), emit=(1.0, 0.65, 0.2), strength=25.0), seg=8)
+    for sx in (-1, 1):
+        hinge = empty("hinge", (sx * (L / 2 - 0.62), 0, 0))
         leaf = empty("leaf", (0, 0, 0), hinge)
         for j in range(4):
-            log(-sx * (0.12 + j * 0.26), 1.45, r=0.125, parent=leaf, i=j)
-        for z in (0.45, 1.05):
-            box((-sx * 0.5, 0.14, z), (1.02, 0.06, 0.12), dark, leaf)
-        box((-sx * 0.5, 0.15, 0.75), (1.05, 0.05, 0.1), dark, leaf, rot=(0, 0, sx * math.radians(32)))
+            log(-sx * (0.13 + j * 0.26), 1.85, r=0.13, parent=leaf, i=j)
+        for z in (0.5, 1.4):
+            box((-sx * 0.52, 0.15, z), (1.06, 0.07, 0.14), dark, leaf)
+        box((-sx * 0.52, 0.16, 0.95), (1.1, 0.06, 0.12), dark, leaf, rot=(0, 0, sx * math.radians(38)))
+        for z in (0.5, 1.4):
+            box((-sx * 0.52, 0.2, z), (0.14, 0.03, 0.2), M["iron"], leaf)
         if gate == "open":
             hinge.rotation_euler.z = sx * math.radians(105)
 
@@ -1180,7 +1204,7 @@ def v4_sprites():
             for o in list(COLL.objects):
                 if o.parent is None and o is not root:
                     o.parent = root
-            static_sprite("wall_wood" + suffix, 400, 96, center=(0, 0, 0.8))
+            static_sprite("wall_wood" + suffix, 400, 96, center=(0, 0, 1.0))
         for state in ("closed", "open"):
             if want("gate_wood_%s%s" % (state, suffix)):
                 clear_models()
@@ -1189,7 +1213,7 @@ def v4_sprites():
                 for o in list(COLL.objects):
                     if o.parent is None and o is not root:
                         o.parent = root
-                static_sprite("gate_wood_%s%s" % (state, suffix), 400, 96, center=(0, 0, 1.0))
+                static_sprite("gate_wood_%s%s" % (state, suffix), 480, 96, center=(0, 0, 1.5))
 
 
 def logo(out_png):
@@ -1324,8 +1348,15 @@ def render_cell(name, col, row, w, h, ax, ay, ppm):
     return path
 
 
+UNIT_PPM = float(os.environ.get("KINGSHOT_UNIT_PPM", "64"))  # animated units: 64 px/m (ppu 3) fits the Pixel's density
+
+
 def unit_atlas(name, w, h, ax, ay, ppm, frames, c, extra=None):
-    """frames: list of callables fn(c) that pose the character. Renders ROWS directions."""
+    """frames: list of callables fn(c) that pose the character. Renders ROWS directions.
+    Cells were designed at 96 px/m; they are rendered at UNIT_PPM (cell and anchor scaled down) to save texture memory."""
+    if ppm != UNIT_PPM:
+        k = UNIT_PPM / ppm
+        w, h, ax, ay, ppm = int(round(w * k)), int(round(h * k)), ax * k, ay * k, UNIT_PPM
     ppu = ppm * UNIT_SCALE / UPM
     info = SPRITES[name] = dict(w=w, h=h, ax=ax, ay=ay, ppu=ppu, cols=len(frames), rows=8, cells=[])
     for d in range(ROWS):
@@ -1493,12 +1524,18 @@ def all_sprites():
     for suffix, rot in (("", 0.0), ("_v", math.pi / 2)):
         if want("wall_stone" + suffix):
             clear_models()
-            prop(HEX + "buildings/neutral/wall_straight.gltf", WS, rot_z=rot)
-            static_sprite("wall_stone" + suffix, 400, 96, center=(0, 0, 0.7))
+            prop(HEX + "buildings/neutral/wall_straight.gltf", (WS, WS, WS * 1.45), rot_z=rot)
+            static_sprite("wall_stone" + suffix, 400, 96, center=(0, 0, 0.9))
         for state in ("closed", "open"):
             if want("gate_%s%s" % (state, suffix)):
                 clear_models()
-                root = prop(HEX + "buildings/neutral/wall_straight_gate.gltf", WS, rot_z=rot)
+                root = prop(HEX + "buildings/neutral/wall_straight_gate.gltf", (WS, WS, WS * 1.45), rot_z=rot)
+                gr = empty("gate_deco", (0, 0, 0), rot=(0, 0, rot))  # towers + banner, in metres (not scaled with the wall)
+                for sx in (-1, 1):
+                    prop(HEX + "buildings/blue/building_tower_base_blue.gltf", 1.45, (sx * 1.6, 0, 0), parent=gr)
+                box((0, -0.42, 3.25), (1.0, 0.04, 0.72), M["velvet_blue"], gr)
+                cyl((0, -0.42, 3.63), 0.03, 0.03, 1.1, M["gold"], gr, rot=(0, math.pi / 2, 0), seg=8)
+                sphere((0, -0.42, 3.63), 0.06, M["gold"], gr, seg=8)
                 for o in list(COLL.objects):
                     if "door_left" in o.name or "door_right" in o.name:
                         sx = 1 if "left" in o.name else -1
@@ -1507,7 +1544,7 @@ def all_sprites():
                         o.location = (sx * 0.45 - sx * 0.675, 0, 0)
                         if state == "open":
                             hinge.rotation_euler.z = sx * math.radians(105)
-                static_sprite("gate_%s%s" % (state, suffix), 400, 96, center=(0, 0, 0.8))
+                static_sprite("gate_%s%s" % (state, suffix), 520, 96, center=(0, 0, 1.4))
     if want("tower_stone"):
         clear_models()
         prop(HEX + "buildings/blue/building_tower_base_blue.gltf", 1.75, rot_z=math.radians(15))
@@ -1770,15 +1807,16 @@ def pack():
         f.write("\n".join(lines))
 
 
-if ONLY is not None and "logo" in ONLY:
-    logo(os.path.join(TMP, "logo_fg.png"))
-    sys.exit(0)
-all_sprites()
-if ONLY is not None and any(n in ONLY for n in V4_NAMES):
-    v4_sprites()
-if ONLY is not None and any(n in ONLY for n in V5_NAMES):
-    v5_sprites()
-if ONLY is not None and any(n in ONLY for n in ("grass_tile", "road_tile", "cliff_tile", "tuft0", "tuft1", "flower0", "flower1",
-                                                  "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack")):
-    terrain_sprites()
-pack()
+if not os.environ.get("KINGSHOT_LIB"):  # render_ui.py imports this file as a library
+    if ONLY is not None and "logo" in ONLY:
+        logo(os.path.join(TMP, "logo_fg.png"))
+        sys.exit(0)
+    all_sprites()
+    if ONLY is not None and any(n in ONLY for n in V4_NAMES):
+        v4_sprites()
+    if ONLY is not None and any(n in ONLY for n in V5_NAMES):
+        v5_sprites()
+    if ONLY is not None and any(n in ONLY for n in ("grass_tile", "road_tile", "cliff_tile", "tuft0", "tuft1", "flower0", "flower1",
+                                                      "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack")):
+        terrain_sprites()
+    pack()
