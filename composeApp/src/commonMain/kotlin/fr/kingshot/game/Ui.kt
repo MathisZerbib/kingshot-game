@@ -1,5 +1,14 @@
 package fr.kingshot.game
 
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -77,6 +86,10 @@ object Pal {
     val veil = Color(0xB9080C1A)
 }
 
+/** Menu v2 curves (art/ui/DA-v2.md): expoOut for every entrance, inOut for what moves. */
+val ExpoOut = CubicBezierEasing(0.16f, 1f, 0.3f, 1f)
+val InOut = CubicBezierEasing(0.77f, 0f, 0.175f, 1f)
+
 /** 9-slice insets of a kit image, in source pixels (art/ui/ui_kit.json). */
 class Inset(val l: Float, val t: Float, val r: Float, val b: Float)
 
@@ -148,14 +161,28 @@ fun GText(
 @Composable
 fun KitButton(
     res: DrawableResource, text: String, sub: String? = null, icon: DrawableResource? = null,
-    width: Dp = 260.dp, height: Dp = 64.dp, textColor: Color = Color.White, enabled: Boolean = true, onClick: () -> Unit,
+    width: Dp = 260.dp, height: Dp = 64.dp, textColor: Color = Color.White, enabled: Boolean = true,
+    titleSize: Int = if (height >= 64.dp) 22 else 17, shine: Boolean = false, onClick: () -> Unit,
 ) {
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
-    val sc by animateFloatAsState(if (pressed) 0.95f else 1f, tween(80))
+    val sc by animateFloatAsState(if (pressed) 0.97f else 1f, if (pressed) tween(100) else tween(160, easing = ExpoOut))
+    // a light sweep across the button every 6 s (read in draw only)
+    val sweep = if (shine) rememberInfiniteTransition().animateFloat(0f, 1f, infiniteRepeatable(tween(6000, easing = LinearEasing))) else null
     Box(
         Modifier.width(width).height(height).scale(sc)
             .nine(res, IN_BUTTON, height.value / 150f)
+            .drawWithContent {
+                drawContent()
+                if (pressed) drawRoundRect(Color.White, alpha = 0.10f, cornerRadius = CornerRadius(12.dp.toPx()))
+                val t = (sweep?.value ?: 1f) / 0.12f // the sweep takes the first 12 % (~720 ms) of each 6 s cycle
+                if (t < 1f) {
+                    val x = -size.width * 0.3f + t * size.width * 1.6f
+                    clipRect(4.dp.toPx(), 3.dp.toPx(), size.width - 4.dp.toPx(), size.height * 0.86f) {
+                        drawRect(Brush.linearGradient(listOf(Color.Transparent, Color(0x55FFFFFF), Color.Transparent), Offset(x - 40.dp.toPx(), 0f), Offset(x + 40.dp.toPx(), size.height)))
+                    }
+                }
+            }
             .clickable(interactionSource = src, indication = null, enabled = enabled) { Audio.play(Sfx.CLICK); onClick() }
             .padding(bottom = height * 0.12f),
         contentAlignment = Alignment.Center,
@@ -166,10 +193,10 @@ fun KitButton(
                 Spacer(Modifier.width(8.dp))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GText(text, if (height >= 64.dp) 22 else 17, textColor, title = true)
+                GText(text, titleSize, textColor, title = true)
                 if (sub != null) AnimatedContent(sub, transitionSpec = {
                     (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
-                }) { GText(it, 11, textColor.copy(alpha = 0.92f)) }
+                }) { GText(it, 13, textColor.copy(alpha = 0.92f), shadow = textColor == Color.White) }
             }
         }
     }
