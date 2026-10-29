@@ -1449,7 +1449,8 @@ class Game {
                     if (!kDead && state == STATE_PLAY) {
                         val dx = kx - c.x
                         val dy = ky - c.y
-                        if (dx * dx + dy * dy < magnet * magnet) { c.state = 2; c.t = 0f; c.vx = 0f }
+                        // in range, or left lying for 4 s anywhere: it flies to the king (keeps the ground, and the frame, light)
+                        if (dx * dx + dy * dy < magnet * magnet || c.t > 4f) { c.state = 2; c.t = 0f; c.vx = 0f }
                     }
                 }
                 2 -> {
