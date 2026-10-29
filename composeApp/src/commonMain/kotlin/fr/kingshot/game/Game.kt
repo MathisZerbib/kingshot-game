@@ -23,6 +23,7 @@ const val PAD_TOWER = 3
 const val PAD_TOWER_ARCHER = 4
 const val START_SQUAD = 2
 const val TRANSITION_TIME = 4.2f
+const val OGRE_SLAM_R = 160f
 const val PAD_WALL = 5
 const val PAD_FARM = 6 // +1 coin every 2 s, dropped next to the farm
 const val PAD_BARRACKS = 7 // 3 lancers holding the gate under attack
@@ -30,6 +31,25 @@ const val PAD_MINE = 8 // doubles enemy coin drops
 const val PAD_BALLISTA = 9 // on a full tower: piercing bolt every 2 s
 const val PAD_ELITE = 10 // on a full tower: its 3 archers fuse into elites (x2.5 damage)
 const val LANCERS = 3
+const val PAD_SPOT_A = 11 // the two base spots offer one new building per level, see UNLOCKS
+const val PAD_SPOT_B = 12
+
+// Buildings unlocked level by level on the two base spots: (spot, level, cost, name)
+const val U_STABLE = 0 // king +20 % speed
+const val U_ALTAR = 1 // keep regenerates 0.5 %/s, king heals twice as fast
+const val U_MILL = 2 // +1 coin every 2 s
+const val U_STATUE = 3 // enemies drop 25 % more coins
+const val U_MARKET = 4 // +25 % coins to the treasure
+const val U_KEEP2 = 5 // keep +50 % health and 2 keep archers
+const val U_BANNER = 6 // squad and towers shoot 20 % faster
+const val U_KEEP3 = 7 // keep +50 % health and 4 keep archers
+const val U_TREASURY = 8 // +5 % of the coins in hand at each wave (max 100)
+const val U_GATEWORKS = 9 // walls +50 % health
+val UNLOCK_SPOT = intArrayOf(0, 0, 0, 0, 0, 1, 1, 1, 1, 1)
+val UNLOCK_LEVEL = intArrayOf(3, 5, 7, 9, 11, 4, 6, 8, 10, 12)
+val UNLOCK_COST = intArrayOf(120, 160, 200, 260, 300, 180, 220, 320, 300, 280)
+val UNLOCK_NAMES = arrayOf("Écurie", "Autel de soin", "Moulin", "Statue d'or", "Marché", "Donjon II", "Bannière", "Donjon III", "Trésorerie", "Forge des portes")
+val UNLOCK_DESC = arrayOf("roi +20 % vitesse", "donjon se soigne", "+1 pièce / 2 s", "butin +25 %", "trésor +25 %", "donjon +50 %, 2 archers", "tirs +20 %", "donjon +50 %, 4 archers", "+5 % des pièces / vague", "murs +50 %")
 
 const val MAX_SQUAD = 30
 
@@ -94,6 +114,7 @@ class Enemy {
     var bossType = 0 // 0 giant knight (wood age), 1 ogre (stone: hurls the king), 2 dark lord (royal: summons soldiers)
     var special = 0f // per-kind timer: archer reload, lord summon, wolf leap
     var elite = false // endless mode: double health and loot
+    var slam = 0f // ogre: > 0 while winding up a ground slam (seconds left)
     var mdx = 0f // last movement direction (shield bearers block arrows from the front)
     var mdy = 0f
     var atkCd = 0f
@@ -151,6 +172,7 @@ class Coin {
     var vy = 0f
     var vz = 0f
     var state = 0 // 0 popping, 1 resting, 2 flying to king
+    var auto = false // pulled in after lying too long: lands silently
     var t = 0f
     var spin = 0f
 }
@@ -163,6 +185,7 @@ class FlyCoin {
     var sz = 0f
     var pad = 0
     var t = 0f
+    var value = 1 // coins carried (big payments fly in bundles)
 }
 
 class Particle {
@@ -328,6 +351,8 @@ class Game {
     // Level transition (ad-style): celebrate, zoom out over the grown map revealing the new road, zoom back
     var transition = 0f // seconds left, TRANSITION_TIME .. 0
     var camZoom = 1f
+    /** Permanent zoom-out as the map grows: 1 at level 1, -0.04 per level, down to 0.78 (eased). */
+    var worldZoom = 1f
     var revealRoad = -1 // index of the road being revealed during the transition, -1 none
     var kDead = false
     var kRespawn = 0f
@@ -379,6 +404,12 @@ class Game {
     lateinit var farmPad: Pad
     lateinit var barracksPad: Pad
     lateinit var minePad: Pad
+    val unlocked = BooleanArray(UNLOCK_NAMES.size) // bought
+    lateinit var spotPadA: Pad
+    lateinit var spotPadB: Pad
+    private var millTimer = 0f
+    private var keepCd = 0f
+    var newUnlocks = "" // names unlocked by the last level-up ("NOUVEAU : ..." panel)
     var farm = false
     private var farmTimer = 0f
     var barracks = false
@@ -421,6 +452,10 @@ class Game {
     // Paying
     private var payTimer = 0f
     private var payStreak = 0
+    private var payTime = 0f
+    private var payAcc = 0f
+    private var coinCombo = 0 // pickups in a row, for the rising pitch of the grouped coin sound
+    private var lastCoinTime = -10f
 
     // fps
     var fps = 0
@@ -471,7 +506,7 @@ class Game {
     private fun addMapPads(fromTower: Int, fromWall: Int) {
         for (i in fromTower until towers.size) {
             val t = towers[i]
-            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = price(25); it.visible = !t.built })
+            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = price(levelPrice(25)); it.visible = !t.built })
             pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = t.built && t.archers < TOWER_SLOTS })
             // once full, the same spot offers the ballista, then the elite fusion
             pads.add(Pad(PAD_BALLISTA, t.x, t.y + 125f, i).also { it.cost = price(70); it.visible = t.built && t.archers >= TOWER_SLOTS && !t.ballista })
@@ -479,7 +514,7 @@ class Game {
         }
         for (i in fromWall until walls.size) {
             val w = walls[i]
-            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = price(15); it.visible = !w.built })
+            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = price(levelPrice(15)); it.visible = !w.built })
         }
     }
 
@@ -496,7 +531,7 @@ class Game {
     var ageChanged = false // the last level-up started a new age (banner)
     var roadAdded = false // the last level-up added a road (banner)
 
-    private fun wallMaxHp() = (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f) * (1f + 0.1f * tal[TAL_WALL_HP])
+    private fun wallMaxHp() = (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f) * (1f + 0.1f * tal[TAL_WALL_HP]) * (if (unlocked[U_GATEWORKS]) 1.5f else 1f)
 
     // progress gathered during the run, written to Storage in batches (flushProgress), never per frame
     private var pendKills = 0
@@ -523,6 +558,7 @@ class Game {
         World.load(1)
         buildMap()
         rainLeft = 0
+        wallLost = false; levelStart = 0f; lastStars = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
         for (t in tal.indices) tal[t] = Talents.level(t)
         castleMaxHp = 600f * (1f + 0.1f * tal[TAL_KEEP_HP])
@@ -563,8 +599,13 @@ class Game {
         barracksPad = Pad(PAD_BARRACKS, World.BARRACKS_X, World.BARRACKS_Y).also { it.cost = price(60); it.visible = false }
         minePad = Pad(PAD_MINE, World.MINE_X, World.MINE_Y).also { it.cost = price(150); it.visible = false }
         farm = false; barracks = false; mine = false; farmTimer = 0f
+        for (k in unlocked.indices) unlocked[k] = false
+        spotPadA = Pad(PAD_SPOT_A, World.SPOT_A_X, World.SPOT_A_Y)
+        spotPadB = Pad(PAD_SPOT_B, World.SPOT_B_X, World.SPOT_B_Y)
         pads.clear()
         pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad); pads.add(farmPad); pads.add(barracksPad); pads.add(minePad)
+        pads.add(spotPadA); pads.add(spotPadB)
+        refreshSpots()
         addMapPads(0, 0)
     }
 
@@ -646,6 +687,9 @@ class Game {
 
     /** Levels 1-4: build everything. Level 5+: hold out [goalWaves] waves (the last one brings the boss); endless after 20. */
     var levelWaves = 0 // waves cleared in this level
+    var lastStars = 0 // stars earned by the level just finished (level-up banner)
+    private var wallLost = false
+    private var levelStart = 0f
     val goalWaves get() = if (level <= 4) 0 else if (level > World.LAST_LEVEL) Int.MAX_VALUE else 3 + level / 4
     val isEndless get() = level > World.LAST_LEVEL
 
@@ -656,6 +700,11 @@ class Game {
     private fun levelUp() {
         levelUpPending = false
         val oldAge = age
+        // stars for the level just finished: keep above 80 %, no wall lost, fast enough
+        lastStars = (if (castleHp >= castleMaxHp * 0.8f) 1 else 0) + (if (!wallLost) 1 else 0) + (if (time - levelStart < 150f + 60f * level) 1 else 0)
+        if (lastStars > Storage.loadInt("stars_$level")) Storage.saveInt("stars_$level", lastStars)
+        wallLost = false
+        levelStart = time
         level++
         levelWaves = 0
         pendXp += 50
@@ -667,13 +716,14 @@ class Game {
         coins += rainLeft; rainLeft = 0
         for (c in coinsOnGround) if (c.active) { c.active = false; coins++ }
         // finishing a level banks all the coins in hand into the treasure (and the game goes on with them)
-        Meta.treasure += coins
+        Meta.treasure += (coins * (if (unlocked[U_MARKET]) 1.25f else 1f)).toInt()
         for (f in flyCoins) if (f.active) { f.active = false; coins++ }
         for (e in enemies) e.active = false
         for (a in arrows) a.active = false
         toSpawn = 0; bossPending = false; waveBreak = 7f; waveCleared = true
+        val missing = castleMaxHp - castleHp
         castleMaxHp *= if (ageChanged && age == 3) 1.25f * 1.5f else 1.25f // royal castle: +50 % on top
-        castleHp = castleMaxHp
+        castleHp = castleMaxHp - missing * 0.5f // the keep only heals half of its damage between levels
         val nt = towers.size
         val nw = walls.size
         World.load(level)
@@ -687,6 +737,12 @@ class Game {
         recruitPad.cost = recruitCost(recruitPad.level)
         forgePad.cost = forgeCost(forgePad.level)
         if (!mine) minePad.visible = true
+        if (!barracks) barracksPad.visible = true
+        refreshSpots()
+        val sb = StringBuilder()
+        for (u in UNLOCK_NAMES.indices) if (UNLOCK_LEVEL[u] == level) { if (sb.isNotEmpty()) sb.append(" · "); sb.append(UNLOCK_NAMES[u]) }
+        if (level == 2) { if (sb.isNotEmpty()) sb.append(" · "); sb.append("Mine · Caserne") }
+        newUnlocks = sb.toString()
         checkpoint = saveString()
         Storage.saveGame(checkpoint)
         kx = World.KING_START_X; ky = World.KING_START_Y; kvx = 0f; kvy = 0f
@@ -808,7 +864,7 @@ class Game {
     private fun finishRun() {
         flushProgress()
         Stats.record(level, kills, time.toInt())
-        treasureWon = (coins + rainLeft) / 2
+        treasureWon = ((coins + rainLeft) / 2 * (if (unlocked[U_MARKET]) 1.25f else 1f)).toInt()
         Meta.treasure += treasureWon
         coins = 0; rainLeft = 0
     }
@@ -886,6 +942,8 @@ class Game {
         sb.append(";").append(levelWaves)
         sb.append(";").append(if (farm) 1 else 0).append(if (barracks) 1 else 0).append(if (mine) 1 else 0).append(";")
         for (t in towers) sb.append(if (t.elite) 2 else if (t.ballista) 1 else 0)
+        sb.append(";")
+        for (u in unlocked) sb.append(if (u) 1 else 0)
         return sb.toString()
     }
 
@@ -931,7 +989,10 @@ class Game {
             farm = b.getOrNull(0) == '1'; barracks = b.getOrNull(1) == '1'; mine = b.getOrNull(2) == '1'
             val tf = f.getOrNull(16 + shift) ?: ""
             for (i in towers.indices) { val c = tf.getOrNull(i) ?: '0'; towers[i].ballista = c >= '1'; towers[i].elite = c == '2' }
-            farmPad.visible = !farm; barracksPad.visible = farm && !barracks; minePad.visible = level >= 2 && !mine
+            val uf = f.getOrNull(17 + shift) ?: ""
+            for (k in unlocked.indices) unlocked[k] = uf.getOrNull(k) == '1'
+            refreshSpots()
+            farmPad.visible = !farm; barracksPad.visible = level >= 2 && !barracks; minePad.visible = level >= 2 && !mine
             if (barracks) for (k in 0 until LANCERS) { lx[k] = World.BARRACKS_X + (k - 1) * 30f; ly[k] = World.BARRACKS_Y }
             for (p in pads) when (p.kind) {
                 PAD_BALLISTA -> p.visible = towers[p.ref].built && towers[p.ref].archers >= TOWER_SLOTS && !towers[p.ref].ballista
@@ -1013,6 +1074,8 @@ class Game {
         if (waveRewardBanner > 0f) waveRewardBanner -= dt
         if (levelUpPending) levelUp()
         if (ringDirty) rebuildRing()
+        val zt = max(0.78f, 1f - 0.04f * (level - 1))
+        worldZoom += (zt - worldZoom) * min(1f, dtReal * 1.5f)
         if (waveBanner > 0f) waveBanner -= dt
         if (bossBanner > 0f) bossBanner -= dt
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
@@ -1065,7 +1128,7 @@ class Game {
             val l = hypot(mx, my)
             if (l > 1f) { mx /= l; my /= l }
         }
-        val speed = (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED])
+        val speed = (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED]) * (if (unlocked[U_STABLE]) 1.2f else 1f)
         val tvx = mx * speed
         val tvy = my * speed
         val acc = min(1f, dt * 14f)
@@ -1109,6 +1172,11 @@ class Game {
             nx = w.x + lx * along + ly * 22f * side
             ny = w.y + ly * along - lx * 22f * side
         }
+        // worn walls (under half health) offer a repair on their pad
+        for (p in pads) if (p.kind == PAD_WALL) {
+            val w = walls[p.ref]
+            if (w.built && !p.visible && w.hp < w.maxHp * 0.5f) { p.visible = true; p.paid = 0; p.pending = 0; p.cost = price(levelPrice(10)) }
+        }
         // the enclosure between walls: push out of any ring segment
         for (i in 1 until ringCount) {
             if (!ringRun[i]) continue
@@ -1138,7 +1206,7 @@ class Game {
         sway += (-kvx * 0.0016f - sway) * min(1f, dt * 6f)
 
         if (kHurtTimer > 0f) kHurtTimer -= dt
-        else if (kHp < kMaxHp) kHp = min(kMaxHp, kHp + dt * 12f)
+        else if (kHp < kMaxHp) kHp = min(kMaxHp, kHp + dt * (if (unlocked[U_ALTAR]) 24f else 12f))
 
         kFireCd -= dt
         if (kFireCd <= 0f) {
@@ -1147,25 +1215,25 @@ class Game {
                 var hit = -1
                 for (i in enemies.indices) {
                     val e = enemies[i]
-                    if (!e.active || hypot(e.x - kx, e.y - ky) > 78f + e.radius) continue
+                    if (!e.active || hypot(e.x - kx, e.y - ky) > 95f + e.radius) continue
                     hit = i
                     kDir = dirIndex(e.x - kx, e.y - ky)
                     burst((kx + e.x) * 0.5f, (ky + e.y) * 0.5f, 30f, 4, 0xFFFFFFFFL, 160f)
                     Audio.playVaried(Sfx.HIT, 0.8f, 0.1f, rnd)
-                    hitEnemy(i, 40f * dmgMult * heroPower)
+                    hitEnemy(i, 55f * dmgMult * heroPower)
                 }
                 if (hit >= 0) {
-                    kFireCd = 0.6f
+                    kFireCd = 0.5f
                 } else kFireCd = 0.1f
             } else {
-                val range = if (heroClass == CLASS_RANGER) 430f else 300f
+                val range = if (heroClass == CLASS_RANGER) 370f else 300f
                 val t = nearestEnemy(kx, ky, range)
                 if (t >= 0) {
-                    fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 24f else 18f) * dmgMult * heroPower)
+                    fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 20f else 18f) * dmgMult * heroPower)
                     Audio.playVaried(Sfx.SHOOT, 0.55f, 0.1f, rnd)
                     kFaceRight = enemies[t].x > kx
                     if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
-                    kFireCd = if (heroClass == CLASS_RANGER) 0.26f else 0.5f
+                    kFireCd = if (heroClass == CLASS_RANGER) 0.3f else 0.5f
                 } else kFireCd = 0.1f
             }
         }
@@ -1198,7 +1266,7 @@ class Game {
                     aFaceRight[i] = enemies[t].x > ax[i]
                     aDir[i] = dirIndex(enemies[t].x - ax[i], enemies[t].y - ay[i])
                     aShoot[i] = 0.32f
-                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE])
+                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f)
                 } else acd[i] = 0.08f + rnd.nextFloat() * 0.1f
             }
         }
@@ -1219,14 +1287,50 @@ class Game {
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
                         t.shoot[a] = 0.32f
-                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE])
+                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f)
                     } else t.cd[a] = 0.1f
                 }
             }
         }
     }
 
+    /** Each base spot offers its next not-yet-bought building, once the level unlocks it. */
+    /** Building prices climb 15 % per level, so not everything can be bought before the next wave. */
+    private fun levelPrice(c: Int) = (c * (1f + 0.15f * (level - 1))).toInt()
+
+    /** Last building bought on a base spot (drawn there), or -1. */
+    fun lastUnlock(spot: Int): Int {
+        var last = -1
+        for (u in UNLOCK_NAMES.indices) if (UNLOCK_SPOT[u] == spot && unlocked[u]) last = u
+        return last
+    }
+
+    private fun refreshSpots() {
+        for (spot in 0..1) {
+            val pad = if (spot == 0) spotPadA else spotPadB
+            var next = -1
+            for (u in UNLOCK_NAMES.indices) if (UNLOCK_SPOT[u] == spot && !unlocked[u]) { next = u; break }
+            pad.visible = next >= 0 && level >= UNLOCK_LEVEL[next]
+            if (next >= 0 && pad.level != next) { pad.level = next; pad.paid = 0; pad.pending = 0 }
+            if (next >= 0) pad.cost = price(UNLOCK_COST[next])
+        }
+    }
+
     private fun updateBuildings(dt: Float) {
+        if (unlocked[U_MILL]) {
+            millTimer += dt
+            if (millTimer >= 2f) { millTimer -= 2f; dropCoin(World.SPOT_A_X + 40f, World.SPOT_A_Y + 10f) }
+        }
+        if (unlocked[U_ALTAR] && castleHp < castleMaxHp) castleHp = min(castleMaxHp, castleHp + castleMaxHp * 0.005f * dt)
+        val keepArchers = if (unlocked[U_KEEP3]) 4 else if (unlocked[U_KEEP2]) 2 else 0
+        if (keepArchers > 0) {
+            keepCd -= dt
+            if (keepCd <= 0f) {
+                keepCd = 1f / keepArchers
+                val t = nearestEnemy(World.CASTLE_X, World.CASTLE_Y, 420f)
+                if (t >= 0) fire(World.CASTLE_X, World.CASTLE_Y, 150f, t, 24f * dmgMult) else keepCd = 0.2f
+            }
+        }
         if (farm) {
             farmTimer += dt
             if (farmTimer >= 2f) { farmTimer -= 2f; dropCoin(World.FARM_X + 40f, World.FARM_Y + 10f) }
@@ -1383,6 +1487,22 @@ class Game {
 
     private fun hitEnemy(i: Int, dmgIn: Float) {
         val e = enemies[i]
+        if (e.kind == KIND_BOSS && e.bossType == 2 && guardsAround(e) >= 3) { // dark lord: protected while 3+ summons stand near
+            burst(e.x, e.y, 60f, 3, 0xFF8E4AE0L, 160f)
+            hitEnemyRaw(i, dmgIn * 0.25f)
+            return
+        }
+        hitEnemyRaw(i, dmgIn)
+    }
+
+    private fun guardsAround(lord: Enemy): Int {
+        var n = 0
+        for (o in enemies) if (o.active && o !== lord && o.kind == KIND_SOLDIER && hypot(o.x - lord.x, o.y - lord.y) < 320f) n++
+        return n
+    }
+
+    private fun hitEnemyRaw(i: Int, dmgIn: Float) {
+        val e = enemies[i]
         Audio.playVaried(Sfx.HIT_FLESH, 0.4f, 0.12f, rnd)
         val crit = rnd.nextFloat() < 0.12f
         val dmg = if (crit) dmgIn * 2f else dmgIn
@@ -1412,7 +1532,11 @@ class Game {
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
         if (e.kind == 2) { rainLeft += if (mine) e.coins * 2 else e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
-        else repeat((if (mine) e.coins * 2 else e.coins) * (if (e.elite) 2 else 1)) { dropCoin(e.x, e.y) }
+        else {
+            var n = (if (mine) e.coins * 2 else e.coins) * (if (e.elite) 2 else 1)
+            if (unlocked[U_STATUE] && rnd.nextFloat() < 0.25f * n) n++
+            repeat(n) { dropCoin(e.x, e.y) }
+        }
         if (e.kind == 2) shake = 14f
     }
 
@@ -1432,12 +1556,12 @@ class Game {
         val sp = (40f + rnd.nextFloat() * 110f) * spread
         c.vx = cos(a) * sp; c.vy = sin(a) * sp * 0.7f
         c.vz = 260f + rnd.nextFloat() * 180f
-        c.state = 0; c.t = 0f
+        c.state = 0; c.t = 0f; c.auto = false
         c.spin = rnd.nextFloat() * 6f
     }
 
     private fun updateCoins(dt: Float) {
-        val magnet = (if (heroClass == CLASS_BUILDER) 780f else 520f) * (1f + 0.1f * tal[TAL_MAGNET])
+        val magnet = (if (heroClass == CLASS_BUILDER) 540f else 360f) * (1f + 0.1f * tal[TAL_MAGNET])
         for (c in coinsOnGround) {
             if (!c.active) continue
             c.t += dt
@@ -1461,7 +1585,8 @@ class Game {
                         val dx = kx - c.x
                         val dy = ky - c.y
                         // in range, or left lying for 4 s anywhere: it flies to the king (keeps the ground, and the frame, light)
-                        if (dx * dx + dy * dy < magnet * magnet || c.t > 4f) { c.state = 2; c.t = 0f; c.vx = 0f }
+                        val near = dx * dx + dy * dy < magnet * magnet
+                        if (near || c.t > 4f) { c.state = 2; c.auto = !near; c.t = 0f; c.vx = 0f }
                     }
                 }
                 2 -> {
@@ -1479,8 +1604,12 @@ class Game {
                         coinsCollected++
                         pendCoins++
                         stackBump = 1f
-                        Audio.play(Sfx.COIN, 0.45f, 0.9f + min(coins, 60) * 0.006f)
-                        if (coins % 10 == 0) { Audio.play(Sfx.COIN_STACK, 0.6f); Audio.haptic(Haptic.LIGHT) }
+                        if (!c.auto) {
+                            coinCombo = if (time - lastCoinTime < 0.6f) coinCombo + 1 else 0
+                            lastCoinTime = time
+                            Audio.play(Sfx.COIN, 0.5f, 0.9f + min(coinCombo, 15) * 0.025f) // Audio drops repeats within 0.12 s
+                            if (coins % 10 == 0) Audio.haptic(Haptic.LIGHT)
+                        }
                     } else {
                         c.x += dx / d * step; c.y += dy / d * step; c.z += dz / d * step
                     }
@@ -1514,26 +1643,30 @@ class Game {
         if (onPad == null || coins <= 0 || onPad.paid + onPad.pending >= onPad.cost) {
             payTimer = 0.12f
             payStreak = 0
+            payTime = 0f
+            payAcc = 0f
             return
         }
         payTimer -= dt
-        while (payTimer <= 0f && coins > 0 && onPad.paid + onPad.pending < onPad.cost) {
-            val f = flyCoins.firstOrNull { !it.active }
-            if (f == null) {
-                onPad.paid++
-                coins--
-                if (onPad.paid >= onPad.cost) complete(onPad)
-            } else {
-                f.active = true
-                f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, MAX_STACK) * 4.5f
-                f.pad = pads.indexOf(onPad)
-                f.t = 0f
-                onPad.pending++
-                coins--
-            }
-            payStreak++
-            payTimer += max(0.022f, 0.09f - payStreak * 0.006f)
-        }
+        if (payTimer > 0f) return // short delay before paying starts, so walking over a pad does not drain coins
+        if (payStreak == 0) Audio.play(Sfx.COIN_STACK, 0.7f) // one "till" sound when paying starts
+        payStreak = 1
+        payTime += dt
+        // the more is left to pay, the faster it flows (8 to 60 coins/s), and it speeds up while you stay on the pad
+        val left = onPad.cost - onPad.paid - onPad.pending
+        payAcc += min(60f, max(8f, left * 2.5f) * (1f + payTime)) * dt
+        val n = min(payAcc.toInt(), min(left, coins))
+        payAcc -= payAcc.toInt()
+        if (n <= 0) return
+        coins -= n
+        val f = flyCoins.firstOrNull { !it.active }
+        if (f == null) { onPad.paid += n; if (onPad.paid >= onPad.cost) complete(onPad); return }
+        onPad.pending += n
+        f.active = true
+        f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, MAX_STACK) * 4.5f
+        f.pad = pads.indexOf(onPad)
+        f.t = 0f
+        f.value = n
     }
 
     private fun updateFlyCoins(dt: Float) {
@@ -1544,15 +1677,15 @@ class Game {
                 f.active = false
                 if (f.pad >= pads.size) continue
                 val p = pads[f.pad]
-                p.pending--
-                p.paid++
+                p.pending -= f.value
+                p.paid += f.value
                 p.bump = 0.35f
                 if (p.paid >= p.cost) complete(p)
             }
         }
     }
 
-    private fun complete(p: Pad) {
+    internal fun complete(p: Pad) {
         if (p.kind != PAD_TOWER_ARCHER) pendBuilds++
         p.paid = 0
         p.pending = 0
@@ -1608,10 +1741,20 @@ class Game {
                 burst(t.x, t.y, 120f, 14, 0xFF6FB7FFL, 180f)
                 if (levelDone()) levelUpPending = true
             }
+            PAD_SPOT_A, PAD_SPOT_B -> {
+                val u = p.level
+                Audio.play(Sfx.BUILD)
+                unlocked[u] = true
+                burst(p.x, p.y, 20f, 30, 0xFFFFD84AL, 300f)
+                when (u) {
+                    U_KEEP2, U_KEEP3 -> { castleMaxHp *= 1.5f; castleHp = castleMaxHp }
+                    U_GATEWORKS -> for (w in walls) if (w.built) { w.maxHp = wallMaxHp(); w.hp = w.maxHp }
+                }
+                refreshSpots()
+            }
             PAD_FARM -> {
                 Audio.play(Sfx.BUILD)
                 farm = true; p.visible = false
-                barracksPad.visible = true
                 burst(p.x, p.y, 20f, 26, 0xFF9EE37DL, 260f)
             }
             PAD_BARRACKS -> {
@@ -1641,6 +1784,11 @@ class Game {
             PAD_WALL -> {
                 Audio.play(Sfx.BUILD)
                 val w = walls[p.ref]
+                if (w.built) { // repair of a worn wall
+                    w.hp = w.maxHp; w.bump = 1f; p.visible = false
+                    burst(w.x, w.y, 20f, 20, 0xFF7CFF8AL, 240f)
+                    return
+                }
                 w.built = true
                 ringDirty = true
                 w.maxHp = wallMaxHp()
@@ -1690,22 +1838,47 @@ class Game {
         if (waveBreak <= 0f) {
             wave++
             Audio.play(Sfx.WAVE_HORN)
+            if (unlocked[U_TREASURY] && coins > 0) coins += min(100, coins / 20)
             if (wave > 1) { pendWaves++; pendXp += 5 }
             flushProgress()
             saveGame()
             waveCleared = false
-            toSpawn = 3 + wave * 2
+            toSpawn = 3 + wave * 2 + (level - 1) * 2
+            pickWaveRoads()
             // boss on every 5th wave, and on the last wave of a level from level 5
             bossPending = wave % 5 == 0 || (goalWaves in 1..999 && levelWaves == goalWaves - 1)
             spawnTimer = 0.5f
             waveBanner = 2.2f
-            waveBreak = 7f
+            waveBreak = max(4f, 7.5f - level * 0.25f)
             if (wave > best) {
                 best = wave
                 newRecord = true
                 Storage.saveBest(best)
             }
         }
+    }
+
+    // roads this wave comes from: 1 then 2 at level 1, 2 at levels 2-3, 3 from level 4, 4 from level 8
+    private val waveRoads = IntArray(8)
+    private var waveRoadCount = 1
+    private fun pickWaveRoads() {
+        val n = World.paths.size
+        val want = min(n, when { level == 1 -> if (wave <= 2) 1 else 2; level <= 3 -> 2; level <= 7 -> 3; else -> 4 })
+        waveRoadCount = 0
+        if (level == 1 && wave <= 2) { waveRoads[0] = 1; waveRoadCount = 1; return } // first waves: the east road only
+        while (waveRoadCount < want) {
+            val r = rnd.nextInt(n)
+            var dup = false
+            for (k in 0 until waveRoadCount) if (waveRoads[k] == r) dup = true
+            if (!dup) waveRoads[waveRoadCount++] = r
+        }
+    }
+
+    /** Rams go for the weakest standing wall (or any road if none stands). */
+    private fun weakestWallRoad(): Int {
+        var best = -1
+        for (w in walls) if (w.built && (best < 0 || w.hp < walls[best].hp)) best = w.path
+        return if (best >= 0) best else waveRoads[rnd.nextInt(waveRoadCount)]
     }
 
     /** Wave mix: new enemy types join as the waves climb. */
@@ -1723,15 +1896,10 @@ class Game {
 
     private fun spawnEnemy(kind: Int, path: Int = -1, s: Float = 0f, ox: Float = Float.NaN, oy: Float = 0f): Enemy? {
         val e = enemies.firstOrNull { !it.active } ?: return null
-        val paths = when {
-            wave <= 1 -> 1
-            wave <= 3 -> 2
-            else -> World.paths.size
-        }
         e.active = true
         e.gen++
         e.kind = kind
-        e.path = if (path >= 0) path else if (paths == 1) 1 else rnd.nextInt(paths)
+        e.path = if (path >= 0) path else if (kind == KIND_RAM) weakestWallRoad() else waveRoads[rnd.nextInt(waveRoadCount)]
         e.s = s
         e.offX = (rnd.nextFloat() - 0.5f) * 60f
         e.offY = (rnd.nextFloat() - 0.5f) * 40f
@@ -1740,16 +1908,16 @@ class Game {
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
         e.special = 0f; e.mdx = 0f; e.mdy = 0f
         e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
-        val hpScale = (1f + (wave - 1) * 0.17f) * (if (e.elite) 2f else 1f)
+        val hpScale = (1f + (wave - 1) * 0.18f) * (1f + 0.12f * (level - 1)) * (if (e.elite) 2f else 1f)
         when (kind) {
-            0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.4f) 3 else 2 }
+            0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < (if (wave <= 3) 0.3f else 0.45f)) 2 else 1 }
             KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
             KIND_WOLF -> { e.maxHp = 30f * hpScale; e.speed = 150f; e.dmg = 6f; e.radius = 14f; e.scale = 0.8f; e.coins = 1 + rnd.nextInt(2) }
             KIND_ARCHER -> { e.maxHp = 40f * hpScale; e.speed = 70f; e.dmg = 7f; e.radius = 15f; e.scale = 0.95f; e.coins = 3 }
             KIND_SHIELD -> { e.maxHp = 200f * hpScale; e.speed = 45f; e.dmg = 14f; e.radius = 20f; e.scale = 1.25f; e.coins = 7 }
             KIND_RAM -> { e.maxHp = 500f * hpScale; e.speed = 38f; e.dmg = 60f; e.radius = 30f; e.scale = 1.8f; e.coins = 15 }
             else -> {
-                e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = ((120 + 40 * (level - 1) + 10 * wave / 5) * (1f + 0.15f * tal[TAL_BOSS_LOOT])).toInt()
+                e.maxHp = (if (level == 1) 650f else 1000f) * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = ((120 + 40 * (level - 1) + 10 * wave / 5) * (1f + 0.15f * tal[TAL_BOSS_LOOT])).toInt()
                 e.bossType = age - 1
             }
         }
@@ -1782,6 +1950,21 @@ class Game {
             val dky = ky - e.y
             val dk = hypot(dkx, dky)
             val aggro = when (e.kind) { KIND_BOSS -> 170f; KIND_WOLF -> 230f; KIND_RAM -> 0f; KIND_ARCHER -> 260f; else -> 140f }
+            if (e.kind == KIND_BOSS && e.bossType == 1) { // ogre: telegraphed ground slam every 4 s, step out of the red circle
+                if (e.slam > 0f) {
+                    e.slam -= dt
+                    if (e.slam <= 0f) {
+                        e.swing = 1f
+                        shake = max(shake, 12f)
+                        burst(e.x, e.y, 10f, 40, 0xFF9DA3AAL, 420f)
+                        if (!kDead && hypot(kx - e.x, ky - e.y) < OGRE_SLAM_R) damageKing(e.dmg * 2f)
+                        for (w in walls) if (w.built && hypot(w.x - e.x, w.y - e.y) < OGRE_SLAM_R) { w.hp -= e.dmg * 2f; if (w.hp <= 0f) breakWall(w) }
+                    }
+                    continue // rooted while slamming
+                }
+                e.special -= dt
+                if (e.special <= 0f && dk < 260f) { e.special = 4f; e.slam = 0.9f }
+            }
             if (e.kind == KIND_BOSS && e.bossType == 2) { // dark lord: summons a ring of soldiers every 6 s
                 e.special -= dt
                 if (e.special <= 0f) {
@@ -1919,6 +2102,7 @@ class Game {
     }
 
     private fun breakWall(w: Wall) {
+        wallLost = true
         Audio.play(Sfx.WALL_BREAK)
         Audio.haptic(Haptic.HEAVY)
         w.built = false

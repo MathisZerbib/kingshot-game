@@ -290,7 +290,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val w = size.width
         val h = size.height
         val portrait = h >= w
-        scale = (if (portrait) w / 560f else min(w / 1000f, h / 620f)) * g.camZoom
+        scale = (if (portrait) w / 560f else min(w / 1000f, h / 620f)) * g.camZoom * g.worldZoom
         val halfW = w / 2f / scale
         val halfH = h / 2f / scale
         val cx = if (halfW * 2 >= World.W) World.W / 2 else g.camX.coerceIn(halfW, World.W - halfW)
@@ -342,7 +342,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             if (sx < -200 || sx > w + 200 || sy < -200 || sy > h + 200) continue
             val pop = 1f + p.bump * 0.25f
             label(text.num(p.cost - p.paid), sx + 18f * scale, sy - 4f * scale, 34f * scale * pop, WHITE)
-            label(text.str(padName(p)), sx, sy + (Pad.HALF + 16f) * scale, 17f * scale, WHITE)
+            label(text.str(padName(p, g)), sx, sy + (Pad.HALF + 16f) * scale, 17f * scale, WHITE)
         }
         for (t in g.texts) {
             if (!t.active) continue
@@ -356,7 +356,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         drawHud(g, w, h)
     }
 
-    private fun padName(p: Pad): String = when (p.kind) {
+    private fun padName(p: Pad, g: Game): String = if (p.kind == PAD_WALL && g.walls[p.ref].built) "Réparer le mur" else when (p.kind) {
         PAD_RECRUIT -> "Archer"
         PAD_FORGE -> "Forge  +dégâts"
         PAD_REPAIR -> "Réparer le donjon"
@@ -367,6 +367,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         PAD_MINE -> "Mine  butin x2"
         PAD_BALLISTA -> "Baliste"
         PAD_ELITE -> "Archers d'élite"
+        PAD_SPOT_A, PAD_SPOT_B -> UNLOCK_NAMES[p.level.coerceIn(0, UNLOCK_NAMES.size - 1)]
         else -> "Palissade"
     }
 
@@ -554,6 +555,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             for (k in 0 until LANCERS) if (vis(g.lx[k], g.ly[k])) n = push(n, g.ly[k], K_LANCER, k)
         }
         if (g.mine) n = push(n, World.MINE_Y, K_BUILDING, 2)
+        if (g.lastUnlock(0) >= 0) n = push(n, World.SPOT_A_Y, K_BUILDING, 3)
+        if (g.lastUnlock(1) >= 0) n = push(n, World.SPOT_B_Y, K_BUILDING, 4)
         n = push(n, World.CASTLE_Y, K_CASTLE, 0)
         for (k in g.towers.indices) if (g.towers[k].built) n = push(n, g.towers[k].y, K_TOWER, k)
         for (k in g.walls.indices) if (g.walls[k].built) n = push(n, g.walls[k].y, K_WALL, k)
@@ -578,7 +581,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_WALL -> drawWall(g.walls[idx], g.age)
                 K_ENEMY -> drawEnemy(g.enemies[idx], g.level % 5 == 0)
                 K_CORPSE -> drawCorpse(g.corpses[idx])
-                K_BUILDING -> drawBuilding(idx)
+                K_BUILDING -> drawBuilding(idx, g)
                 K_LANCER -> {
                     val sp = sprites
                     if (sp != null) {
@@ -658,9 +661,22 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private val lancerTint = ColorFilter.tint(Color(0x884060D0), BlendMode.SrcAtop)
     private val eliteTint = ColorFilter.tint(Color(0x88FFD84A), BlendMode.SrcAtop)
 
-    private fun DrawScope.drawBuilding(idx: Int) {
+    private val spotTints = arrayOf(
+        ColorFilter.tint(Color(0x668A5A2E), BlendMode.SrcAtop), ColorFilter.tint(Color(0x6640C0E0), BlendMode.SrcAtop),
+        ColorFilter.tint(Color(0x66E0D060), BlendMode.SrcAtop), ColorFilter.tint(Color(0x88FFD84A), BlendMode.SrcAtop),
+        ColorFilter.tint(Color(0x66E07040), BlendMode.SrcAtop),
+    )
+
+    private fun DrawScope.drawBuilding(idx: Int, g: Game) {
         val sp = sprites ?: return
         when (idx) {
+            3, 4 -> { // base spot: the last building bought there (placeholder looks: tinted house or tower)
+                val u = g.lastUnlock(idx - 3)
+                val x = if (idx == 3) World.SPOT_A_X else World.SPOT_B_X
+                val y = if (idx == 3) World.SPOT_A_Y else World.SPOT_B_Y
+                if (u == U_KEEP2 || u == U_KEEP3 || u == U_BANNER) sprite(sp.towerStone, SpriteData.towerStone, 0, 0, x, y, 0.9f, spotTints[u % 5])
+                else sprite(sp.house, SpriteData.house, 0, 0, x, y - 20f, 0.75f, spotTints[u % 5])
+            }
             0 -> {
                 sprite(sp.house, SpriteData.house, 0, 0, World.FARM_X, World.FARM_Y - 20f, 0.7f, farmTint)
                 for (k in 0 until 4) sprite(sp.tuft0, SpriteData.tuft0, 0, 0, World.FARM_X - 60f + k * 34f, World.FARM_Y + 40f, 1.3f) // crops
@@ -800,6 +816,11 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val filter = if (e.hitFlash > 0f) flashFilter else if (boss) bossTints[e.bossType.coerceIn(0, 2)] else if (e.elite) eliteTint else kindTints[e.kind.coerceIn(0, kindTints.size - 1)]
         if (boss) {
             val col = if (e.swing > 0f) 4 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 4)
+            if (e.slam > 0f) { // red warning circle, filling up until the slam lands
+                val k = 1f - e.slam / 0.9f
+                drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R, e.y - OGRE_SLAM_R * 0.6f), Size(OGRE_SLAM_R * 2f, OGRE_SLAM_R * 1.2f), alpha = 0.18f + 0.25f * k)
+                drawOval(ALERT_RED, Offset(e.x - OGRE_SLAM_R * k, e.y - OGRE_SLAM_R * 0.6f * k), Size(OGRE_SLAM_R * 2f * k, OGRE_SLAM_R * 1.2f * k), alpha = 0.35f)
+            }
             sprite(sp.boss, SpriteData.boss, col, e.dir, e.x, e.y, UNIT_SCALE * (if (e.bossType == 1) 1.15f else 1f) * (if (bigBoss) 1.15f else 1f), filter)
         } else {
             val col = if (e.swing > 0f) 6 + ((1f - e.swing) * 3f).toInt().coerceIn(0, 2) else walkFrame(e.walk, 6)
@@ -946,7 +967,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
             val a = min(1f, g.levelBanner * 2f)
             label(text.str(levelDoneLabel(g.level - 1)), w / 2f, h * 0.27f, 36f * u * pop, GOLD, a)
+            label(text.str(STAR_LABELS[g.lastStars.coerceIn(0, 3)]), w / 2f, h * 0.27f + 128f * u, 30f * u * pop, GOLD, a)
             val newChapter = World.chapter(g.level) != World.chapter(g.level - 1) || g.level == World.LAST_LEVEL + 1
+            if (g.newUnlocks.isNotEmpty()) {
+                rr(HUD_BG, 30f * u, h * 0.27f + 96f * u, w - 60f * u, 30f * u, 15f * u)
+                label(text.str(newLabel(g.newUnlocks)), w / 2f, h * 0.27f + 111f * u, 13f * u, GOLD, a)
+            }
             if (newChapter) label(text.str(if (g.isEndless) "MODE INFINI !" else "CHAPITRE ${World.chapter(g.level) + 1} : " + World.CHAPTER_NAMES[World.chapter(g.level)].uppercase()),
                 w / 2f, h * 0.27f - 40f * u, 20f * u, WHITE, a)
             if (g.ageChanged) {
@@ -1067,6 +1093,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
 
     private val waveLabels = HashMap<Int, String>()
     private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { "Vague ${max(n, 1)}" }
+    private val STAR_LABELS = arrayOf("☆☆☆", "★☆☆", "★★☆", "★★★")
+    private val newLabels = HashMap<String, String>()
+    private fun newLabel(s: String) = newLabels.getOrPut(s) { "NOUVEAU : $s" }
     private val levelLabels = HashMap<Int, String>()
     private fun levelLabel(n: Int) = levelLabels.getOrPut(n) { "Niveau $n · " + (if (n >= 5) "Royal" else if (n >= 3) "Pierre" else "Bois") }
     private val levelDoneLabels = HashMap<Int, String>()

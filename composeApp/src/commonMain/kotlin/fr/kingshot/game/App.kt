@@ -90,7 +90,7 @@ fun App() {
                 last = now
                 frame.longValue = now
                 if (game.state != uiState) uiState = game.state
-                if (game.paused != pausedUi) pausedUi = game.paused
+                if (game.paused != pausedUi) { pausedUi = game.paused; if (game.paused) Audio.pause() else Audio.resume() }
                 Audio.time = game.time
                 val want = game.musicTrack
                 if (want != track[0]) { track[0] = want; Audio.music(want) }
@@ -424,7 +424,7 @@ private fun MetaPanel(which: Int, metaTick: Int, onChange: () -> Unit, onClose: 
                     val secs = Stats.playSeconds
                     for ((k, v) in listOf(
                         "Niveau de héros" to "${Hero.level}", "Meilleur niveau" to "${Stats.bestLevel}", "Meilleure vague" to "${Storage.loadBest()}",
-                        "Ennemis vaincus" to "${Stats.kills}", "Parties" to "${Stats.games}", "Temps de jeu" to "${secs / 3600} h ${secs / 60 % 60} min",
+                        "Étoiles" to "${Stats.stars} / 60", "Ennemis vaincus" to "${Stats.kills}", "Parties" to "${Stats.games}", "Temps de jeu" to "${secs / 3600} h ${secs / 60 % 60} min",
                     )) Row(Modifier.width(260.dp).padding(vertical = 3.dp)) {
                         Box(Modifier.weight(1f)) { BasicText(k, style = TextStyle(color = Color(0xFFCCCCCC), fontSize = 14.sp)) }
                         BasicText(v, style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black))

@@ -124,6 +124,7 @@ object Stats {
     val kills get() = Storage.loadInt("st_kills")
     val games get() = Storage.loadInt("st_games")
     val playSeconds get() = Storage.loadInt("st_time")
+    val stars: Int get() { var n = 0; for (l in 1..20) n += Storage.loadInt("stars_$l"); return n }
 
     /** Folds a finished (or abandoned) run into the totals. */
     fun record(level: Int, kills: Int, seconds: Int) {

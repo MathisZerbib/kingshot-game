@@ -30,7 +30,7 @@ object Sfx {
     )
     /** Minimum seconds between two plays of the same sound (keeps 30 archers from producing white noise). */
     val minGap = floatArrayOf(
-        0.07f, 0.05f, 0.06f, 0.04f, 0.08f, 0.15f, 0.5f, 2f, 1f, 0.3f,
+        0.07f, 0.05f, 0.06f, 0.12f, 0.08f, 0.15f, 0.5f, 2f, 1f, 0.3f,
         2f, 2f, 0.1f, 2f, 0.4f, 0.5f, 0.2f, 0.2f, 0.2f,
     )
 }

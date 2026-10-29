@@ -77,6 +77,11 @@ object World {
     const val FARM_Y = 1560f
     const val BARRACKS_X = 800f
     const val BARRACKS_Y = 1900f
+    // two spots offering the level-by-level buildings (found clear of every road, pad and the enclosure)
+    const val SPOT_A_X = 1320f
+    const val SPOT_A_Y = 1446f
+    const val SPOT_B_X = 1270f
+    const val SPOT_B_Y = 1977f
     const val MINE_X = 1300f
     const val MINE_Y = 1800f
 
@@ -365,7 +370,8 @@ object World {
             1200f, 1705f, PROP_CRATE, 1228f, 1690f, PROP_BARREL, 860f, 1850f, PROP_LUMBER, 1250f, 1960f, PROP_TENT,
             880f, 1560f, PROP_BARREL,
         )
-        val pads = floatArrayOf(720f, 1600f, 560f, 1640f, 1170f, 1800f, KING_START_X, KING_START_Y, FARM_X, FARM_Y, BARRACKS_X, BARRACKS_Y, MINE_X, MINE_Y)
+        val pads = floatArrayOf(720f, 1600f, 560f, 1640f, 1170f, 1800f, KING_START_X, KING_START_Y, FARM_X, FARM_Y, BARRACKS_X, BARRACKS_Y, MINE_X, MINE_Y,
+            SPOT_A_X, SPOT_A_Y, SPOT_B_X, SPOT_B_Y)
         var j = 0
         while (j < camp.size) {
             val x = camp[j]; val y = camp[j + 1]
