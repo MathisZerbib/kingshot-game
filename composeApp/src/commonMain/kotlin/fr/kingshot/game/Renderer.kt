@@ -197,6 +197,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     /** Pre-rendered 3D sprite atlases; null until loaded. */
     var sprites: Sprites? = null
     private var scale = 1f
+    private var viewTop = 0f // world y of the top of the view, to stop the coin stack where it leaves the screen
     private var viewOx = 0f // world -> screen offset of the current frame, for the HUD
     private var viewOy = 0f
     /** Unit triangle pointing +x, drawn rotated/scaled for off-screen enemy arrows. */
@@ -300,6 +301,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val vl = cx - halfW - 160f
         val vr = cx + halfW + 160f
         val vt = cy - halfH - 60f
+        viewTop = vt
         val vb = cy + halfH + 260f
 
         time = g.time
@@ -320,14 +322,14 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             drawGround(vl, vt, vr, vb)
             for (p in g.pads) if (p.visible) drawPad(p, p.kind == PAD_TOWER_ARCHER && g.squad == 0)
             drawSorted(g, vl, vt, vr, vb)
-            drawArrows(g)
+            drawArrows(g, vl, vt, vr, vb)
             for (sh in g.enemyShots) if (sh.active) { // enemy arrows: short dark streak
                 val dx = sh.tx - sh.x; val dy = sh.ty - sh.y
                 val l = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
                 line(ENEMY_ARROW, sh.x, sh.y, sh.x - dx / l * 26f, sh.y - dy / l * 26f, 3.5f)
             }
             drawFlyCoins(g)
-            drawParticles(g)
+            drawParticles(g, vl, vt, vr, vb)
         }
 
         // world-anchored labels in screen space
@@ -783,6 +785,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val base = y - 70f - bob + g.stackBump * 3f
         for (i in 0 until n) {
             val cx = x + g.sway * min(i * i * 0.016f, 70f) // bend capped so a tall stack never leaves the screen sideways
+            if (base - i * 4.5f < viewTop) break
             sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, cx, base - i * 4.5f, 1f)
         }
         if (g.kHp < g.kMaxHp) hpBar(x, y + 18f, 50f, g.kHp / g.kMaxHp, HP_GREEN) // under the king: the stack can be taller than the screen
@@ -822,11 +825,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         sprite(sp.coinSpin, SpriteData.coinSpin, frame, 0, c.x, c.y - c.z, 1f)
     }
 
-    private fun DrawScope.drawArrows(g: Game) {
+    private fun DrawScope.drawArrows(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
         for (a in g.arrows) {
             if (!a.active) continue
             val px = a.x
             val py = a.y - a.z
+            if (px < vl || px > vr || py < vt || py > vb) continue
             var dx = a.dx
             var dy = a.dy - a.dz
             val l = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
@@ -850,9 +854,9 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
     }
 
-    private fun DrawScope.drawParticles(g: Game) {
+    private fun DrawScope.drawParticles(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
         for (p in g.particles) {
-            if (!p.active) continue
+            if (!p.active || p.x < vl || p.x > vr || p.y - p.z < vt || p.y - p.z > vb) continue
             val k = p.life / p.maxLife
             val s = p.size * (0.4f + 0.6f * k)
             drawRect(Color(p.color.toInt()), Offset(p.x - s / 2f, p.y - p.z - s / 2f), Size(s, s), alpha = min(1f, k * 2f))
