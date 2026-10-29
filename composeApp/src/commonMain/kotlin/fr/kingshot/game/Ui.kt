@@ -1,5 +1,6 @@
 package fr.kingshot.game
 
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -149,17 +150,19 @@ fun nunito() = FontFamily(
 @Composable
 fun GText(
     text: String, size: Int, color: Color = Color.White, title: Boolean = false, weight: FontWeight = FontWeight.ExtraBold,
-    shadow: Boolean = true, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center,
+    shadow: Boolean = true, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Center, caps: Boolean = title,
 ) {
+    val px = LocalDensity.current.density
     // menu v2 scale: never under 13 dp for body text, 11 for Cinzel labels (tabs, card titles)
     val size = size.coerceAtLeast(if (title) 11 else 13)
     BasicText(
-        if (title) text.uppercase() else text, modifier,
+        if (caps) text.uppercase() else text, modifier,
         style = TextStyle(
             color = color, fontSize = size.sp, fontFamily = if (title) cinzel() else nunito(),
             fontWeight = if (title) FontWeight.Bold else weight, textAlign = align,
             letterSpacing = if (title) (size * 0.04f).sp else 0.sp, lineHeight = (size * 1.25f).sp,
-            shadow = if (shadow) Shadow(Color(0xCC1A0E04), Offset(0f, 2f), 3f) else null,
+            // kit v3: a soft drop shadow (0 / 2 dp, 35 %) instead of the dark engraved look
+            shadow = if (shadow) Shadow(Color(0x59000000), Offset(0f, 2f * px), 4f * px) else null,
         ),
     )
 }
@@ -216,7 +219,7 @@ fun Ribbon(text: String, red: Boolean = false, width: Dp = 280.dp) {
         Modifier.width(width).height(54.dp).nine(if (red) Res.drawable.ui_ribbon_red else Res.drawable.ui_ribbon_blue, IN_RIBBON, 54f / 170f)
             .padding(bottom = 6.dp),
         contentAlignment = Alignment.Center,
-    ) { GText(text, 19, Pal.goldLight, title = true) }
+    ) { GText(text, 19, Color.White, title = true) }
 }
 
 /** Counter pill: icon + number. */

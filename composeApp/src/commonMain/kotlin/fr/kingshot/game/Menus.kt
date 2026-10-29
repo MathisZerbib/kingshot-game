@@ -255,7 +255,7 @@ private fun HeroPlate(picked: Int) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Ornament(left = true)
-                    GText(CLASS_NAMES[c], 30, Pal.goldLight, title = true, modifier = Modifier.padding(horizontal = 10.dp))
+                    GText(CLASS_NAMES[c], 30, Color.White, title = true, modifier = Modifier.padding(horizontal = 10.dp))
                     Ornament(left = false)
                 }
                 GText(CLASS_ROLE_V2[c], 15, Color(0xFFEBF0FF), weight = FontWeight.ExtraBold)
@@ -343,7 +343,7 @@ private fun NewGameLink(onNew: () -> Unit) {
 private fun TabBar(ready: Int, onShop: () -> Unit, onMeta: (Int) -> Unit) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 13.dp).height(56.dp)
-            .background(Color(0xE60C1326), RoundedCornerShape(10.dp)).border(1.dp, Pal.goldDark, RoundedCornerShape(10.dp))
+            .background(Color(0xEB101A30), RoundedCornerShape(14.dp)).border(1.dp, Color(0x1AFFFFFF), RoundedCornerShape(14.dp))
             .padding(horizontal = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -366,7 +366,7 @@ private fun MenuTab(text: String, icon: DrawableResource, badge: Int, modifier: 
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Image(painterResource(icon), null, Modifier.size(20.dp))
-            GText(text, 11, Color.White, title = true)
+            GText(text, 11, Color.White, title = true, caps = false)
         }
         if (badge > 0) Box(
             Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-8).dp).size(18.dp).clip(CircleShape).background(Pal.red),
@@ -464,13 +464,13 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
         Pill(Res.drawable.ui_icon_coins, "${Meta.treasure}", width = 140.dp)
         when (which) {
             0 -> {
-                GText("${CLASS_NAMES[hero]} : améliorations", 12, Pal.goldLight, title = true)
+                GText("${CLASS_NAMES[hero]} : améliorations", 12, Color.White, title = true)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (up in 0..2) TalentCard(UP_NAMES[up], UP_ICONS[up], Meta.level(hero, up), UP_MAX, Meta.cost(hero, up), Modifier.weight(1f).stagger(up)) {
                         if (Meta.buy(hero, up)) { Audio.play(Sfx.FORGE); onChange() }
                     }
                 }
-                GText("Talents du royaume", 12, Pal.goldLight, title = true)
+                GText("Talents du royaume", 12, Color.White, title = true)
                 for (row in 0 until 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (col in 0 until 3) {
                         val t = row * 3 + col
@@ -521,7 +521,7 @@ private fun TalentCard(name: String, icon: DrawableResource, lv: Int, max: Int, 
         modifier.nine(Res.drawable.ui_card, IN_CARD, 0.22f).clickable(enabled = can) { onBuy() }.padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.height(18.dp), contentAlignment = Alignment.Center) { GText(name, 9, Pal.goldLight, title = true) }
+        Box(Modifier.height(18.dp), contentAlignment = Alignment.Center) { GText(name, 9, Color.White, title = true) }
         Spacer(Modifier.height(6.dp))
         KitIcon(icon, 34.dp, grey = lv == 0)
         GText(if (max > 5) "$lv / $max" else "★".repeat(lv) + "☆".repeat(max - lv), 10, Pal.gold, weight = FontWeight.Black)
@@ -555,7 +555,7 @@ fun VictoryPanel(game: Game, onNext: () -> Unit) {
                 Modifier.fillMaxWidth().nine(Res.drawable.ui_card, IN_CARD, 0.25f).padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                GText("Nouveau : " + (if (id == UNLOCK_MINE_CARD) "Mine et Caserne" else UNLOCK_NAMES[id]), 12, Pal.goldLight, title = true)
+                GText("Nouveau : " + (if (id == UNLOCK_MINE_CARD) "Mine et Caserne" else UNLOCK_NAMES[id]), 12, Color.White, title = true)
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(unlockArt(id)), null, Modifier.size(80.dp))

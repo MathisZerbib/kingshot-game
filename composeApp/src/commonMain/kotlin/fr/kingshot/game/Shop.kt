@@ -90,10 +90,35 @@ object Shop {
         if (!canBuy(id)) return false
         Meta.treasure -= it.price
         Storage.saveInt("${KEY}own_$id", 1)
+        // remember it for « Annuler l'achat » (10 min), with what was equipped before
+        Storage.saveInt("${KEY}last_item", items.indexOf(it) + 1)
+        Storage.saveInt("${KEY}last_prev", Storage.loadInt(slotKey(it.kind, it.cls)))
+        Storage.saveInt("${KEY}last_time", nowSeconds())
         equip(id)
         Audio.play(Sfx.FORGE)
         return true
     }
+
+    /** The last purchase can be undone for 10 minutes: full refund, previous look back on. */
+    fun canRefund(id: String): Boolean {
+        val last = items.getOrNull(Storage.loadInt("${KEY}last_item") - 1) ?: return false
+        return last.id == id && owned(id) && nowSeconds() - Storage.loadInt("${KEY}last_time") in 0..600
+    }
+
+    fun refund(id: String): Boolean {
+        if (!canRefund(id)) return false
+        val it = item(id) ?: return false
+        Meta.treasure += it.price
+        Storage.saveInt("${KEY}own_$id", 0)
+        Storage.saveInt(slotKey(it.kind, it.cls), Storage.loadInt("${KEY}last_prev"))
+        Storage.saveInt("${KEY}last_item", 0)
+        load()
+        version.intValue++
+        return true
+    }
+
+    // seconds since 2026-01-01: fits the Int store for decades
+    private fun nowSeconds() = (kotlin.time.Clock.System.now().epochSeconds - 1_767_225_600L).toInt()
 
     fun equip(id: String): Boolean {
         val it = item(id) ?: return false

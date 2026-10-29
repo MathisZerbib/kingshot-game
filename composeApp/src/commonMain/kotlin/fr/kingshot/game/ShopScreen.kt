@@ -106,7 +106,7 @@ fun ShopScreen(hero: Int, onClose: () -> Unit) {
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(Res.drawable.ui_icon_close, size = 46.dp, onClick = onClose)
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { GText("Boutique", 26, Pal.goldLight, title = true) }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { GText("Boutique", 26, Color.White, title = true) }
                 Box(Modifier.onGloballyPositioned { pill = it.boundsInRoot().center }) {
                     TreasurePill(shown)
                 }
@@ -167,29 +167,43 @@ private fun CatTab(k: Int, on: Boolean, modifier: Modifier, onClick: () -> Unit)
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Image(painterResource(CAT_ICONS[k]), null, Modifier.size(20.dp))
-        GText(CAT_NAMES[k], 11, if (on) Pal.ink else Color.White, title = true, shadow = !on)
+        GText(CAT_NAMES[k], 12, if (on) Pal.ink else Color.White, title = true, shadow = !on, caps = false)
     }
 }
 
 /** Big preview on the hero's own background, name, kind, description and the one action. */
 @Composable
 private fun Showcase(item: ShopItem, hero: Int, onBuy: (String) -> Unit) {
+    Shop.version.intValue
     Row(
         Modifier.fillMaxWidth().nine(Res.drawable.ui_panel_dark, IN_PANEL, 0.3f).padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(140.dp).clip(RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(140.dp).clip(RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
             Image(painterResource(MENU_BG_RES[hero]), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             Preview(item, 116.dp, locked = !Shop.unlocked(item.id))
         }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-            GText(item.name, 19, Pal.goldLight, title = true)
+            GText(item.name, 19, Color.White, title = true)
             GText(if (item.kind == SHOP_SKIN) "${CLASS_NAMES[item.cls]} · skin" else CAT_KIND[item.kind].replaceFirstChar { it.uppercase() }, 13, Color(0xFFAAB4D2), shadow = false)
             Spacer(Modifier.height(4.dp))
             GText(item.desc, 13, Color.White, weight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
-            ShopAction(item, big = true) { onBuy(item.id) }
+            // a purchase always asks once: « Acheter pour 1 500 ? » Oui / Non
+            var ask by remember(item.id) { mutableStateOf(false) }
+            if (ask) {
+                GText("Acheter pour ${price(item.price)} ?", 15, Color.White)
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KitButton(Res.drawable.ui_button_gold, "Oui", width = 80.dp, height = 44.dp, titleSize = 16, textColor = Pal.ink) { ask = false; onBuy(item.id) }
+                    KitButton(Res.drawable.ui_button_grey, "Non", width = 80.dp, height = 44.dp, titleSize = 16) { ask = false }
+                }
+            } else ShopAction(item, big = true) { ask = true }
+            if (Shop.canRefund(item.id)) Box(
+                Modifier.height(36.dp).clickable { Audio.play(Sfx.CLICK); Shop.refund(item.id) },
+                contentAlignment = Alignment.Center,
+            ) { GText("Annuler l'achat (rembourse ${price(item.price)})", 13, Color(0xFFC8BEA0), shadow = false) }
         }
     }
 }
@@ -236,13 +250,13 @@ private fun ShopCard(item: ShopItem, selected: Boolean, modifier: Modifier, stag
     Column(
         modifier.graphicsLayer { alpha = inA.value; translationY = (1f - inA.value) * 12.dp.toPx() }
             .drawBehind {
-                if (eq) for (k in 3 downTo 1) drawRoundRect(Pal.gold, Offset(-k * 3.dp.toPx(), -k * 3.dp.toPx()), Size(size.width + k * 6.dp.toPx(), size.height + k * 6.dp.toPx()), CornerRadius(14.dp.toPx()), alpha = 0.12f)
-                if (selected) drawRoundRect(Pal.goldLight, cornerRadius = CornerRadius(10.dp.toPx()), style = Stroke(2.5.dp.toPx()))
+                if (eq) for (k in 3 downTo 1) drawRoundRect(Pal.gold, Offset(-k * 3.dp.toPx(), -k * 3.dp.toPx()), Size(size.width + k * 6.dp.toPx(), size.height + k * 6.dp.toPx()), CornerRadius(18.dp.toPx()), alpha = 0.12f)
+                if (selected) drawRoundRect(Color.White, cornerRadius = CornerRadius(14.dp.toPx()), style = Stroke(2.dp.toPx()))
             }
             .nine(Res.drawable.ui_card, IN_CARD, 0.32f).clickable(onClick = onClick).padding(start = 6.dp, end = 6.dp, top = 5.dp, bottom = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.height(28.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) { GText(item.short, 11, Pal.goldLight, title = true) }
+        Box(Modifier.height(28.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) { GText(item.short, 12, Color.White, title = true, caps = false) }
         Spacer(Modifier.height(10.dp))
         Box(contentAlignment = Alignment.Center) {
             Preview(item, 84.dp, locked)
