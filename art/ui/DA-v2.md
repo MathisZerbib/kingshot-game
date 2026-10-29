@@ -70,3 +70,12 @@ en attendant un tint HSV du portrait.
 Phrases courtes, à l'impératif ou à l'indicatif, pas de majuscules partout hors titres Cinzel. Le bouton dit ce qui
 arrive : « Continuer », « Jouer », « Équiper », « Acheter 1 500 ». Les états vides et verrouillés disent quoi faire :
 « Atteins le niveau 10 », « Bats le premier boss ».
+
+## DA v3 « moderne » (2026-10-29 soir, après le retour de Mathis : « trop old school »)
+Même structure et mêmes écrans que la v2, nouveau kit `art/ui/make_ui_kit_v3.py` (mêmes noms de fichiers et mêmes insets
+9-slice que v1, donc le code Compose ne change pas) : verre bleu nuit `#101A30` à 92 % avec bord blanc 10 %, boutons plats
+très arrondis à dégradé vif (or, vert, bleu, rouge, gris, « wood » devient un bouton fantôme sombre), panneau clair
+`#F4F7FF`, cartes verre avec bandeau bleu, plaques de titre en pilule lumineuse, jauges en capsule, pastilles rondes en
+verre, logotype KINGSHOT en Lilita One (blanc → or, contour bleu nuit). Typo : Lilita One (OFL) remplace Cinzel pour
+titres et boutons, Nunito pour le texte ; titres en blanc, ombre douce 0/2 dp à 35 %, plus de contour ni de doré sur le
+texte. L'or ne reste que sur le bouton principal, les pièces et l'anneau de la pastille sélectionnée.
