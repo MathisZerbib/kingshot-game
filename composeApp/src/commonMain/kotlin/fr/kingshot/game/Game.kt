@@ -241,6 +241,7 @@ class Pad(val kind: Int, val x: Float, val y: Float, val ref: Int = -1) {
     var visible = true
     var level = 0
     var bump = 0f
+    var locked = false // shown as a teaser (padlock, "Niveau N") but cannot be paid yet
     companion object {
         const val HALF = 55f
     }
@@ -362,6 +363,14 @@ class Game {
     var camZoom = 1f
     /** Permanent zoom-out as the map grows: 1 at level 1, -0.04 per level, down to 0.78 (eased). */
     var worldZoom = 1f
+    /** Radius of the explored area around the keep (the fog beyond recedes at each level-up). */
+    var fogR = 0f
+    private fun fogTarget(): Float {
+        var r = 650f + 170f * (level - 1)
+        for (p in pads) if (p.visible) r = max(r, hypot(p.x - World.CASTLE_X, p.y - World.CASTLE_Y) + 180f)
+        for (t in towers) r = max(r, hypot(t.x - World.CASTLE_X, t.y - World.CASTLE_Y) + 220f)
+        return min(r, 2600f)
+    }
     var revealRoad = -1 // index of the road being revealed during the transition, -1 none
     var kDead = false
     var kRespawn = 0f
@@ -585,7 +594,7 @@ class Game {
         kMaxHp = when (heroClass) { CLASS_WARRIOR -> 300f; CLASS_RANGER -> 110f; else -> 160f } * (1f + 0.1f * Meta.level(heroClass, UP_HP))
         heroPower = (1f + 0.08f * Meta.level(heroClass, UP_POWER)) * (1f + 0.01f * min(50, Hero.level - 1))
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
-        abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1
+        abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1; worldZoom = 1f; fogR = 0f
         kHp = kMaxHp; kDead = false; coins = 10 * tal[TAL_START_COINS]
         squad = START_SQUAD + tal[TAL_START_ARCHERS] / 2
         castleHp = castleMaxHp
@@ -1097,6 +1106,8 @@ class Game {
         if (waveRewardBanner > 0f) waveRewardBanner -= dt
         if (levelUpPending) levelUp()
         if (ringDirty) rebuildRing()
+        val ft = fogTarget()
+        fogR = if (fogR <= 0f) ft else fogR + (ft - fogR) * min(1f, dtReal * 1.2f)
         val zt = max(0.78f, 1f - 0.04f * (level - 1))
         worldZoom += (zt - worldZoom) * min(1f, dtReal * 1.5f)
         if (waveBanner > 0f) waveBanner -= dt
@@ -1159,6 +1170,11 @@ class Game {
         kvy += (tvy - kvy) * acc
         var nx = kx + kvx * dt
         var ny = ky + kvy * dt
+        // the king stays inside the explored area
+        val fdx = nx - World.CASTLE_X
+        val fdy = ny - World.CASTLE_Y
+        val fd = hypot(fdx, fdy)
+        if (fogR > 0f && fd > fogR - 70f) { nx = World.CASTLE_X + fdx / fd * (fogR - 70f); ny = World.CASTLE_Y + fdy / fd * (fogR - 70f) }
         nx = nx.coerceIn(40f, World.W - 40f)
         ny = ny.coerceIn(60f, World.H - 40f)
         if (World.river.isNotEmpty() && World.inRiver(nx, ny)) {
@@ -1331,6 +1347,13 @@ class Game {
     /** Building prices climb 15 % per level, so not everything can be bought before the next wave. */
     private fun levelPrice(c: Int) = (c * (1f + 0.15f * (level - 1))).toInt()
 
+    /** Next building that a coming level unlocks (HUD teaser), or -1. */
+    val nextUnlock: Int get() {
+        var best = -1
+        for (u in UNLOCK_NAMES.indices) if (!unlocked[u] && UNLOCK_LEVEL[u] > level && (best < 0 || UNLOCK_LEVEL[u] < UNLOCK_LEVEL[best])) best = u
+        return best
+    }
+
     /** Last building bought on a base spot (drawn there), or -1. */
     fun lastUnlock(spot: Int): Int {
         var last = -1
@@ -1343,7 +1366,9 @@ class Game {
             val pad = if (spot == 0) spotPadA else spotPadB
             var next = -1
             for (u in UNLOCK_NAMES.indices) if (UNLOCK_SPOT[u] == spot && !unlocked[u]) { next = u; break }
-            pad.visible = next >= 0 && level >= UNLOCK_LEVEL[next]
+            // the next building is always shown; until its level it is a locked teaser
+            pad.visible = next >= 0
+            pad.locked = next >= 0 && level < UNLOCK_LEVEL[next]
             if (next >= 0 && pad.level != next) { pad.level = next; pad.paid = 0; pad.pending = 0 }
             if (next >= 0) pad.cost = price(UNLOCK_COST[next])
         }
@@ -1686,7 +1711,7 @@ class Game {
             for (p in pads) {
                 if (p.bump > 0f) p.bump = max(0f, p.bump - dt * 3f)
                 if (!p.visible) continue
-                if (abs(kx - p.x) < Pad.HALF && abs(ky - p.y) < Pad.HALF) { onPad = p; break }
+                if (!p.locked && abs(kx - p.x) < Pad.HALF && abs(ky - p.y) < Pad.HALF) { onPad = p; break }
             }
         }
         if (onPad != null && onPad.kind == PAD_TOWER_ARCHER) {

@@ -91,11 +91,13 @@ private val WAVE_RED = Color(0xFFC8342B)
 private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
 private val CAPTAIN_AURA = Color(0x55FFC531)
+private val LOCK = Color(0xFFE0C068)
 private const val WALL_SCALE = 1.45f // walls and gates drawn bigger than their footprint so they read at a glance
 private val TORCH = Color(0xFFFFD25A)
 private val TORCH_GLOW = Color(0x55FF9A2A)
 private val GATE_BANNER = Color(0xFF2F5BD3)
 private val NIGHT = Color(0xD0050A1E)
+private val FOG = Color(0xE6DCE6E8)
 private val SNOW = Color(0xCCFFFFFF)
 private val ENEMY_ARROW = Color(0xFF3A2414)
 private val ALERT_RED = Color(0xFFFF4A3A)
@@ -207,6 +209,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private var scale = 1f
     private val portraitClip = Path()
     private val payRing = Stroke(width = 9f, cap = StrokeCap.Round)
+    private val lockStroke = Stroke(width = 6f)
     private var viewTop = 0f // world y of the top of the view, to stop the coin stack where it leaves the screen
     private var viewOx = 0f // world -> screen offset of the current frame, for the HUD
     private var viewOy = 0f
@@ -349,7 +352,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val sy = oy + p.y * scale
             if (sx < -200 || sx > w + 200 || sy < -200 || sy > h + 200) continue
             val pop = 1f + p.bump * 0.5f
-            label(text.num(p.cost - p.paid), sx + 18f * scale, sy - 4f * scale, 34f * scale * pop, WHITE)
+            if (p.locked) label(text.str(lockLabel(UNLOCK_LEVEL[p.level.coerceIn(0, UNLOCK_LEVEL.size - 1)])), sx, sy + 34f * scale, 18f * scale, GOLD)
+            else label(text.num(p.cost - p.paid), sx + 18f * scale, sy - 4f * scale, 34f * scale * pop, WHITE)
             label(text.str(padName(p, g)), sx, sy + (Pad.HALF + 16f) * scale, 17f * scale, WHITE)
         }
         for (t in g.texts) {
@@ -361,6 +365,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, col, min(1f, k * 2.5f))
         }
 
+        drawFog(g, w, h)
         drawWeather(g, w, h)
         drawHud(g, w, h)
     }
@@ -381,6 +386,40 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         }
         lightMask = img
         return img
+    }
+
+    private var holeMask: ImageBitmap? = null
+
+    /** Clear disc with a soft rim (opaque inside 80 % of the radius), punched out of the fog layer. */
+    private fun holeBitmap(): ImageBitmap {
+        holeMask?.let { return it }
+        val n = 256
+        val img = ImageBitmap(n, n)
+        val c = androidx.compose.ui.graphics.Canvas(img)
+        val paint = androidx.compose.ui.graphics.Paint()
+        paint.color = Color.Black
+        c.drawCircle(Offset(n / 2f, n / 2f), n * 0.4f, paint)
+        for (r in (n / 2) downTo (n * 2 / 5)) { // soft rim
+            paint.color = Color.Black.copy(alpha = 0.09f)
+            c.drawCircle(Offset(n / 2f, n / 2f), r.toFloat(), paint)
+        }
+        holeMask = img
+        return img
+    }
+
+    /** Unexplored land: a mist beyond the explored radius, receding as levels go by. */
+    private fun DrawScope.drawFog(g: Game, w: Float, h: Float) {
+        if (g.fogR <= 0f) return
+        val sx = viewOx + World.CASTLE_X * scale
+        val sy = viewOy + World.CASTLE_Y * scale
+        val rr = g.fogR * scale / 0.8f // the mask is clear up to 80 % of its radius
+        if (sx - rr * 0.8f < 0f || sx + rr * 0.8f > w || sy - rr * 0.8f < 0f || sy + rr * 0.8f > h) {
+            val hole = holeBitmap()
+            drawContext.canvas.saveLayer(androidx.compose.ui.geometry.Rect(0f, 0f, w, h), nightPaint)
+            drawRect(FOG)
+            drawImage(hole, IntOffset.Zero, IntSize(hole.width, hole.height), IntOffset((sx - rr).toInt(), (sy - rr).toInt()), IntSize((rr * 2).toInt(), (rr * 2).toInt()), blendMode = BlendMode.DstOut)
+            drawContext.canvas.restore()
+        }
     }
 
     private fun DrawScope.drawWeather(g: Game, w: Float, h: Float) {
@@ -573,7 +612,12 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             val sp = sprites
             if (sp != null) sprite(sp.archer, SpriteData.archer, 0, 0, p.x - 22f, p.y + 16f, 0.75f, if (dim) dimFilter else null)
             if (dim) rr(PAD_DIM, x0, y0, size, size, 14f)
-        } else drawCoinIcon(p.x - 22f, p.y - 4f, 13f)
+        } else if (!p.locked) drawCoinIcon(p.x - 22f, p.y - 4f, 13f)
+        if (p.locked) { // padlock teaser
+            rr(PAD_DIM, x0, y0, size, size, 14f)
+            rr(LOCK, p.x - 16f, p.y - 4f, 32f, 26f, 5f)
+            drawArc(LOCK, 180f, 180f, false, Offset(p.x - 11f, p.y - 22f), Size(22f, 30f), style = lockStroke)
+        }
     }
 
     private fun DrawScope.drawCoinIcon(x: Float, y: Float, r: Float) {
@@ -993,6 +1037,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             label(text.str(World.levelName(g.level)), lx + lw / 2f, top + 28f * u, 10f * u, GOLD, outlined = false)
             rr(HUD_TRACK, lx + 8f * u, top + 37f * u, lw - 16f * u, 6f * u, 3f * u)
             rr(GOLD, lx + 8f * u, top + 37f * u, (lw - 16f * u) * g.levelProgress, 6f * u, 3f * u)
+            val nu = g.nextUnlock
+            if (nu >= 0) label(text.str(nextLabel(nu)), lx + lw / 2f, top + 56f * u, 9.5f * u, WHITE)
             // --- top-right: coins and pause
             val ph = 34f * u
             val pauseR = 17f * u
@@ -1192,6 +1238,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
     private val waveLabels = HashMap<Int, String>()
     private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { "Vague ${max(n, 1)}" }
     private val STAR_LABELS = arrayOf("☆☆☆", "★☆☆", "★★☆", "★★★")
+    private val lockLabels = HashMap<Int, String>()
+    private fun lockLabel(lv: Int) = lockLabels.getOrPut(lv) { "Niveau $lv" }
+    private val nextLabels = HashMap<Int, String>()
+    private fun nextLabel(u: Int) = nextLabels.getOrPut(u) { "Prochain : " + UNLOCK_NAMES[u] + " (niv. " + UNLOCK_LEVEL[u] + ")" }
     private val newLabels = HashMap<String, String>()
     private fun newLabel(s: String) = newLabels.getOrPut(s) { "NOUVEAU : $s" }
     private val levelLabels = HashMap<Int, String>()
