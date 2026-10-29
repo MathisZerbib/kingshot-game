@@ -402,6 +402,7 @@ class Game {
     var abilityCls = 0
     var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
     var kFlash = 0f // white flash on the king at the cast
+    var kCast = 0f // cast pose (sword / bow / hammer raised), seconds left
     var vignette = 0f // class-coloured screen edge flash (seconds left, 0.22)
     var abilityTitle = 0f // « TOURBILLON ! » title (seconds since shown, < 0.78)
     var abilityPress = 0f // HUD button bounce (seconds since press, < 0.24)
@@ -684,7 +685,7 @@ class Game {
         heroPower = (1f + 0.08f * Meta.level(heroClass, UP_POWER)) * (1f + 0.01f * min(50, Hero.level - 1))
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
         for (f in fx) f.active = false
-        abilityT = -1f; kSpin = 0f; kFlash = 0f; vignette = 0f; abilityTitle = 1f; abilityPress = 1f; abilityStop = 0f; castleHealT = -1f
+        abilityT = -1f; kSpin = 0f; kFlash = 0f; kCast = 0f; vignette = 0f; abilityTitle = 1f; abilityPress = 1f; abilityStop = 0f; castleHealT = -1f
         abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1; worldZoom = 1f; fogR = 0f
         kHp = kMaxHp; kDead = false; coins = 10 * tal[TAL_START_COINS]
         squad = START_SQUAD + tal[TAL_START_ARCHERS] / 2
@@ -917,6 +918,7 @@ class Game {
         abilityCls = heroClass; abilityT = 0f; abilityStep = 0
         if (!calm) abilityStop = if (heroClass == CLASS_RANGER) 0.05f else 0.09f
         kFlash = 0.06f; vignette = 0.22f; abilityTitle = 0f; abilityPress = 0f
+        kCast = when (heroClass) { CLASS_WARRIOR -> 0.6f; CLASS_RANGER -> 0.65f; else -> 0.2f } // ranger holds the bow through the 3 salvos
         val col = ABILITY_COLORS[heroClass]
         spawnFx(FX_GLOW, kx, ky, 0.22f, col)?.r1 = 2.2f
         when (heroClass) {
@@ -967,6 +969,7 @@ class Game {
     private fun updateAbility(dt: Float) {
         if (kSpin > 0f) kSpin -= dt
         if (kFlash > 0f) kFlash -= dt
+        if (kCast > 0f) kCast -= dt
         if (abilityT < 0f) return
         val t0 = abilityT
         abilityT += dt

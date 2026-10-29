@@ -219,6 +219,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     /** Atlas of the equipped king skin, loaded on demand by App (only the one in use). */
     var kingSkin: ImageBitmap? = null
     var portraitSkin: ImageBitmap? = null
+    var kingCast: ImageBitmap? = null
     var fxi: FxImages? = null
     private val tints = HashMap<Long, ColorFilter>() // one Modulate filter per effect colour, built once
     private var scale = 1f
@@ -973,7 +974,11 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         withTransform({ rotate(lean, Offset(x, y)) }) {
             // Tourbillon: the king turns through the 8 directions of his atlas, one step every 75 ms
             val dir = if (g.kSpin > 0f) (g.kDir + ((0.6f - g.kSpin) / 0.075f).toInt()) % 8 else g.kDir
-            sprite(kingImg, SpriteData.kingWarrior, col, dir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f || g.kFlash > 0f) flashFilter else null)
+            val flash = if (g.kHurtTimer > 2.85f || g.kFlash > 0f) flashFilter else null
+            val cast = kingCast
+            // ability pose: the cast atlas, also for the Tourbillon spin (its 8 directions scroll)
+            if (g.kCast > 0f && cast != null) sprite(cast, SpriteData.kingWarriorCast, 0, dir, x, y, UNIT_SCALE, flash)
+            else sprite(kingImg, SpriteData.kingWarrior, col, dir, x, y, UNIT_SCALE, flash)
         }
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)

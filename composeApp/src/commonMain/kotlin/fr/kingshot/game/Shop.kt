@@ -157,6 +157,12 @@ object Shop {
         return if (look == 0) null else Res.allDrawableResources["king_${SKIN_PREFIX[cls]}_${SKIN_KEY[look]}"]
     }
 
+    /** Cast pose atlas (1 column × 8 directions) of the hero in its equipped skin. */
+    fun castAtlas(cls: Int): DrawableResource? {
+        val look = skinLook(cls)
+        return Res.allDrawableResources["king_${SKIN_PREFIX[cls]}${if (look == 0) "" else "_" + SKIN_KEY[look]}_cast"]
+    }
+
     /** Shop preview portrait of a skin; falls back on the class portrait. */
     fun skinPortrait(cls: Int, look: Int): DrawableResource? =
         if (look == 0) null else Res.allDrawableResources["portrait_${SKIN_PREFIX[cls]}_${SKIN_KEY[look]}"]
