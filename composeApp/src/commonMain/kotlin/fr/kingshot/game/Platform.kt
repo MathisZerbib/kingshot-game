@@ -31,5 +31,9 @@ object Prefs {
         Storage.saveBest(0)
         Storage.saveInt("treasure", 0)
         for (c in 0..2) for (u in 0..2) Storage.saveInt("up_${c}_$u", 0)
+        for (t in 0 until 9) Storage.saveInt("tal_$t", 0)
+        for (k in listOf("xp", "st_best_level", "st_kills", "st_games", "st_time", "mis_init", "daily_day", "daily_streak")) Storage.saveInt(k, 0)
+        for (t in 0 until 6) Storage.saveInt("mis_next_$t", 0)
+        Missions.ensure()
     }
 }

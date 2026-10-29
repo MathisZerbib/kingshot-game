@@ -101,6 +101,8 @@ fun App() {
     }
     LaunchedEffect(Unit) { Audio.init() }
     var settingsOpen by remember { mutableStateOf(false) }
+    var metaPanel by remember { mutableIntStateOf(-1) } // 0 talents, 1 missions, 2 stats
+    LaunchedEffect(Unit) { Missions.ensure() }
 
     Box(
         Modifier
@@ -159,12 +161,15 @@ fun App() {
                 onContinue = { game.start(); focus.requestFocus() },
                 onNew = { game.newGame(picked); focus.requestFocus() },
                 onSettings = { settingsOpen = true },
+                onMeta = { metaPanel = it },
+                onDaily = { Daily.claim(); metaTick++ },
             )
             uiState == STATE_OVER -> DefeatPanel(game, onRevive = { game.revive(); focus.requestFocus() },
                 onRetry = { game.retryLevel(); focus.requestFocus() }, onMenu = { game.quitRun(); metaTick++ })
             pausedUi -> Panel("PAUSE", "${CLASS_NAMES[game.heroClass]} · niveau ${game.level} · vague ${game.wave}", "Partie sauvegardée à chaque vague",
                 "REPRENDRE", { game.paused = false; focus.requestFocus() }, "Menu", { game.quitRun() }, third = "Réglages", onThird = { settingsOpen = true })
         }
+        if (metaPanel >= 0) MetaPanel(metaPanel, metaTick, onChange = { metaTick++ }) { metaPanel = -1 }
         if (settingsOpen) SettingsPanel(onReset = { game.best = 0; metaTick++ }) { settingsOpen = false }
     }
 }
@@ -188,7 +193,7 @@ private val CLASS_HP = intArrayOf(3, 1, 2)
 private fun MainMenu(
     hasSave: Boolean, savedLevel: Int, savedClass: Int, best: Int,
     picked: Int, onPick: (Int) -> Unit, metaTick: Int, onBuy: (Int) -> Unit, onContinue: () -> Unit, onNew: () -> Unit,
-    onSettings: () -> Unit,
+    onSettings: () -> Unit, onMeta: (Int) -> Unit, onDaily: () -> Unit,
 ) {
     metaTick // read so a purchase recomposes the menu
     Box(
@@ -208,6 +213,23 @@ private fun MainMenu(
             Image(painterResource(Res.drawable.logo), null, Modifier.size(110.dp))
             Label("KINGSHOT", Color(0xFFFFC531), 48, FontWeight.Black)
             Label("Défends ton royaume", Color.White, 16, FontWeight.Bold)
+            Spacer(Modifier.height(6.dp))
+            // hero level and XP
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(30.dp).clip(CircleShape).background(Color(0xFFFFC531)), contentAlignment = Alignment.Center) {
+                    Label("${Hero.level}", Color(0xFF4A2A00), 14, FontWeight.Black)
+                }
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.width(150.dp).height(10.dp).clip(RoundedCornerShape(5.dp)).background(Color(0x66000000))) {
+                    Box(Modifier.fillMaxWidth(Hero.progress().coerceIn(0f, 1f)).height(10.dp).background(Color(0xFF7CC4FF)))
+                }
+                Spacer(Modifier.width(8.dp))
+                Label("Niveau de héros", Color.White, 12, FontWeight.Bold)
+            }
+            if (Daily.available) {
+                Spacer(Modifier.height(10.dp))
+                BigButton("RÉCOMPENSE DU JOUR", "+${Daily.reward} pièces · série de ${Daily.nextStreak} jour(s)", Color(0xFF9B59D6), Color(0xFF6A3A99), onDaily, small = true)
+            }
             Spacer(Modifier.height(28.dp))
             Label("Choisis ton héros", Color.White, 18, FontWeight.Black)
             Spacer(Modifier.height(10.dp))
@@ -241,9 +263,16 @@ private fun MainMenu(
             } else {
                 BigButton("JOUER", CLASS_NAMES[picked], Color(0xFF45C34A), Color(0xFF2A8A2F), onNew)
             }
+            Spacer(Modifier.height(14.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val ready = (0 until Missions.SLOTS).count { Missions.done(it) }
+                SmallTab("Talents", false) { onMeta(0) }
+                SmallTab(if (ready > 0) "Missions ($ready !)" else "Missions", ready > 0) { onMeta(1) }
+                SmallTab("Stats", false) { onMeta(2) }
+            }
             if (best > 0) {
-                Spacer(Modifier.height(14.dp))
-                Label("Record : vague $best", Color(0xFF9EE37D), 14, FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Label("Record : vague $best · niveau ${Stats.bestLevel}", Color(0xFF9EE37D), 14, FontWeight.Bold)
             }
         }
     }
@@ -323,6 +352,86 @@ private fun Panel(
                 Spacer(Modifier.height(10.dp))
                 BigButton(third, null, Color(0xFF4A5A7A), Color(0xFF2E3A52), onThird, small = true)
             }
+        }
+    }
+}
+
+@Composable
+private fun SmallTab(text: String, hot: Boolean, onClick: () -> Unit) {
+    Box(
+        Modifier.clip(RoundedCornerShape(14.dp)).background(if (hot) Color(0xFFE0533F) else Color(0xCC2B3A55))
+            .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(14.dp)).clickable { Audio.play(Sfx.CLICK); onClick() }
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) { Label(text, Color.White, 14, FontWeight.Black) }
+}
+
+/** Talents (grid), missions and statistics, opened from the menu. */
+@Composable
+private fun MetaPanel(which: Int, metaTick: Int, onChange: () -> Unit, onClose: () -> Unit) {
+    metaTick
+    Box(Modifier.fillMaxSize().background(Color(0xCC000000)).clickable(onClick = onClose), contentAlignment = Alignment.Center) {
+        Column(
+            Modifier.padding(16.dp).clip(RoundedCornerShape(22.dp)).background(Color(0xF21F2A40))
+                .border(3.dp, Color(0xFFFFC531), RoundedCornerShape(22.dp)).clickable(enabled = false) {}.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Label(arrayOf("TALENTS", "MISSIONS", "STATISTIQUES")[which], Color(0xFFFFC531), 26, FontWeight.Black)
+            Label("Trésor ● ${Meta.treasure}", Color.White, 14, FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            when (which) {
+                0 -> for (row in 0 until 3) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 3.dp)) {
+                        for (col in 0 until 3) {
+                            val t = row * 3 + col
+                            val lv = Talents.level(t)
+                            val cost = Talents.cost(t)
+                            val can = lv < TALENT_MAX && Meta.treasure >= cost
+                            Column(
+                                Modifier.width(104.dp).clip(RoundedCornerShape(12.dp))
+                                    .background(if (can) Color(0xEE2E6B34) else Color(0xAA1A2233))
+                                    .clickable(enabled = can) { if (Talents.buy(t)) { Audio.play(Sfx.FORGE); onChange() } }
+                                    .padding(6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Label(TALENT_NAMES[t], Color.White, 13, FontWeight.Black)
+                                Label("●".repeat(lv) + "○".repeat(TALENT_MAX - lv), Color(0xFFFFC531), 11)
+                                Label(TALENT_DESC[t], Color(0xFFCCCCCC), 9)
+                                Label(if (lv >= TALENT_MAX) "MAX" else "● $cost", if (can) Color(0xFFFFC531) else Color(0xFF999999), 12, FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+                1 -> for (sl in 0 until Missions.SLOTS) {
+                    val done = Missions.done(sl)
+                    Row(
+                        Modifier.width(300.dp).padding(vertical = 4.dp).clip(RoundedCornerShape(12.dp))
+                            .background(if (done) Color(0xEE2E6B34) else Color(0x33FFFFFF)).padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            BasicText(Missions.label(sl), style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold))
+                            BasicText("${minOf(Missions.progress(sl), Missions.target(sl))} / ${Missions.target(sl)}  ·  ● ${Missions.reward(sl)}",
+                                style = TextStyle(color = Color(0xFFFFD86A), fontSize = 12.sp))
+                        }
+                        if (done) Box(
+                            Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFFFFB627))
+                                .clickable { Missions.claim(sl); Audio.play(Sfx.COIN_STACK); onChange() }.padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) { Label("Réclamer", Color(0xFF3A2400), 13, FontWeight.Black) }
+                    }
+                }
+                else -> {
+                    val secs = Stats.playSeconds
+                    for ((k, v) in listOf(
+                        "Niveau de héros" to "${Hero.level}", "Meilleur niveau" to "${Stats.bestLevel}", "Meilleure vague" to "${Storage.loadBest()}",
+                        "Ennemis vaincus" to "${Stats.kills}", "Parties" to "${Stats.games}", "Temps de jeu" to "${secs / 3600} h ${secs / 60 % 60} min",
+                    )) Row(Modifier.width(260.dp).padding(vertical = 3.dp)) {
+                        Box(Modifier.weight(1f)) { BasicText(k, style = TextStyle(color = Color(0xFFCCCCCC), fontSize = 14.sp)) }
+                        BasicText(v, style = TextStyle(color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Black))
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            BigButton("FERMER", null, Color(0xFF45C34A), Color(0xFF2A8A2F), onClose, small = true)
         }
     }
 }

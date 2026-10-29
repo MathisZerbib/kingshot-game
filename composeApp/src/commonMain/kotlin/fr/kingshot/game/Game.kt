@@ -290,6 +290,8 @@ class Input {
 }
 
 class Game {
+    /** Talent ranks, read once per game (see Progress.kt). Declared first: reset() runs from init. */
+    private val tal = IntArray(TALENT_NAMES.size)
     val rnd = Random(Random.nextLong())
     val input = Input()
 
@@ -494,7 +496,26 @@ class Game {
     var ageChanged = false // the last level-up started a new age (banner)
     var roadAdded = false // the last level-up added a road (banner)
 
-    private fun wallMaxHp() = (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f)
+    private fun wallMaxHp() = (300f + wave * 40f) * (if (age >= 2) 2.5f else 1f) * (1f + 0.1f * tal[TAL_WALL_HP])
+
+    // progress gathered during the run, written to Storage in batches (flushProgress), never per frame
+    private var pendKills = 0
+    private var pendCoins = 0
+    private var pendBuilds = 0
+    private var pendWaves = 0
+    private var pendBosses = 0
+    private var pendXp = 0
+    private var runTimeFlushed = 0f
+
+    private fun flushProgress() {
+        if (pendKills > 0) Missions.add(MIS_KILLS, pendKills)
+        if (pendCoins > 0) Missions.add(MIS_COINS, pendCoins)
+        if (pendBuilds > 0) Missions.add(MIS_BUILD, pendBuilds)
+        if (pendWaves > 0) Missions.add(MIS_WAVES, pendWaves)
+        if (pendBosses > 0) Missions.add(MIS_BOSSES, pendBosses)
+        if (pendXp > 0) Hero.xp += pendXp
+        pendKills = 0; pendCoins = 0; pendBuilds = 0; pendWaves = 0; pendBosses = 0; pendXp = 0
+    }
 
     fun reset() {
         level = 1
@@ -503,15 +524,18 @@ class Game {
         buildMap()
         rainLeft = 0
         levelBanner = 0f; levelUpPending = false; waveCleared = true; kBoost = 0f
-        castleMaxHp = 600f
+        for (t in tal.indices) tal[t] = Talents.level(t)
+        castleMaxHp = 600f * (1f + 0.1f * tal[TAL_KEEP_HP])
+        flushProgress()
+        runTimeFlushed = 0f
         kx = World.KING_START_X; ky = World.KING_START_Y
         kvx = 0f; kvy = 0f
         kMaxHp = when (heroClass) { CLASS_WARRIOR -> 300f; CLASS_RANGER -> 110f; else -> 160f } * (1f + 0.1f * Meta.level(heroClass, UP_HP))
-        heroPower = 1f + 0.08f * Meta.level(heroClass, UP_POWER)
+        heroPower = (1f + 0.08f * Meta.level(heroClass, UP_POWER)) * (1f + 0.01f * min(50, Hero.level - 1))
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
         abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1
-        kHp = kMaxHp; kDead = false; coins = 0
-        squad = START_SQUAD
+        kHp = kMaxHp; kDead = false; coins = 10 * tal[TAL_START_COINS]
+        squad = START_SQUAD + tal[TAL_START_ARCHERS] / 2
         castleHp = castleMaxHp
         castleAlarm = 0f
         dmgLevel = 0
@@ -627,6 +651,10 @@ class Game {
         levelUpPending = false
         val oldAge = age
         level++
+        pendXp += 50
+        flushProgress()
+        Missions.reach(MIS_LEVEL, level)
+        if (level > Stats.bestLevel) Storage.saveInt("st_best_level", level)
         levelBanner = 3.5f
         ageChanged = age != oldAge
         coins += rainLeft; rainLeft = 0
@@ -771,6 +799,8 @@ class Game {
 
     /** Ends the run for good: half the coins in hand go to the treasure. */
     private fun finishRun() {
+        flushProgress()
+        Stats.record(level, kills, time.toInt())
         treasureWon = (coins + rainLeft) / 2
         Meta.treasure += treasureWon
         coins = 0; rainLeft = 0
@@ -820,6 +850,7 @@ class Game {
 
     /** App left the screen: pause the run and save it. */
     fun onBackground() {
+        flushProgress()
         if (state == STATE_PLAY && transition <= 0f) { paused = true; saveGame() }
     }
 
@@ -907,7 +938,7 @@ class Game {
     private fun recruitCost(n: Int): Int = price((min(4 + n * 2, 20) * (if (level >= 2) 0.75f else 1f)).toInt())
 
     /** Builder pays 30 % less for everything. */
-    private fun price(c: Int) = if (heroClass == CLASS_BUILDER) max(1, (c * 0.7f + 0.5f).toInt()) else c
+    private fun price(c: Int) = max(1, (c * (if (heroClass == CLASS_BUILDER) 0.7f else 1f) * (1f - 0.04f * tal[TAL_PRICES]) + 0.5f).toInt())
 
     private fun forgeCost(n: Int): Int = price(((20 + n * 25 + n * n * 5) * (if (age >= 2) 0.7f else 1f)).toInt())
 
@@ -1022,7 +1053,7 @@ class Game {
             val l = hypot(mx, my)
             if (l > 1f) { mx /= l; my /= l }
         }
-        val speed = if (kBoost > 0f) 351f else 270f
+        val speed = (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED])
         val tvx = mx * speed
         val tvy = my * speed
         val acc = min(1f, dt * 14f)
@@ -1156,7 +1187,7 @@ class Game {
                     aFaceRight[i] = enemies[t].x > ax[i]
                     aDir[i] = dirIndex(enemies[t].x - ax[i], enemies[t].y - ay[i])
                     aShoot[i] = 0.32f
-                    acd[i] = 0.85f + rnd.nextFloat() * 0.25f
+                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE])
                 } else acd[i] = 0.08f + rnd.nextFloat() * 0.1f
             }
         }
@@ -1177,7 +1208,7 @@ class Game {
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
                         t.shoot[a] = 0.32f
-                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f)
+                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE])
                     } else t.cd[a] = 0.1f
                 }
             }
@@ -1361,6 +1392,8 @@ class Game {
     private fun killEnemy(e: Enemy) {
         e.active = false
         kills++
+        pendKills++; pendXp++
+        if (e.kind == KIND_BOSS) { pendBosses++; pendXp += 20 }
         corpses.firstOrNull { !it.active }?.let { c ->
             c.active = true; c.x = e.x; c.y = e.y; c.kind = e.kind; c.dir = e.dir; c.scale = e.scale; c.t = 0f
         }
@@ -1393,7 +1426,7 @@ class Game {
     }
 
     private fun updateCoins(dt: Float) {
-        val magnet = if (heroClass == CLASS_BUILDER) 780f else 520f
+        val magnet = (if (heroClass == CLASS_BUILDER) 780f else 520f) * (1f + 0.1f * tal[TAL_MAGNET])
         for (c in coinsOnGround) {
             if (!c.active) continue
             c.t += dt
@@ -1432,6 +1465,7 @@ class Game {
                         c.active = false
                         coins++
                         coinsCollected++
+                        pendCoins++
                         stackBump = 1f
                         Audio.play(Sfx.COIN, 0.45f, 0.9f + min(coins, 60) * 0.006f)
                         if (coins % 10 == 0) { Audio.play(Sfx.COIN_STACK, 0.6f); Audio.haptic(Haptic.LIGHT) }
@@ -1507,6 +1541,7 @@ class Game {
     }
 
     private fun complete(p: Pad) {
+        if (p.kind != PAD_TOWER_ARCHER) pendBuilds++
         p.paid = 0
         p.pending = 0
         p.bump = 1f
@@ -1639,6 +1674,8 @@ class Game {
         if (waveBreak <= 0f) {
             wave++
             Audio.play(Sfx.WAVE_HORN)
+            if (wave > 1) { pendWaves++; pendXp += 5 }
+            flushProgress()
             saveGame()
             waveCleared = false
             toSpawn = 3 + wave * 2
@@ -1694,7 +1731,7 @@ class Game {
             KIND_SHIELD -> { e.maxHp = 200f * hpScale; e.speed = 45f; e.dmg = 14f; e.radius = 20f; e.scale = 1.25f; e.coins = 7 }
             KIND_RAM -> { e.maxHp = 500f * hpScale; e.speed = 38f; e.dmg = 60f; e.radius = 30f; e.scale = 1.8f; e.coins = 15 }
             else -> {
-                e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = 120 + 40 * (level - 1) + 10 * wave / 5
+                e.maxHp = 1000f * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = ((120 + 40 * (level - 1) + 10 * wave / 5) * (1f + 0.15f * tal[TAL_BOSS_LOOT])).toInt()
                 e.bossType = age - 1
             }
         }
