@@ -90,6 +90,10 @@ private val HUD_BUTTON = Color(0xFF3B4A6B)
 private val WAVE_RED = Color(0xFFC8342B)
 private val COOLDOWN = Color(0xAA000000)
 private val PAD_DIM = Color(0x66000000)
+private const val WALL_SCALE = 1.45f // walls and gates drawn bigger than their footprint so they read at a glance
+private val TORCH = Color(0xFFFFD25A)
+private val TORCH_GLOW = Color(0x55FF9A2A)
+private val GATE_BANNER = Color(0xFF2F5BD3)
 private val NIGHT = Color(0xD0050A1E)
 private val SNOW = Color(0xCCFFFFFF)
 private val ENEMY_ARROW = Color(0xFF3A2414)
@@ -632,7 +636,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
                 K_HOUSE -> drawHouse(World.HOUSE_X, World.HOUSE_Y)
                 K_CASTLE -> drawCastle(g)
                 K_TOWER -> drawTower(g.towers[idx], g.age)
-                K_WALL -> drawWall(g.walls[idx], g.age)
+                K_WALL -> drawWall(g.walls[idx], g.age, g)
                 K_ENEMY -> drawEnemy(g.enemies[idx], g.level % 5 == 0)
                 K_CORPSE -> drawCorpse(g.corpses[idx])
                 K_BUILDING -> drawBuilding(idx, g)
@@ -705,8 +709,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val j = if (k + 1 < g.ringCount && g.ringRun[k + 1]) k + 1 else k - 1
         val vertical = j >= 0 && abs(g.ringY[j] - y) > abs(g.ringX[j] - x)
         val stone = g.age >= 2
-        if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, 0.72f)
-        else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, 0.72f)
+        if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, 0.72f * WALL_SCALE)
+        else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, 0.72f * WALL_SCALE)
     }
 
     // placeholder looks for the new buildings until their own models land
@@ -782,31 +786,51 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         if (t.boltT > 0f) line(WHITE, t.x, top - 30f, t.boltX, t.boltY - 30f, 5f * (t.boltT / 0.18f))
     }
 
-    private fun DrawScope.drawWall(w: Wall, age: Int) {
+    private fun DrawScope.drawWall(w: Wall, age: Int, g: Game) {
         val sp = sprites ?: return
         val filter = if (w.hitFlash > 0f) flashFilter else null
-        val b = 1f + w.bump * 0.2f
+        val b = WALL_SCALE * (1f + w.bump * 0.2f)
+        // see-through when the king walks behind it
+        val alpha = if (g.ky < w.y && g.ky > w.y - 200f && abs(g.kx - w.x) < RAMPART_HALF + 40f) 0.6f else 1f
         // segment, gate, segment along the wall line, drawn back to front: wooden palisade, then stone from the stone age
         val vertical = w.ry != 0f
-        val open = w.gate > 0.5f
         val stone = age >= 2
+        oval(SHADOW, w.x - (if (vertical) 50f else RAMPART_HALF + 30f), w.y - (if (vertical) RAMPART_HALF + 20f else 26f),
+            if (vertical) 100f else RAMPART_HALF * 2f + 60f, if (vertical) RAMPART_HALF * 2f + 40f else 52f)
         for (i in -1..1) { // left to right / top to bottom = back to front
             val x = w.x + w.rx * i * 90f
             val y = w.y + w.ry * i * 90f
             if (i == 0) {
+                // gate: closed and open leaves cross-fade as it opens (0.25 s)
+                val closedA = (1f - w.gate) * alpha
+                val openA = w.gate * alpha
                 if (stone) {
-                    if (vertical) sprite(if (open) sp.gateOpenV else sp.gateClosedV, if (open) SpriteData.gateOpenV else SpriteData.gateClosedV, 0, 0, x, y, b, filter)
-                    else sprite(if (open) sp.gateOpen else sp.gateClosed, if (open) SpriteData.gateOpen else SpriteData.gateClosed, 0, 0, x, y, b, filter)
+                    if (closedA > 0.01f) sprite(if (vertical) sp.gateClosedV else sp.gateClosed, if (vertical) SpriteData.gateClosedV else SpriteData.gateClosed, 0, 0, x, y, b, filter, closedA)
+                    if (openA > 0.01f) sprite(if (vertical) sp.gateOpenV else sp.gateOpen, if (vertical) SpriteData.gateOpenV else SpriteData.gateOpen, 0, 0, x, y, b, filter, openA)
                 } else {
-                    if (vertical) sprite(if (open) sp.gateWoodOpenV else sp.gateWoodClosedV, if (open) SpriteData.gateWoodOpenV else SpriteData.gateWoodClosedV, 0, 0, x, y, b, filter)
-                    else sprite(if (open) sp.gateWoodOpen else sp.gateWoodClosed, if (open) SpriteData.gateWoodOpen else SpriteData.gateWoodClosed, 0, 0, x, y, b, filter)
+                    if (closedA > 0.01f) sprite(if (vertical) sp.gateWoodClosedV else sp.gateWoodClosed, if (vertical) SpriteData.gateWoodClosedV else SpriteData.gateWoodClosed, 0, 0, x, y, b, filter, closedA)
+                    if (openA > 0.01f) sprite(if (vertical) sp.gateWoodOpenV else sp.gateWoodOpen, if (vertical) SpriteData.gateWoodOpenV else SpriteData.gateWoodOpen, 0, 0, x, y, b, filter, openA)
                 }
+                // gate marker: two flickering torches on the posts and a blue banner on top
+                val px = if (vertical) 0f else 52f
+                val py = if (vertical) 52f else 0f
+                val top = y - 95f * b / WALL_SCALE
+                for (sgn in -1..1 step 2) {
+                    val tx = x + px * sgn
+                    val ty = top + py * sgn
+                    val fl = 0.8f + 0.2f * sin(g.time * 17f + sgn * 2f)
+                    circ(TORCH_GLOW, tx, ty - 6f, 16f * fl)
+                    circ(TORCH, tx, ty - 6f, 6f * fl)
+                    line(PLANK_DARK, tx, ty, tx, ty + 22f, 4f)
+                }
+                rr(GATE_BANNER, x - 16f, top - 46f, 32f, 26f, 4f)
+                line(PLANK_DARK, x, top - 50f, x, top - 18f, 3f)
             } else {
-                if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, b, filter)
-                else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, b, filter)
+                if (vertical) sprite(if (stone) sp.wallStoneV else sp.wallWoodV, if (stone) SpriteData.wallStoneV else SpriteData.wallWoodV, 0, 0, x, y, b, filter, alpha)
+                else sprite(if (stone) sp.wallStone else sp.wallWood, if (stone) SpriteData.wallStone else SpriteData.wallWood, 0, 0, x, y, b, filter, alpha)
             }
         }
-        if (w.hp < w.maxHp) hpBar(w.x, w.y - 64f, 70f, w.hp / w.maxHp, HP_GREEN)
+        if (w.hp < w.maxHp) hpBar(w.x, w.y - 110f, 80f, w.hp / w.maxHp, HP_GREEN)
     }
 
     private fun DrawScope.hpBar(cx: Float, y: Float, width: Float, frac: Float, col: Color) {
@@ -832,7 +856,10 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         val col = if (moving) 1 + walkFrame(g.kWalk, 6) else 0
         oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
         val kingImg = when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
-        sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
+        val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
+        withTransform({ rotate(lean, Offset(x, y)) }) {
+            sprite(kingImg, SpriteData.kingWarrior, col, g.kDir, x, y, UNIT_SCALE, if (g.kHurtTimer > 2.85f) flashFilter else null)
+        }
         // coin stack on the king's head
         val n = min(g.coins, MAX_STACK)
         val bob = if (moving) abs(sin(g.kWalk * 2f)) * 2f else 0f
@@ -840,8 +867,8 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
         for (i in 0 until n) {
             val cx = x + g.sway * min(i * i * 0.016f, 70f) // bend capped so a tall stack never leaves the screen sideways
             if (base - i * 4.5f < viewTop) break
-            // above 30 coins draw one in three: coins are 23 units tall, so the column still looks solid
-            if (i >= 30 && i % 3 != 0 && i != n - 1) continue
+            // above 30 coins draw one in two: the flat coins still overlap, so the column stays solid
+            if (i >= 30 && i % 2 != 0 && i != n - 1) continue
             sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, cx, base - i * 4.5f, 1f)
         }
         if (g.kHp < g.kMaxHp) hpBar(x, y + 18f, 50f, g.kHp / g.kMaxHp, HP_GREEN) // under the king: the stack can be taller than the screen
@@ -900,6 +927,7 @@ class Renderer(measurer: TextMeasurer, private val density: Float) {
             var dy = a.dy - a.dz
             val l = sqrt(dx * dx + dy * dy).coerceAtLeast(0.001f)
             dx /= l; dy /= l
+            if (a.z > 4f) line(SHADOW, a.x - a.dx * 20f, a.y - a.dy * 20f, a.x, a.y, 4f) // shadow on the ground, shows the arc
             line(Color(0x557FC8FF), px - dx * 46f, py - dy * 46f, px, py, 5f)
             line(WOOD_DARK, px - dx * 22f, py - dy * 22f, px, py, 2.5f)
             line(WHITE, px - dx * 4f, py - dy * 4f, px + dx * 3f, py + dy * 3f, 4f)

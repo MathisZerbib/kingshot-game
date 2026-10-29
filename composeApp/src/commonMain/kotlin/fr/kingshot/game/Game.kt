@@ -395,6 +395,8 @@ class Game {
     val corpses = Array(60) { Corpse() }
     val enemyShots = Array(40) { EnemyShot() }
     private var slowMo = 0f // real seconds of 0.4x time left
+    private var hitStop = 0f
+    private var dustTimer = 0f
 
     var towers = emptyArray<Tower>(); private set
     var walls = emptyArray<Wall>(); private set
@@ -757,6 +759,7 @@ class Game {
         shake = 8f
         // ad-style sequence, see updateTransition
         transition = TRANSITION_TIME
+        slowMo = 0.3f
         Audio.play(Sfx.VICTORY)
         revealRoad = if (roadAdded) walls.size - 1 else -1
         for (k in CONFETTI.indices) burst(kx, ky, 90f, 22, CONFETTI[k], 520f)
@@ -1027,7 +1030,9 @@ class Game {
     fun update(dtIn: Float) {
         val dtReal = dtIn.coerceIn(0f, 1f / 20f)
         if (slowMo > 0f) slowMo -= dtReal
-        val dt = if (slowMo > 0f) dtReal * 0.4f else dtReal
+        if (hitStop > 0f) hitStop -= dtReal
+        // hitstop freezes the action for a few frames when the king is hit; slow motion after a boss or a level
+        val dt = if (hitStop > 0f) 0f else if (slowMo > 0f) dtReal * 0.4f else dtReal
         fpsFrames++
         fpsTime += dtIn
         if (fpsTime >= 0.5f) {
@@ -1202,6 +1207,15 @@ class Game {
             nx = cx + px * 18f; ny = cy + py * 18f
         }
         kx = nx; ky = ny
+        dustTimer -= dt
+        if (dustTimer <= 0f && hypot(kvx, kvy) > 150f) { // dust under the hooves
+            dustTimer = 0.07f
+            particles.firstOrNull { !it.active }?.let { p ->
+                p.active = true; p.x = kx + (rnd.nextFloat() - 0.5f) * 20f; p.y = ky + 4f; p.z = 2f
+                p.vx = -kvx * 0.15f + (rnd.nextFloat() - 0.5f) * 30f; p.vy = -kvy * 0.15f; p.vz = 30f + rnd.nextFloat() * 30f
+                p.life = 0.45f; p.maxLife = 0.45f; p.size = 9f + rnd.nextFloat() * 6f; p.color = 0x99C8B08AL; p.gravity = 40f
+            }
+        }
         val sp = hypot(kvx, kvy)
         if (sp > 10f) {
             kWalk += dt * sp * 0.05f
@@ -1623,7 +1637,7 @@ class Game {
                 2 -> {
                     if (kDead) { c.state = 1; c.z = 0f; continue }
                     c.vx += dt * 4500f // used as speed
-                    val tz = 95f + min(coins, MAX_STACK) * 4.5f
+                    val tz = 95f + min(coins, 30) * 4.5f // land on the king's head, not the top of a huge column
                     val dx = kx - c.x
                     val dy = ky - c.y
                     val dz = tz - c.z
@@ -1698,7 +1712,7 @@ class Game {
         if (f == null) { onPad.paid += n; if (onPad.paid >= onPad.cost) complete(onPad); return }
         onPad.pending += n
         f.active = true
-        f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, MAX_STACK) * 4.5f
+        f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, 30) * 4.5f
         f.pad = pads.indexOf(onPad)
         f.t = 0f
         f.value = n
@@ -1847,6 +1861,7 @@ class Game {
                     spawnEnemy(KIND_BOSS)
                     bossPending = false
                     bossBanner = 2.2f
+                    shake = max(shake, 14f)
                     Audio.play(Sfx.BOSS_ROAR)
                 } else if (toSpawn > 0) {
                     spawnEnemy(pickKind())
@@ -2161,6 +2176,7 @@ class Game {
 
     private fun damageKing(d: Float) {
         kHp -= d
+        hitStop = 0.04f
         text(kx, ky, 90f, d.toInt(), false, 2)
         Audio.play(Sfx.KING_HURT, 0.7f)
         Audio.haptic(Haptic.MEDIUM)
