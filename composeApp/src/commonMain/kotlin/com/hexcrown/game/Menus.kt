@@ -405,6 +405,7 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
         KitToggle(L["music"], !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
         KitToggle(L["vibration"], !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
         KitToggle(L["fluid"], !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
+        KitToggle(L["show.fps"], Prefs.showFps) { Prefs.showFps = it; tick++ }
         GText(L["language"], 15, Pal.ink, title = true, shadow = false)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             for (l in 0..1) Box(

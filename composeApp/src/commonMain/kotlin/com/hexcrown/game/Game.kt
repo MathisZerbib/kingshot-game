@@ -219,6 +219,7 @@ const val FX_ARROW = 9 // ballistic arrow of the rain: up off-screen, down on it
 const val FX_STUCK = 10
 const val FX_RUNE = 11
 const val FX_RISE = 12 // light motes rising around the keep (Réparation)
+const val FX_FIREHIT = 14 // orange flash where a burning arrow lands
 const val FX_COINUP = 13 // a small coin rising from a hex: passive income
 
 /** Class colours of the effects: warrior gold, ranger green, builder light gold. */
@@ -1205,6 +1206,16 @@ class Game {
 
     // ---------------------------------------------------------------- relics, combo, day cycle
 
+    /** Removes one squad member; the last one takes its slot. */
+    private fun removeSquadAt(i: Int) {
+        val l = squad - 1
+        val x = ax[i]; val y = ay[i]
+        ax[i] = ax[l]; ay[i] = ay[l]; aDir[i] = aDir[l]; aShoot[i] = aShoot[l]; acd[i] = acd[l]; aWolf[i] = aWolf[l]; aFaceRight[i] = aFaceRight[l]
+        ax[l] = x; ay[l] = y // kept for the death puff
+        aWolf[l] = false
+        squad = l
+    }
+
     private fun applyRelic(i: Int) {
         relics[i] = true
         Relics.markSeen(i)
@@ -1332,7 +1343,7 @@ class Game {
 
     /** 0 move, 1 gold, 2 banner, 3 build, 4 charge, 5 last words (OK button), 6 done (persisted). Never a forced pause. */
     var tutorial = TUTO_DONE
-    private val tutoSlow get() = if (tutorial < TUTO_DONE) 0.7f else 1f
+    private val tutoSlow get() = if (tutorial < TUTO_DONE && wave <= 1) 0.7f else 1f
     private fun updateTutorial() {
         if (tutorial >= 5 || state != STATE_PLAY) return
         val next = when (tutorial) {
@@ -1399,7 +1410,8 @@ class Game {
         sb.append(";R")
         for (r in relics) sb.append(if (r) 1 else 0)
         sb.append(':').append(combo).append(':').append(if (raining) 1 else 0).append(':').append(draftsNoRare).append(':').append(if (nextRare) 1 else 0)
-            .append(':').append(if (freeRevive) 1 else 0).append(':').append(wolvesTamedRun).append(':').append(if (relicOpen || relicDelay > 0f) 1 else 0)
+            .append(':').append(if (freeRevive) 1 else 0).append(':').append(wolvesTamedRun).append(':').append(if (relicOpen || relicDelay > 0f) 1 else 0).append(':')
+        for (i in 0 until squad) sb.append(if (aWolf[i]) 1 else 0)
         return sb.toString()
     }
 
@@ -1467,6 +1479,7 @@ class Game {
                 for (i in 0 until RELIC_COUNT) relics[i] = r[0].getOrNull(i) == '1'
                 combo = r[1].toInt(); raining = r[2] == "1"; draftsNoRare = r[3].toInt(); nextRare = r[4] == "1"; freeRevive = r[5] == "1"; wolvesTamedRun = r[6].toInt()
                 if (r[7] == "1") relicDelay = 0.01f // a draft was waiting when the app left
+                for (i in 0 until squad) aWolf[i] = r.getOrNull(8)?.getOrNull(i) == '1'
             }
             nightAmt = when (dayPhase) { 2 -> 1f; 1 -> 0.45f; else -> 0f }
             rainAmt = if (raining) 1f else 0f
@@ -1762,7 +1775,12 @@ class Game {
             if (acd[i] <= 0f) {
                 if (aWolf[i]) { // tamed wolf: bites what is next to it
                     val w = nearestEnemy(ax[i], ay[i], 70f)
-                    if (w >= 0) { hitEnemy(w, 20f * dmgMult); aDir[i] = dirIndex(enemies[w].x - ax[i], enemies[w].y - ay[i]); aShoot[i] = 0.2f; acd[i] = 0.8f } else acd[i] = 0.15f
+                    if (w >= 0) {
+                        val foe = enemies[w]
+                        hitEnemy(w, 20f * dmgMult); aDir[i] = dirIndex(foe.x - ax[i], foe.y - ay[i]); aShoot[i] = 0.2f; acd[i] = 0.8f
+                        // 1 HP: whoever it bites and can strike back kills it
+                        if (foe.active && foe.atkCd <= 0f) { foe.atkCd = 1f; foe.swing = 1f; removeSquadAt(i); burst(ax[squad], ay[squad], 20f, 8, 0xFFD8262BL, 160f); return }
+                    } else acd[i] = 0.15f
                     continue
                 }
                 val t = nearestEnemy(ax[i], ay[i], 280f * torchRange(ax[i], ay[i]))
@@ -2027,6 +2045,7 @@ class Game {
                 if (alive) {
                     val blocked = e.kind == KIND_SHIELD && a.dx * e.mdx + a.dy * e.mdy < -0.3f
                     hitEnemy(a.target, if (blocked) a.dmg * 0.25f else a.dmg)
+                    if (fireActive) spawnFx(FX_FIREHIT, a.x, a.y - a.z, 0.2f, 0xFFFF8A2AL)
                     sparks(a.tx, a.ty, a.tz)
                     if (blocked) burst(a.tx, a.ty, a.tz, 4, 0xFFFFFFFFL, 160f)
                 }

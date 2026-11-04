@@ -219,6 +219,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
 
     private val keys = LongArray(2048)
     private val flashFilter = ColorFilter.tint(Color(0xD0FFFFFF), BlendMode.SrcAtop)
+    private val allyTint = ColorFilter.tint(Color(0x556FB7FF), BlendMode.SrcAtop)
     private val dimFilter = ColorFilter.tint(Color(0xB0808080), BlendMode.SrcAtop)
 
     /** Pre-rendered 3D sprite atlases; null until loaded. */
@@ -980,6 +981,10 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
 
     private fun DrawScope.drawArcher(g: Game, i: Int) {
         val sp = sprites ?: return
+        if (g.aWolf[i]) { // tamed wolf: enemy model with a blue cast so it reads as ours
+            sprite(sp.wolf, SpriteData.wolf, walkFrame(g.time * 12f, 6), g.aDir[i], g.ax[i], g.ay[i], UNIT_SCALE, allyTint)
+            return
+        }
         val col = when {
             g.aShoot[i] > 0f -> 7 + ((0.32f - g.aShoot[i]) / 0.32f * 3f).toInt().coerceIn(0, 2)
             g.aMoving[i] -> 1 + walkFrame(g.aWalk[i], 6)
@@ -1178,6 +1183,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 FX_PUFF -> if (!ground) fxDraw(fi.puff, (k * 7.99f).toInt(), f.x, f.y - 10f, 100f * f.r1, 100f * f.r1, 0f, 0.85f, tn, false)
                 FX_SPARKLE -> if (!ground) fxDraw(fi.sparkle, (k * 5.99f).toInt(), f.x, f.y - f.z, 34f, 34f, 0f, 1f, tn, true)
                 FX_SPIRAL -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - 30f, 28f, 28f, 0f, 1f - k, tn, true)
+                FX_FIREHIT -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y, 90f, 90f, 0f, 1f - k, tn, true)
                 FX_COINUP -> if (!ground) { val sp = sprites; if (sp != null) sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, f.x, f.y - f.z, 0.8f, null, 1f - k) }
                 FX_RISE -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - f.z, 20f, 20f, 0f, if (k > 0.66f) (1f - k) * 3f else 1f, tn, true)
                 FX_ARROW -> if (!ground) {
@@ -1454,14 +1460,14 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             val a = Ach.age
             val slide = if (a < 0.25f) expoOut(a / 0.25f) else if (a > 2.1f) 1f - (a - 2.1f) / 0.3f else 1f
             val bh = 56f * density
-            val ty = topInset + 6f * u - (1f - slide) * (bh + 20f)
-            rr(HUD_BG, 20f * u, ty, w - 40f * u, bh, 16f * u)
+            val ty = top + 136f * u - (1f - slide) * 14f * u // under the wave band, never over the top HUD
+            rr(HUD_BG.copy(alpha = HUD_BG.alpha * slide), 20f * u, ty, w - 40f * u, bh, 16f * u)
             if (ui != null) img(ui.trophy, 20f * u + bh / 2f, ty + bh / 2f, bh * 0.34f)
             label((titleText ?: text).str(L["ach.$ach"]), w / 2f + bh * 0.3f, ty + bh * 0.34f, 18f * u, WHITE)
             label(text.str(L.f("ach.reward", Ach.reward(ach))), w / 2f + bh * 0.3f, ty + bh * 0.72f, 12f * u, GOLD)
         }
         // fps
-        label(text.str(fpsLabel(g.fps)), 34f * u, h - 16f * u, 11f * u, Color(0xCCFFFFFF), outlined = false)
+        if (Prefs.showFps) label(text.str(fpsLabel(g.fps)), 34f * u, h - 16f * u, 11f * u, Color(0xCCFFFFFF), outlined = false)
         // joystick
         val inp = g.input
         if (inp.touching && g.state == STATE_PLAY) {
