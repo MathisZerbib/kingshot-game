@@ -34,6 +34,9 @@ kotlin {
             implementation(libs.compose.ui)
             implementation(libs.compose.components.resources)
         }
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
         }
@@ -54,7 +57,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = Integer.parseInt(SimpleDateFormat("yyMMddHH").format(Date()))
-        versionName = "0.9.0"
+        versionName = "0.95.0"
     }
     // the release key lives outside git (docs/HEXCROWN.md §5); without it, release falls back to the debug key for local installs
     val keystoreFile = File(System.getProperty("user.home"), ".hexcrown/keystore.properties")

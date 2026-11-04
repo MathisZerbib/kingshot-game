@@ -33,6 +33,11 @@ class LArr(private vararg val keys: String) {
 expect fun systemLanguage(): String
 
 private val TEXTS: Map<String, Array<String>> = mapOf(
+    "hud.banner" to arrayOf("Bannière", "Banner"),
+    "hud.charge" to arrayOf("Charge", "Charge"),
+    "obj.banner" to arrayOf("Objectif : plante une bannière sur ce chantier", "Goal: plant a banner on this site"),
+    "pad.fire" to arrayOf("Éteins le feu", "Put out the fire"),
+    "pad.needbanner" to arrayOf("Plante une bannière", "Plant a banner"),
     "ability" to arrayOf("Capacité", "Ability"),
     "ability.0" to arrayOf("Tourbillon", "Whirlwind"),
     "ability.1" to arrayOf("Pluie de flèches", "Arrow Rain"),

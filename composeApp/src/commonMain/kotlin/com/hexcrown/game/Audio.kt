@@ -24,29 +24,38 @@ object Sfx {
     const val RECRUIT = 16
     const val FORGE = 17
     const val REPAIR = 18
+    const val BANNER = 19
+    const val BURN = 20
+    const val EXTINGUISH = 21
+    const val CHARGE = 22
     val names = arrayOf(
         "shoot", "hit", "hit_flesh", "coin", "coin_stack", "build", "gate", "wave_horn", "boss_roar", "ability",
         "victory", "defeat", "click", "level_up", "king_hurt", "wall_break", "recruit", "forge", "repair",
+        "banner", "burn", "extinguish", "charge",
     )
     /** Minimum seconds between two plays of the same sound (keeps 30 archers from producing white noise). */
     val minGap = floatArrayOf(
         0.07f, 0.05f, 0.06f, 0.12f, 0.08f, 0.15f, 0.5f, 2f, 1f, 0.3f,
         2f, 2f, 0.1f, 2f, 0.4f, 0.5f, 0.2f, 0.2f, 0.2f,
+        0.3f, 0.5f, 0.3f, 0.3f,
     )
     /** Discreet mix (Mathis: "less sounds, more minimalistic"): longer gaps, so the battle hum stays in the background. */
     val minGapDiscreet = floatArrayOf(
         0.35f, 0.25f, 0.25f, 0.4f, 1.5f, 0.3f, 0.8f, 3f, 2f, 0.5f,
         3f, 3f, 0.12f, 3f, 0.6f, 0.8f, 0.6f, 0.6f, 0.6f,
+        0.5f, 1f, 0.5f, 0.5f,
     )
     /** Volume multiplier per sound in the discreet mix: combat and coin sounds are quiet, jingles and alerts keep their level. */
     val gainDiscreet = floatArrayOf(
         0.22f, 0.3f, 0.3f, 0.28f, 0.3f, 0.55f, 0.4f, 0.8f, 0.8f, 0.6f,
         0.85f, 0.85f, 0.45f, 0.7f, 0.7f, 0.6f, 0.45f, 0.45f, 0.4f,
+        0.6f, 0.4f, 0.5f, 0.6f,
     )
     /** Combat sounds that share one small budget (at most [Audio.COMBAT_BUDGET] of them per 0.5 s). */
     val combat = booleanArrayOf(
         true, true, true, true, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false,
+        false, false, false, false,
     )
 }
 

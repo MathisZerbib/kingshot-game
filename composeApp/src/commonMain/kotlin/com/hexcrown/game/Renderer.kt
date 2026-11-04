@@ -51,6 +51,7 @@ private const val K_WALL = 5
 private const val K_ENEMY = 6
 private const val K_ARCHER = 7
 private const val K_KING = 8
+private const val K_BANNER = 30
 private const val K_COIN = 9
 private const val K_PROP = 10
 private const val K_RING = 11
@@ -123,6 +124,9 @@ private val SILVER = Color(0xFFD4DAE2)
 private val GOLD = Color(0xFFFFC531)
 private val GOLD_DARK = Color(0xFFD9901A)
 private val HEAL_GREEN = Color(0xFF7CFF8A)
+private val HEX_LINE = Color(0x1FFFFFFF)
+private val HEX_BURNT_FILL = Color(0xFF7A1F12)
+private val ABILITY_GLOW = Color(0x66FFD65A)
 private val HORSE = Color(0xFFD9A066)
 private val HORSE_DARK = Color(0xFF8A5A33)
 private val RED = Color(0xFFD8262B)
@@ -351,7 +355,8 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             scale(scale, scale, Offset.Zero)
         }) {
             drawGround(vl, vt, vr, vb)
-            for (p in g.pads) if (p.visible) drawPad(p, p.kind == PAD_TOWER_ARCHER && g.squad == 0)
+            drawHexes(g, vl, vt, vr, vb)
+            for (p in g.pads) if (p.visible) drawPad(p, (p.kind == PAD_TOWER_ARCHER && g.squad == 0) || !g.padOpen(p))
             drawFx(g, ground = true)
             drawSorted(g, vl, vt, vr, vb)
             drawArrows(g, vl, vt, vr, vb)
@@ -373,6 +378,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             if (sx < -200 || sx > w + 200 || sy < -200 || sy > h + 200) continue
             val pop = 1f + p.bump * 0.5f
             if (p.locked) label(text.str(lockLabel(UNLOCK_LEVEL[p.level.coerceIn(0, UNLOCK_LEVEL.size - 1)])), sx, sy + 34f * scale, 18f * scale, GOLD)
+            else if (!g.padOpen(p)) label(text.str(if (g.grid.stateAt(p.x, p.y) == HEX_BURNT) L["pad.fire"] else L["pad.needbanner"]), sx, sy, 15f * scale, GOLD)
             else label(text.num(p.cost - p.paid), sx + 18f * scale, sy - 4f * scale, 34f * scale * pop, WHITE)
             label(text.str(padName(p, g)), sx, sy + (Pad.HALF + 16f) * scale, 17f * scale, WHITE)
         }
@@ -725,6 +731,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         for (k in g.walls.indices) if (g.walls[k].built) n = push(n, g.walls[k].y, K_WALL, k)
         for (k in g.enemies.indices) { val e = g.enemies[k]; if (e.active && vis(e.x, e.y)) n = push(n, e.y, K_ENEMY, k) }
         for (k in g.corpses.indices) { val c = g.corpses[k]; if (c.active && vis(c.x, c.y)) n = push(n, c.y - 2f, K_CORPSE, k) }
+        for (k in 0 until g.grid.count) { val h = g.grid.at(k); if (g.grid.hasBanner(h) && vis(h.x, h.y)) n = push(n, h.y, K_BANNER, k) }
         for (k in 0 until g.squad) if (vis(g.ax[k], g.ay[k])) n = push(n, g.ay[k], K_ARCHER, k)
         if (!g.kDead && g.state != STATE_MENU) n = push(n, g.ky, K_KING, 0)
         for (k in g.coinsOnGround.indices) { val c = g.coinsOnGround[k]; if (c.active && vis(c.x, c.y)) n = push(n, c.y - 1f, K_COIN, k) }
@@ -759,6 +766,16 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                     }
                 }
                 K_ARCHER -> drawArcher(g, idx)
+                K_BANNER -> {
+                    val h = g.grid.at(idx)
+                    val sp = sprites
+                    val left = g.grid.unfolding(h)
+                    if (sp != null && left < DEPLOY_MS) { // it rises as its hex unfolds
+                        val k = 1.5f * expoOut((DEPLOY_MS - left) / DEPLOY_MS.toFloat())
+                        if (g.grid.state(h) == HEX_BURNT) sprite(sp.bannerBurning, SpriteData.bannerBurning, 0, 0, h.x, h.y, k)
+                        else sprite(sp.banner, SpriteData.banner, 0, 0, h.x, h.y, k)
+                    }
+                }
                 K_KING -> drawKing(g)
                 K_COIN -> drawGroundCoin(g.coinsOnGround[idx], g.kx, g.ky)
             }
@@ -971,6 +988,11 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
         val skin = kingSkin
         val kingImg = skin ?: when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
+        val fi = fxi
+        if (fi != null && g.kChargeT > 0f) { // charge: a long streak behind the mount, in the class colour
+            val ang = atan2(g.kvy, g.kvx)
+            fxDraw(fi.trail, 0, x - cos(ang) * 80f, y - 30f - sin(ang) * 80f, 170f, 46f, ang * 180f / PI.toFloat(), 0.9f, tint(ABILITY_COLORS[g.heroClass]), true)
+        }
         val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
         withTransform({ rotate(lean, Offset(x, y)) }) {
             // Tourbillon: the king turns through the 8 directions of his atlas, one step every 75 ms
@@ -1150,6 +1172,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 FX_PUFF -> if (!ground) fxDraw(fi.puff, (k * 7.99f).toInt(), f.x, f.y - 10f, 100f * f.r1, 100f * f.r1, 0f, 0.85f, tn, false)
                 FX_SPARKLE -> if (!ground) fxDraw(fi.sparkle, (k * 5.99f).toInt(), f.x, f.y - f.z, 34f, 34f, 0f, 1f, tn, true)
                 FX_SPIRAL -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - 30f, 28f, 28f, 0f, 1f - k, tn, true)
+                FX_COINUP -> if (!ground) { val sp = sprites; if (sp != null) sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, f.x, f.y - f.z, 0.8f, null, 1f - k) }
                 FX_RISE -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - f.z, 20f, 20f, 0f, if (k > 0.66f) (1f - k) * 3f else 1f, tn, true)
                 FX_ARROW -> if (!ground) {
                     // ballistic: from the king (z 40) up to ~900 px (off screen) and down on the target
@@ -1353,8 +1376,8 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         }
         val obj = g.objective
         if (g.state == STATE_PLAY && obj != null && g.transition <= 0f) {
-            val msg = when (obj.kind) { PAD_TOWER -> L["obj.tower"]; PAD_TOWER_ARCHER -> L["obj.archer"]; else -> L["obj.wall"] }
-            val by = h - 150f * u
+            val msg = if (!g.padOpen(obj)) L["obj.banner"] else when (obj.kind) { PAD_TOWER -> L["obj.tower"]; PAD_TOWER_ARCHER -> L["obj.archer"]; else -> L["obj.wall"] }
+            val by = h - 205f * u
             rr(HUD_BG, 24f * u, by - 18f * u, w - 48f * u, 36f * u, 18f * u)
             label(text.str(msg), w / 2f, by, 13.5f * u, GOLD)
             val sx = viewOx + obj.x * scale
@@ -1366,9 +1389,9 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 0 -> L["tuto.0"]
                 1 -> L["tuto.1"]
                 2 -> L["tuto.2"]
-                else -> L["tuto.3"]
+                else -> if (g.tutorialTarget?.let { g.padOpen(it) } == false) L["obj.banner"] else L["tuto.3"]
             }
-            val by = h - 150f * u
+            val by = h - 205f * u
             rr(HUD_BG, 24f * u, by - 18f * u, w - 48f * u, 36f * u, 18f * u)
             label(text.str(msg), w / 2f, by, 13.5f * u * (1f + 0.04f * sin(g.time * 5f)), WHITE)
             val p = g.tutorialTarget
@@ -1435,6 +1458,35 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     var pauseX = -1000f; var pauseY = -1000f; var pauseRadius = 0f
     var abilityX = -1000f; var abilityY = -1000f; var abilityRadius = 0f
 
+    var chargeX = 0f; private set
+    var chargeY = 0f; private set
+    var chargeRadius = 0f; private set
+    var bannerX = 0f; private set
+    var bannerY = 0f; private set
+    var bannerRadius = 0f; private set
+
+    /** Charge above the ability; the banner to its left, only when the king stands on a neutral hex. */
+    private fun DrawScope.drawTerritoryButtons(g: Game, w: Float, h: Float, u: Float) {
+        val ui = hud ?: return
+        val r = 26f * u
+        chargeX = abilityX; chargeY = abilityY - 34f * u - 22f * u - r; chargeRadius = r + 8f * u
+        img(ui.circle, chargeX, chargeY, r * 1.12f)
+        img(ui.charge, chargeX, chargeY, r * 0.66f)
+        if (g.kChargeCd > 0f) {
+            drawArc(COOLDOWN, -90f, 360f * (g.kChargeCd / 4f).coerceIn(0f, 1f), true, Offset(chargeX - r + 3f * u, chargeY - r + 3f * u), Size((r - 3f * u) * 2f, (r - 3f * u) * 2f))
+        }
+        label(text.str(L["hud.charge"]), chargeX, chargeY + r + 9f * u, 10f * u, WHITE)
+        if (!g.canPlant) { bannerRadius = 0f; return }
+        val b = 30f * u
+        bannerX = abilityX - 34f * u - 18f * u - b; bannerY = abilityY; bannerRadius = b + 8f * u
+        val can = g.coins >= g.bannerCost
+        val al = if (can) 1f else 0.55f
+        if (can) circ(ABILITY_GLOW, bannerX, bannerY, b + (3f + 2f * sin(g.time * 6f)) * u)
+        drawImage(ui.circle, IntOffset.Zero, IntSize(ui.circle.width, ui.circle.height), IntOffset((bannerX - b * 1.12f).toInt(), (bannerY - b * 1.12f).toInt()), IntSize((b * 2.24f).toInt(), (b * 2.24f).toInt()), alpha = al)
+        drawImage(ui.hex, IntOffset.Zero, IntSize(ui.hex.width, ui.hex.height), IntOffset((bannerX - b * 0.62f).toInt(), (bannerY - b * 0.62f).toInt()), IntSize((b * 1.24f).toInt(), (b * 1.24f).toInt()), alpha = al)
+        label(text.num(g.bannerCost), bannerX, bannerY + b + 10f * u, 13f * u, if (can) GOLD else WHITE)
+    }
+
     private fun DrawScope.drawAbilityButton(g: Game, w: Float, h: Float, u: Float) {
         // press: 0.9 (80 ms) → 1.12 (160 ms) → 1, with a ring around the button
         val pt = g.abilityPress
@@ -1465,6 +1517,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             label(text.num(g.abilityCd.toInt() + 1), abilityX, abilityY, 22f * u, WHITE)
         }
         label(text.str(ABILITY_NAMES[g.heroClass]), abilityX, abilityY + r + 12f * u, 11f * u, WHITE)
+        drawTerritoryButtons(g, w, h, u)
     }
 
     private fun DrawScope.drawClassIcon(cls: Int, x: Float, y: Float, s: Float, u: Float) = classIcon(cls, x, y, s, 4.5f * u)
@@ -1476,6 +1529,77 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     private val sunRay = Path().apply { moveTo(0f, 0f); lineTo(1f, -1f); lineTo(1f, 1f); close() }
 
     private var labelLang = -1 // the label caches below hold text in this language
+    // ------------------------------------------------------------ territory
+
+    private val hexGridPath = Path()
+    private val hexOursPath = Path()
+    private val hexBurntPath = Path()
+    private val hexUnit = Path()
+    private var gridKey = Long.MIN_VALUE
+    private var hexVersion = -1
+    private var hexClass = -1
+    private val hexCos = FloatArray(6) { cos((60f * it - 90f) * PI.toFloat() / 180f) * HEX_R }
+    private val hexSin = FloatArray(6) { sin((60f * it - 90f) * PI.toFloat() / 180f) * HEX_R }
+
+    private fun addHex(p: Path, x: Float, y: Float) {
+        p.moveTo(x + hexCos[0], y + hexSin[0])
+        for (i in 1..5) p.lineTo(x + hexCos[i], y + hexSin[i])
+        p.close()
+    }
+
+    /** Thin grid in view, then our lands and the burnt ones. The paths are only rebuilt when the view or a hex changes. */
+    private fun DrawScope.drawHexes(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
+        if (g.state == STATE_MENU) return
+        val grid = g.grid
+        val a = grid.hexAt(vl, vt); val b = grid.hexAt(vr, vb)
+        val r0 = a.r - 1; val r1 = b.r + 1
+        val key = (r0.toLong() shl 48) xor (r1.toLong() shl 32) xor (grid.hexAt(vl, vb).q.toLong() shl 16) xor grid.hexAt(vr, vt).q.toLong()
+        if (key != gridKey) {
+            gridKey = key
+            hexGridPath.reset()
+            for (r in r0..r1) {
+                val q0 = grid.hexAt(vl, r * HEX_R * 1.5f).q - 1
+                val q1 = grid.hexAt(vr, r * HEX_R * 1.5f).q + 1
+                for (q in q0..q1) { val h = Hex.of(q, r); addHex(hexGridPath, h.x, h.y) }
+            }
+        }
+        if (hexVersion != grid.version) {
+            hexVersion = grid.version
+            hexOursPath.reset(); hexBurntPath.reset()
+            for (i in 0 until grid.count) {
+                val h = grid.at(i)
+                if (grid.state(h) == HEX_BURNT) addHex(hexBurntPath, h.x, h.y)
+                else if (grid.unfolding(h) == 0) addHex(hexOursPath, h.x, h.y)
+            }
+        }
+        if (hexUnit.isEmpty) addHex(hexUnit, 0f, 0f)
+        val line = 2f * density / scale // 2 dp whatever the zoom
+        val c = Color(ABILITY_COLORS[g.heroClass].toInt())
+        drawPath(hexGridPath, HEX_LINE, style = Stroke(line))
+        drawPath(hexOursPath, c, alpha = 0.18f)
+        drawPath(hexOursPath, c, alpha = 0.6f, style = Stroke(line))
+        drawPath(hexBurntPath, HEX_BURNT_FILL, alpha = 0.5f)
+        drawPath(hexBurntPath, HEX_BURNT_FILL, style = Stroke(line))
+        val fi = fxi ?: return
+        for (i in 0 until grid.count) {
+            val h = grid.at(i)
+            if (grid.state(h) == HEX_BURNT) { // small flame
+                val flick = 0.75f + 0.25f * sin(g.time * 11f + i)
+                fxDraw(fi.glow, 0, h.x, h.y - 10f, 70f * flick, 90f * flick, 0f, 0.8f, tint(0xFFFF7A2AL), true)
+                continue
+            }
+            val left = grid.unfolding(h)
+            if (left == 0 || left >= DEPLOY_MS) continue
+            // the flower unfolds hex by hex: 120 ms each, expoOut, with a glow of the class colour
+            val k = expoOut((DEPLOY_MS - left) / DEPLOY_MS.toFloat())
+            withTransform({ translate(h.x, h.y); scale(k, k, Offset.Zero) }) {
+                drawPath(hexUnit, c, alpha = 0.3f)
+                drawPath(hexUnit, c, style = Stroke(line))
+            }
+            fxDraw(fi.glow, 0, h.x, h.y, 260f, 200f, 0f, 1f - k, tint(ABILITY_COLORS[g.heroClass]), true)
+        }
+    }
+
     private val waveLabels = HashMap<Int, String>()
     private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { L.f("wave.n", max(n, 1)) }
     private val STAR_LABELS = arrayOf("☆☆☆", "★☆☆", "★★☆", "★★★")

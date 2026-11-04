@@ -129,9 +129,11 @@ class Enemy {
     var atkCd = 0f
     var swing = 0f
     var hitFlash = 0f
-    var knockT = -1f // animated knockback (Tourbillon): seconds elapsed, -1 when none
+    var chargedBy = 0 // last king charge that hit this enemy
+    var knockT = -1f // animated knockback (Tourbillon, charge): seconds elapsed, -1 when none
     var knockDx = 0f
     var knockDy = 0f
+    var knockTime = 0.18f
     var squash = 0f // hit squash 1.25/0.8 → 1, seconds left
     var walk = 0f
     var faceRight = false
@@ -215,6 +217,7 @@ const val FX_ARROW = 9 // ballistic arrow of the rain: up off-screen, down on it
 const val FX_STUCK = 10
 const val FX_RUNE = 11
 const val FX_RISE = 12 // light motes rising around the keep (Réparation)
+const val FX_COINUP = 13 // a small coin rising from a hex: passive income
 
 /** Class colours of the effects: warrior gold, ranger green, builder light gold. */
 val ABILITY_COLORS = longArrayOf(0xFFFFC531L, 0xFF9EE37DL, 0xFFFFE08AL)
@@ -401,6 +404,19 @@ class Game {
     var abilityT = -1f // seconds since the cast, -1 when no ability is playing
     var abilityCls = 0
     var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
+    // territory and charge (docs/HEXCROWN.md §2.1, §2.3)
+    val grid = HexGrid()
+    var bannersPlanted = 0
+    val bannerCost get() = 30 + 10 * bannersPlanted
+    val canPlant get() = state == STATE_PLAY && !kDead && transition <= 0f && grid.stateAt(kx, ky) == HEX_NEUTRAL
+    var kChargeT = 0f // seconds left of the charge in progress
+    var kChargeCd = 0f
+    private var kChargeX = 0f
+    private var kChargeY = 0f
+    private var kFaceX = 0f
+    private var kFaceY = 1f
+    private var chargeId = 0
+    private var chargeDust = 0f
     var kFlash = 0f // white flash on the king at the cast
     var kCast = 0f // cast pose (sword / bow / hammer raised), seconds left
     var vignette = 0f // class-coloured screen edge flash (seconds left, 0.22)
@@ -685,6 +701,9 @@ class Game {
         heroPower = (1f + 0.08f * Meta.level(heroClass, UP_POWER)) * (1f + 0.01f * min(50, Hero.level - 1))
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
         for (f in fx) f.active = false
+        grid.clear(); bannersPlanted = 0; kChargeT = 0f; kChargeCd = 0f
+        grid.plant(grid.hexAt(World.CASTLE_X, World.CASTLE_Y), animated = false) // starting lands: the keep and the king's camp
+        grid.plant(grid.hexAt(World.KING_START_X - 100f, World.KING_START_Y - 100f), animated = false)
         abilityT = -1f; kSpin = 0f; kFlash = 0f; kCast = 0f; vignette = 0f; abilityTitle = 1f; abilityPress = 1f; abilityStop = 0f; castleHealT = -1f
         abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1; worldZoom = 1f; fogR = 0f
         kHp = kMaxHp; kDead = false; coins = 10 * tal[TAL_START_COINS]
@@ -929,7 +948,7 @@ class Game {
                     if (e.kind != 2) { // knocked back 90 px along its road, animated over 180 ms (expoOut)
                         e.s = max(0f, e.s - 90f)
                         val d = max(1f, hypot(e.x - kx, e.y - ky))
-                        e.knockT = 0f; e.knockDx = (e.x - kx) / d * 90f; e.knockDy = (e.y - ky) / d * 90f
+                        e.knockT = 0f; e.knockTime = 0.18f; e.knockDx = (e.x - kx) / d * 90f; e.knockDy = (e.y - ky) / d * 90f
                     }
                     e.squash = 0.15f
                     hitEnemy(i, 110f * dmgMult * heroPower)
@@ -1066,6 +1085,7 @@ class Game {
                     f.x += cos(a) * 380f * dt; f.y += sin(a) * 380f * dt * 0.55f
                 }
                 FX_RISE -> { f.z += 80f * dt; f.x += sin(f.t * 5f + f.a) * 20f * dt }
+                FX_COINUP -> f.z += 70f * dt
                 FX_SPARKLE -> if (f.t > 0f) f.z += 20f / 0.6f * dt
                 FX_ARROW -> if (f.t >= f.life) { // lands: damage, spark, dust, an arrow left in the ground
                     val e = enemies.getOrNull(f.target)
@@ -1089,11 +1109,11 @@ class Game {
             if (!e.active) continue
             if (e.squash > 0f) e.squash -= dt
             if (e.knockT >= 0f) {
-                val k0 = expoOut(e.knockT / 0.18f)
+                val k0 = expoOut(e.knockT / e.knockTime)
                 e.knockT += dt
-                val k1 = expoOut((e.knockT / 0.18f).coerceAtMost(1f))
+                val k1 = expoOut((e.knockT / e.knockTime).coerceAtMost(1f))
                 e.x += e.knockDx * (k1 - k0); e.y += e.knockDy * (k1 - k0)
-                if (e.knockT >= 0.18f) e.knockT = -1f
+                if (e.knockT >= e.knockTime) e.knockT = -1f
             }
         }
     }
@@ -1222,6 +1242,8 @@ class Game {
         for (t in towers) sb.append(if (t.elite) 2 else if (t.ballista) 1 else 0)
         sb.append(";")
         for (u in unlocked) sb.append(if (u) 1 else 0)
+        sb.append(";H").append(bannersPlanted).append(':') // tagged last field: the positional fields above do not move
+        grid.save(sb)
         return sb.toString()
     }
 
@@ -1279,6 +1301,11 @@ class Game {
             for (i in 0 until squad) { ax[i] = kx + slotX[i]; ay[i] = ky + slotY[i] }
             waveBreak = 5f
             ringDirty = true
+            f.lastOrNull { it.startsWith("H") }?.let { // saves without it keep the starting lands
+                val colon = it.indexOf(':')
+                bannersPlanted = it.substring(1, colon).toInt()
+                grid.load(it.substring(colon + 1))
+            }
             true
         } catch (e: NumberFormatException) {
             reset(); false
@@ -1339,6 +1366,8 @@ class Game {
             updateTowers(dt)
             updateBuildings(dt)
             updatePads(dt)
+            updateHexes(dt)
+            if (kChargeCd > 0f) kChargeCd -= dt
             if (abilityCd > 0f) abilityCd -= dt
             if (abilityFlash > 0f) abilityFlash -= dt
             updateAbility(dt)
@@ -1423,6 +1452,7 @@ class Game {
         val acc = min(1f, dt * 14f)
         kvx += (tvx - kvx) * acc
         kvy += (tvy - kvy) * acc
+        if (kChargeT > 0f) updateCharge(dt)
         var nx = kx + kvx * dt
         var ny = ky + kvy * dt
         // the king stays inside the explored area
@@ -1504,7 +1534,7 @@ class Game {
         if (sp > 10f) {
             kWalk += dt * sp * 0.05f
             if (abs(kvx) > 15f) kFaceRight = kvx > 0f
-            if (sp > 40f) kDir = dirIndex(kvx, kvy)
+            if (sp > 40f) { kDir = dirIndex(kvx, kvy); kFaceX = kvx / sp; kFaceY = kvy / sp }
         }
         sway += (-kvx * 0.0016f - sway) * min(1f, dt * 6f)
 
@@ -1570,7 +1600,7 @@ class Game {
                     aFaceRight[i] = enemies[t].x > ax[i]
                     aDir[i] = dirIndex(enemies[t].x - ax[i], enemies[t].y - ay[i])
                     aShoot[i] = 0.32f
-                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f)
+                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f) / (if (grid.stateAt(ax[i], ay[i]) == HEX_OURS) 1.1f else 1f)
                 } else acd[i] = 0.08f + rnd.nextFloat() * 0.1f
             }
         }
@@ -1591,7 +1621,7 @@ class Game {
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
                         t.shoot[a] = 0.32f
-                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f)
+                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f) / (if (grid.stateAt(t.x, t.y) == HEX_OURS) 1.1f else 1f)
                     } else t.cd[a] = 0.1f
                 }
             }
@@ -1969,6 +1999,77 @@ class Game {
         }
     }
 
+    /** Sites only stand on our hexes; repairs (keep, built walls) stay open everywhere. */
+    fun padOpen(p: Pad) = p.kind == PAD_REPAIR || (p.kind == PAD_WALL && walls[p.ref].built) || grid.stateAt(p.x, p.y) == HEX_OURS
+
+    /** Plants a banner on the neutral hex under the king: pays, claims the flower of 7, plays the signature moment. */
+    fun plantBanner(): Boolean {
+        if (!canPlant || coins < bannerCost) return false
+        coins -= bannerCost
+        bannersPlanted++
+        val h = grid.hexAt(kx, ky)
+        grid.plant(h)
+        Audio.play(Sfx.BANNER)
+        Audio.haptic(Haptic.MEDIUM)
+        spawnFx(FX_GLOW, h.x, h.y, 0.5f, ABILITY_COLORS[heroClass])?.r1 = 4f
+        return true
+    }
+
+    private fun updateHexes(dt: Float) {
+        for (e in enemies) if (e.active) grid.markEnemy(e.x, e.y)
+        val earned = grid.update(dt, kx, ky, !kDead)
+        if (earned > 0) { // passive income: small coins rise from a few of our hexes
+            coins = min(carryCap, coins + earned)
+            var shown = 0
+            var i = rnd.nextInt(grid.count.coerceAtLeast(1))
+            var tries = grid.count
+            while (shown < 8 && tries-- > 0) {
+                val h = grid.at(i % grid.count)
+                i += 3
+                if (grid.state(h) != HEX_OURS) continue
+                spawnFx(FX_COINUP, h.x + (rnd.nextFloat() - 0.5f) * 80f, h.y + (rnd.nextFloat() - 0.5f) * 50f, 0.7f, 0xFFFFFFFFL)
+                shown++
+            }
+        }
+        if (grid.burned > 0) Audio.play(Sfx.BURN)
+        if (grid.extinguished > 0) { Audio.play(Sfx.EXTINGUISH); Audio.haptic(Haptic.LIGHT) }
+    }
+
+    /** Double-tap or button: the mount charges 320 px in 350 ms along the king's heading. */
+    fun charge(): Boolean {
+        if (state != STATE_PLAY || paused || transition > 0f || kDead || kChargeCd > 0f) return false
+        val sp = hypot(kvx, kvy)
+        if (sp > 40f) { kChargeX = kvx / sp; kChargeY = kvy / sp } else { kChargeX = kFaceX; kChargeY = kFaceY }
+        kChargeT = 0.35f; kChargeCd = 4f; chargeId++; chargeDust = 0f
+        Audio.play(Sfx.CHARGE)
+        Audio.haptic(Haptic.MEDIUM)
+        return true
+    }
+
+    private fun updateCharge(dt: Float) {
+        kChargeT -= dt
+        val speed = 320f / 0.35f
+        kvx = kChargeX * speed; kvy = kChargeY * speed
+        chargeDust -= dt
+        if (chargeDust <= 0f) { chargeDust = 0.06f; spawnFx(FX_PUFF, kx, ky, 0.4f, 0xFFD9C9A0L) }
+        var impact = false
+        for (i in enemies.indices) {
+            val e = enemies[i]
+            if (!e.active || e.chargedBy == chargeId || hypot(e.x - kx, e.y - ky) > 60f + e.radius) continue
+            e.chargedBy = chargeId; e.squash = 0.15f
+            if (e.kind != KIND_BOSS) { // bowled over: 120 px back along its road and away from the mount
+                e.s = max(0f, e.s - 120f)
+                val d = max(1f, hypot(e.x - kx, e.y - ky))
+                e.knockT = 0f; e.knockTime = 0.22f; e.knockDx = (e.x - kx) / d * 120f; e.knockDy = (e.y - ky) / d * 120f
+            }
+            hitEnemy(i, 18f * dmgMult * heroPower)
+            spawnFx(FX_SPARK, e.x, e.y - 30f * e.scale, 0.25f, ABILITY_COLORS[heroClass])?.a = rnd.nextFloat() * 360f
+            impact = true
+        }
+        if (impact && !Prefs.cap60) hitStop = max(hitStop, 0.04f)
+        for (c in coinsOnGround) if (c.active && c.state == 1 && hypot(c.x - kx, c.y - ky) < 90f) { c.state = 2; c.t = 0f; c.vx = 0f }
+    }
+
     private fun updatePads(dt: Float) {
         repairPad.visible = castleHp < castleMaxHp * 0.92f
         if (repairPad.bump > 0f) repairPad.bump -= dt * 3f
@@ -1977,7 +2078,7 @@ class Game {
             for (p in pads) {
                 if (p.bump > 0f) p.bump = max(0f, p.bump - dt * 3f)
                 if (!p.visible) continue
-                if (!p.locked && abs(kx - p.x) < Pad.HALF && abs(ky - p.y) < Pad.HALF) { onPad = p; break }
+                if (!p.locked && padOpen(p) && abs(kx - p.x) < Pad.HALF && abs(ky - p.y) < Pad.HALF) { onPad = p; break }
             }
         }
         if (onPad != null && onPad.kind == PAD_TOWER_ARCHER) {
