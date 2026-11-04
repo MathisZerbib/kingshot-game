@@ -45,6 +45,22 @@ actual class AudioEngine actual constructor() {
         }
     }
 
+    private var loopClip: Clip? = null
+
+    actual fun loop(id: Int, volume: Float) {
+        val data = sfx[id] ?: return
+        runCatching {
+            val c = loopClip ?: AudioSystem.getClip().also {
+                it.open(AudioSystem.getAudioInputStream(ByteArrayInputStream(data)))
+                it.loop(Clip.LOOP_CONTINUOUSLY)
+                loopClip = it
+            }
+            gain(c, volume * sfxVol)
+        }
+    }
+
+    actual fun stopLoop(id: Int) { loopClip?.stop(); loopClip?.close(); loopClip = null }
+
     actual fun music(track: Int) {
         if (track == this.track && musicClip != null) return
         musicClip?.stop(); musicClip?.close(); musicClip = null
@@ -66,7 +82,7 @@ actual class AudioEngine actual constructor() {
     }
 
     actual fun vibrate(kind: Int) {}
-    actual fun pause() { musicClip?.stop() }
-    actual fun resume() { musicClip?.loop(Clip.LOOP_CONTINUOUSLY) }
-    actual fun release() { musicClip?.close(); musicClip = null }
+    actual fun pause() { musicClip?.stop(); loopClip?.stop() }
+    actual fun resume() { musicClip?.loop(Clip.LOOP_CONTINUOUSLY); loopClip?.loop(Clip.LOOP_CONTINUOUSLY) }
+    actual fun release() { musicClip?.close(); musicClip = null; loopClip?.close(); loopClip = null }
 }

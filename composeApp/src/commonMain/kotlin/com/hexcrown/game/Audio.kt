@@ -39,39 +39,42 @@ object Sfx {
     const val CROWN = 31
     const val TAB = 32
     const val SWIPE = 33
+    const val ABILITY_RANGER = 34
+    const val ABILITY_BUILDER = 35
+    const val RAIN_LOOP = 36
     val names = arrayOf(
         "shoot", "hit", "hit_flesh", "coin", "coin_stack", "build", "gate", "wave_horn", "boss_roar", "ability",
         "victory", "defeat", "click", "level_up", "king_hurt", "wall_break", "recruit", "forge", "repair",
         "banner", "burn", "extinguish", "charge", "relic", "combo_break", "combo_up", "achievement", "night", "rain_start",
-        "boss_down", "star", "crown", "tab", "swipe",
+        "boss_down", "star", "crown", "tab", "swipe", "ability_ranger", "ability_builder", "rain_loop",
     )
     /** Minimum seconds between two plays of the same sound (keeps 30 archers from producing white noise). */
     val minGap = floatArrayOf(
         0.07f, 0.05f, 0.06f, 0.12f, 0.08f, 0.15f, 0.5f, 2f, 1f, 0.3f,
         2f, 2f, 0.1f, 2f, 0.4f, 0.5f, 0.2f, 0.2f, 0.2f,
         0.3f, 0.5f, 0.3f, 0.3f, 0.3f, 0.5f, 0.3f, 0.3f, 2f, 2f,
-        1f, 0.1f, 2f, 0.1f, 0.1f,
+        1f, 0.1f, 2f, 0.1f, 0.1f, 0.3f, 0.3f, 0f,
     )
     /** Discreet mix (Mathis: "less sounds, more minimalistic"): longer gaps, so the battle hum stays in the background. */
     val minGapDiscreet = floatArrayOf(
         0.35f, 0.25f, 0.25f, 0.18f, 1.5f, 0.3f, 0.8f, 3f, 2f, 0.5f,
         3f, 3f, 0.12f, 3f, 0.6f, 0.8f, 0.6f, 0.6f, 0.6f,
         0.5f, 1f, 0.5f, 0.5f, 0.5f, 0.8f, 0.5f, 0.5f, 3f, 3f,
-        1f, 0.1f, 2f, 0.1f, 0.15f,
+        1f, 0.1f, 2f, 0.1f, 0.15f, 0.5f, 0.5f, 0f,
     )
     /** Volume multiplier per sound in the discreet mix: combat and coin sounds are quiet, jingles and alerts keep their level. */
     val gainDiscreet = floatArrayOf(
-        0.22f, 0.3f, 0.3f, 0.28f, 0.3f, 0.55f, 0.4f, 0.8f, 0.8f, 0.6f,
+        0.32f, 0.42f, 0.42f, 0.5f, 0.3f, 0.55f, 0.4f, 0.8f, 0.8f, 0.6f,
         0.85f, 0.85f, 0.45f, 0.7f, 0.7f, 0.6f, 0.45f, 0.45f, 0.4f,
         0.6f, 0.4f, 0.5f, 0.6f, 0.6f, 0.6f, 0.45f, 0.6f, 0.7f, 0.6f,
-        0.85f, 0.6f, 0.85f, 0.35f, 0.35f,
+        0.85f, 0.6f, 0.85f, 0.35f, 0.35f, 0.6f, 0.6f, 1f,
     )
     /** Combat sounds that share one small budget (at most [Audio.COMBAT_BUDGET] of them per 0.5 s). */
     val combat = booleanArrayOf(
         true, true, true, true, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false,
         false, false, false, false, false, false, false, false, false, false,
-        false, false, false, false, false,
+        false, false, false, false, false, false, false, false,
     )
 }
 
@@ -100,6 +103,9 @@ expect class AudioEngine() {
     /** Registers a music file (AAC .m4a; WAV also accepted) for [track]. */
     fun loadMusic(track: Int, data: ByteArray)
     fun play(id: Int, volume: Float, pitch: Float)
+    /** Starts the effect [id] as a seamless loop, or changes the volume of the one playing. */
+    fun loop(id: Int, volume: Float)
+    fun stopLoop(id: Int)
     /** Starts (or keeps) the looping [track]; Music.NONE stops. */
     fun music(track: Int)
     fun setVolumes(sfx: Float, music: Float)
@@ -122,6 +128,9 @@ object Audio {
     private const val MASTER_SFX = 0.8f
     private const val MUSIC_DISCREET = 0.42f
     private var engine: AudioEngine? = null
+    var loadedSfx = 0; private set
+    private var rainVolume = 0f
+    private const val RAIN_LEVEL = 0.25f
     private val lastPlay = FloatArray(Sfx.names.size) { -10f }
     private var combatWindow = -1f
     private var combatCount = 0
@@ -136,8 +145,10 @@ object Audio {
         if (engine != null) return
         val e = AudioEngine()
         for (i in Sfx.names.indices) {
-            runCatching { e.loadSfx(i, Res.readBytes("files/sfx/${Sfx.names[i]}.wav")) }
+            runCatching { e.loadSfx(i, Res.readBytes("files/sfx/${Sfx.names[i]}.wav")); loadedSfx++ }
+                .onFailure { println("Hexcrown audio: ${Sfx.names[i]}.wav not loaded: $it") }
         }
+        println("Hexcrown audio: $loadedSfx / ${Sfx.names.size} sounds loaded")
         for (i in Music.names.indices) {
             runCatching { e.loadMusic(i, Res.readBytes("files/music/${Music.names[i]}.m4a")) }
         }
@@ -149,6 +160,16 @@ object Audio {
 
     private fun sfxVolume() = if (Prefs.sfxOff) 0f else if (discreet) MASTER_SFX else 1f
     private fun musicVolume() = if (Prefs.musicOff) 0f else if (discreet) MUSIC_DISCREET else 1f
+
+    /** The rain loop is ambience, outside the sound budgets: fades in and out over a second. Call every frame. */
+    fun rain(on: Boolean, dt: Float) {
+        val e = engine ?: return
+        val target = if (on && !Prefs.sfxOff) RAIN_LEVEL else 0f
+        if (rainVolume == target) return
+        val step = RAIN_LEVEL * dt
+        rainVolume = if (rainVolume < target) minOf(target, rainVolume + step) else maxOf(target, rainVolume - step)
+        if (rainVolume <= 0f) e.stopLoop(Sfx.RAIN_LOOP) else e.loop(Sfx.RAIN_LOOP, rainVolume)
+    }
 
     fun play(id: Int, volume: Float = 1f, pitch: Float = 1f) {
         if (Prefs.sfxOff) return

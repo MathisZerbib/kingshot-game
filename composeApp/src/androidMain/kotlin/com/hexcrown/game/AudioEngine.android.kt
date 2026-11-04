@@ -55,6 +55,21 @@ actual class AudioEngine actual constructor() {
         pool.play(s, v, v, 1, 0, pitch.coerceIn(0.5f, 2f))
     }
 
+    private var loopStream = 0
+
+    actual fun loop(id: Int, volume: Float) {
+        val s = soundIds.getOrNull(id) ?: return
+        if (s <= 0) return
+        val v = (volume * sfxVol).coerceIn(0f, 1f)
+        if (loopStream != 0) pool.setVolume(loopStream, v, v)
+        else loopStream = pool.play(s, v, v, 0, -1, 1f) // 0 while the sound is still loading: the next frame retries
+    }
+
+    actual fun stopLoop(id: Int) {
+        if (loopStream != 0) pool.stop(loopStream)
+        loopStream = 0
+    }
+
     actual fun music(track: Int) {
         if (track == this.track && player != null) {
             if (track != Music.NONE && !pausedByApp) runCatching { if (player?.isPlaying == false) player?.start() }

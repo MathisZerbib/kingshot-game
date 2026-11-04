@@ -61,6 +61,16 @@ actual class AudioEngine actual constructor() {
         }
     }.getOrNull()
 
+    private var loopPlayer: AVAudioPlayer? = null
+
+    actual fun loop(id: Int, volume: Float) {
+        val data = sfx[id]?.data ?: return
+        val p = loopPlayer ?: (newPlayer(data, -1) ?: return).also { loopPlayer = it; if (!pausedByApp) it.play() }
+        p.volume = (volume * sfxVol).coerceIn(0f, 1f)
+    }
+
+    actual fun stopLoop(id: Int) { loopPlayer?.stop(); loopPlayer = null }
+
     actual fun play(id: Int, volume: Float, pitch: Float) {
         if (sfxVol <= 0f) return
         val pool = sfx[id] ?: return
@@ -113,11 +123,13 @@ actual class AudioEngine actual constructor() {
     }
 
     actual fun pause() {
+        loopPlayer?.pause()
         pausedByApp = true
         player?.pause()
     }
 
     actual fun resume() {
+        loopPlayer?.play()
         pausedByApp = false
         if (track != Music.NONE) player?.play()
     }

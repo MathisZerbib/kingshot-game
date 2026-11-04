@@ -1065,7 +1065,7 @@ class Game {
         if (state != STATE_PLAY || paused || transition > 0f || kDead || abilityCd > 0f) return false
         abilityCd = abilityTime
         abilityFlash = 0.6f
-        Audio.play(Sfx.ABILITY)
+        Audio.play(when (heroClass) { CLASS_RANGER -> Sfx.ABILITY_RANGER; CLASS_BUILDER -> Sfx.ABILITY_BUILDER; else -> Sfx.ABILITY })
         Audio.haptic(Haptic.MEDIUM)
         // common opening: hit-stop, white flash on the king, ground halo, edge vignette, title, button bounce
         val calm = Prefs.cap60 // reduced motion: no hit-stop, no shake; the effects stay
@@ -1813,6 +1813,7 @@ class Game {
         if (stopCd > 0f) stopCd -= dtReal
         val dt = if (hitStop > 0f) 0f else if (abilityStop > 0f) dtReal * 0.15f else if (slowMo > 0f) dtReal * slowFactor else dtReal
         updateFeel(dtReal)
+        Audio.rain(raining && state == STATE_PLAY && !paused && !victoryOpen && !relicOpen && transition <= 0f, dtReal)
         if (abilityPress < 1f) abilityPress += dtReal
         if (vignette > 0f) vignette -= dtReal
         if (abilityTitle < 1f) abilityTitle += dtReal
