@@ -1,5 +1,8 @@
 package com.hexcrown.game
 
+import platform.Foundation.NSLocale
+import platform.Foundation.preferredLanguages
+
 import androidx.compose.ui.graphics.asComposeImageBitmap
 
 import androidx.compose.ui.window.ComposeUIViewController
@@ -32,4 +35,4 @@ actual fun imageFromPixels(w: Int, h: Int, argb: IntArray): androidx.compose.ui.
     return bmp.asComposeImageBitmap()
 }
 
-actual fun systemLanguage(): String = (platform.Foundation.NSLocale.preferredLanguages.firstOrNull() as? String)?.substringBefore('-') ?: "en"
+actual fun systemLanguage(): String = (NSLocale.preferredLanguages.firstOrNull() as? String)?.substringBefore('-') ?: "en"
