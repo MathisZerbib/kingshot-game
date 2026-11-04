@@ -1,5 +1,7 @@
 package com.hexcrown.game
 
+import androidx.compose.runtime.mutableStateOf
+
 /** Hooks between the platform shell (Activity, window) and the shared game. */
 object PlatformHooks {
     /** Set by App: called when the app goes to the background (pause + save). */
@@ -8,6 +10,12 @@ object PlatformHooks {
     var onForeground: (() -> Unit)? = null
     /** Set by the platform: applies the frame-rate preference (true = cap at 60 Hz). */
     var applyFrameCap: ((Boolean) -> Unit)? = null
+    /** Set by App: the Android back button. */
+    var onBack: (() -> Unit)? = null
+    /** Set by the platform, null where it does not apply: leave the app, open a web page, the build's version. */
+    var exit: (() -> Unit)? = null
+    var openUrl: ((String) -> Unit)? = null
+    var version: String? = null
 }
 
 /** Player preferences, stored as small ints (0 = default). */
@@ -41,9 +49,20 @@ object Prefs {
         get() { if (cap60Cache < 0) cap60Cache = Storage.loadInt("cap60"); return cap60Cache == 1 }
         set(v) { cap60Cache = if (v) 1 else 0; Storage.saveInt("cap60", cap60Cache); PlatformHooks.applyFrameCap?.invoke(v) }
 
+    private var reduceCache = -1
+    var reduceMotion: Boolean
+        get() { if (reduceCache < 0) reduceCache = Storage.loadInt("reduce_motion"); return reduceCache == 1 }
+        set(v) { reduceCache = if (v) 1 else 0; Storage.saveInt("reduce_motion", reduceCache) }
+    /** Observed by App, which scales every text by 1.15. */
+    private val largeTextState by lazy { mutableStateOf(Storage.loadInt("large_text") == 1) }
+    var largeText: Boolean
+        get() = largeTextState.value
+        set(v) { largeTextState.value = v; Storage.saveInt("large_text", if (v) 1 else 0) }
+
     /** Wipes the treasure, upgrades, record and saved game; preferences stay. */
     fun resetProgress() {
         Storage.saveGame(null)
+        for (k in listOf("game_prev", "realm", "realm_prev")) Storage.saveText(k, null)
         Storage.saveBest(0)
         Storage.saveInt("treasure", 0)
         for (c in 0..2) for (u in 0..2) Storage.saveInt("up_${c}_$u", 0)

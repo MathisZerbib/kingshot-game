@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.view.WindowCompat
@@ -45,6 +46,12 @@ class MainActivity : ComponentActivity() {
         }
         PlatformHooks.applyFrameCap = { cap -> requestRefreshRate(cap) }
         requestRefreshRate(Prefs.cap60)
+        PlatformHooks.exit = { finish() }
+        PlatformHooks.openUrl = { url -> runCatching { startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) } }
+        PlatformHooks.version = packageManager.getPackageInfo(packageName, 0).let { "${it.versionName} (${androidx.core.content.pm.PackageInfoCompat.getLongVersionCode(it)})" }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() { PlatformHooks.onBack?.invoke() }
+        })
         setContent { App() }
     }
 

@@ -1,6 +1,8 @@
 package com.hexcrown.game
 
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.hexcrown.game.resources.allDrawableResources
@@ -113,7 +115,7 @@ fun MainMenu(
     onShop: () -> Unit = {}, onRealm: () -> Unit = {},
 ) {
     metaTick // re-read Meta after purchases
-    val reduced = Prefs.cap60
+    val reduced = Prefs.reduceMotion
     var dir by remember { mutableIntStateOf(1) }
     val pick = { c: Int, d: Int ->
         if (c != picked) { dir = d; Audio.play(Sfx.RECRUIT); Audio.haptic(Haptic.LIGHT); onPick(c) }
@@ -452,38 +454,58 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     var confirmReset by remember { mutableStateOf(false) }
     tick
+    var credits by remember { mutableStateOf(false) }
+    val maxH = with(LocalDensity.current) { (LocalWindowInfo.current.containerSize.height * 0.72f).toDp() }
     KitPanel(L["settings"], onDismiss = onClose) {
-        KitToggle(L["sfx"], !Prefs.sfxOff) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
-        KitToggle(L["sfx.full"], Prefs.sfxFull) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
-        KitToggle(L["music"], !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
-        KitToggle(L["vibration"], !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
-        KitToggle(L["fluid"], !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
-        KitToggle(L["show.fps"], Prefs.showFps) { Prefs.showFps = it; tick++ }
-        GText(L["language"], 15, Pal.ink, title = true, shadow = false)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (l in 0..1) Box(
-                Modifier.weight(1f).height(40.dp).nine(if (L.lang == l) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
-                    .clickable { Audio.play(Sfx.CLICK); L.setLang(l) },
-                contentAlignment = Alignment.Center,
-            ) { GText(L["lang.$l"], 13, if (L.lang == l) Color.White else Pal.ink, title = true, caps = false, shadow = L.lang == l) }
+        Column(
+            Modifier.fillMaxWidth().heightIn(max = maxH).verticalScroll(rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            GText(L["language"], 15, Pal.ink, title = true, shadow = false)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (l in 0..1) Box(
+                    Modifier.weight(1f).height(48.dp).nine(if (L.lang == l) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
+                        .clickable { Audio.play(Sfx.CLICK); L.setLang(l) },
+                    contentAlignment = Alignment.Center,
+                ) { GText(L["lang.$l"], 13, if (L.lang == l) Color.White else Pal.ink, title = true, caps = false, shadow = L.lang == l) }
+            }
+            KitToggle(L["sfx"], !Prefs.sfxOff) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
+            KitToggle(L["sfx.full"], Prefs.sfxFull) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
+            KitToggle(L["music"], !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
+            KitToggle(L["vibration"], !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
+            KitToggle(L["reduce.motion"], Prefs.reduceMotion) { Prefs.reduceMotion = it; tick++ }
+            KitToggle(L["battery"], Prefs.cap60) { Prefs.cap60 = it; tick++ }
+            KitToggle(L["large.text"], Prefs.largeText) { Prefs.largeText = it; tick++ }
+            KitToggle(L["show.fps"], Prefs.showFps) { Prefs.showFps = it; tick++ }
+            GText(L["difficulty"], 15, Pal.ink, title = true, shadow = false)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                for (d in 0..2) Box(
+                    Modifier.weight(1f).height(48.dp).nine(if (Prefs.difficulty == d) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
+                        .clickable { Audio.play(Sfx.CLICK); Prefs.difficulty = d; tick++ },
+                    contentAlignment = Alignment.Center,
+                ) { GText(DIFF_NAMES[d], 13, if (Prefs.difficulty == d) Color.White else Pal.ink, title = true, caps = false, shadow = Prefs.difficulty == d) }
+            }
+            GText(L["difficulty.note"], 13, Pal.ink, shadow = false)
+            SettingsLink(if (Storage.loadInt("tuto_done") == 1) L["tuto.replay"] else L["tuto.replay.set"]) { Storage.saveInt("tuto_done", 0); tick++ }
+            SettingsLink(L["credits"]) { credits = !credits }
+            if (credits) GText(L["credits.body"], 13, Pal.ink, shadow = false)
+            PlatformHooks.openUrl?.let { open -> SettingsLink(L["privacy"]) { open(PRIVACY_URL) } }
+            KitButton(
+                Res.drawable.ui_button_red, if (confirmReset) L["reset.confirm"] else L["reset"],
+                if (confirmReset) L["reset.what"] else L["reset.all"], width = 230.dp, height = 52.dp,
+            ) { if (confirmReset) { Prefs.resetProgress(); confirmReset = false; onReset() } else confirmReset = true }
+            PlatformHooks.version?.let { GText(L.f("version", it), 13, Pal.ink, shadow = false) }
         }
-        Box(Modifier.fillMaxWidth().height(36.dp).clickable { Audio.play(Sfx.CLICK); Storage.saveInt("tuto_done", 0); tick++ }, contentAlignment = Alignment.Center) {
-            GText(if (Storage.loadInt("tuto_done") == 1) L["tuto.replay"] else L["tuto.replay.set"], 14, Pal.ink, shadow = false)
-        }
-        GText(L["difficulty"], 15, Pal.ink, title = true, shadow = false)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            for (d in 0..2) Box(
-                Modifier.weight(1f).height(40.dp).nine(if (Prefs.difficulty == d) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
-                    .clickable { Audio.play(Sfx.CLICK); Prefs.difficulty = d; tick++ },
-                contentAlignment = Alignment.Center,
-            ) { GText(DIFF_NAMES[d], 13, if (Prefs.difficulty == d) Color.White else Pal.ink, title = true, caps = false, shadow = Prefs.difficulty == d) }
-        }
-        GText(L["difficulty.note"], 10, Pal.ink, shadow = false)
-        KitButton(
-            Res.drawable.ui_button_red, if (confirmReset) L["reset.confirm"] else L["reset"],
-            if (confirmReset) L["reset.what"] else L["reset.all"], width = 230.dp, height = 52.dp,
-        ) { if (confirmReset) { Prefs.resetProgress(); confirmReset = false; onReset() } else confirmReset = true }
         KitButton(Res.drawable.ui_button_green, L["close"], icon = Res.drawable.ui_icon_close, width = 200.dp, height = 52.dp, onClick = onClose)
+    }
+}
+
+private const val PRIVACY_URL = "https://mathiszerbib.github.io/kingshot-game/privacy"
+
+@Composable
+private fun SettingsLink(text: String, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().height(48.dp).clickable { Audio.play(Sfx.CLICK); onClick() }, contentAlignment = Alignment.Center) {
+        GText(text, 14, Pal.ink, shadow = false)
     }
 }
 
@@ -523,7 +545,7 @@ fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, onMenu: (
             width = 250.dp, height = 56.dp, onClick = onRevive,
         )
         KitButton(Res.drawable.ui_button_gold, L["retry"], icon = Res.drawable.ui_icon_arrow, width = 250.dp, height = 60.dp, textColor = Pal.ink, onClick = onRetry)
-        Box(Modifier.height(44.dp).padding(horizontal = 24.dp).clickable { Audio.play(Sfx.CLICK); onMenu() }, contentAlignment = Alignment.Center) {
+        Box(Modifier.height(48.dp).padding(horizontal = 24.dp).clickable { Audio.play(Sfx.CLICK); onMenu() }, contentAlignment = Alignment.Center) {
             BasicText(
                 L["menu"],
                 style = TextStyle(color = Color(0xFF3A4464), fontSize = 15.sp, fontFamily = nunito(), fontWeight = FontWeight.ExtraBold, textDecoration = TextDecoration.Underline),
@@ -738,7 +760,7 @@ private fun FallingStar(k: Int, earned: Boolean) {
     }
     Box(Modifier.graphicsLayer {
         alpha = a.value
-        if (!Prefs.cap60) { translationY = -(1f - a.value) * 70.dp.toPx(); val s = 1.5f - 0.5f * a.value; scaleX = s; scaleY = s }
+        if (!Prefs.reduceMotion) { translationY = -(1f - a.value) * 70.dp.toPx(); val s = 1.5f - 0.5f * a.value; scaleX = s; scaleY = s }
     }) { KitIcon(Res.drawable.ui_icon_star, if (k == 1) 64.dp else 48.dp, grey = !earned) }
 }
 

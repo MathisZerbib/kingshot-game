@@ -69,11 +69,20 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.unit.Density
+import kotlinx.coroutines.delay
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
 fun App() {
+    val d = LocalDensity.current
+    CompositionLocalProvider(LocalDensity provides Density(d.density, d.fontScale * (if (Prefs.largeText) 1.15f else 1f))) { AppContent() }
+}
+
+@Composable
+private fun AppContent() {
     val game = remember { Game() }
     val density = LocalDensity.current
     val measurer = rememberTextMeasurer(cacheSize = 0)
@@ -130,12 +139,30 @@ fun App() {
     LaunchedEffect(Unit) { focus.requestFocus() }
     LaunchedEffect(game) {
         PlatformHooks.onBackground = { game.onBackground(); Audio.pause() }
-        PlatformHooks.onForeground = { Audio.resume() }
+        PlatformHooks.onForeground = { if (!game.paused) Audio.resume() } // a paused run stays silent behind the pause screen
     }
     LaunchedEffect(Unit) { Audio.init() }
     var settingsOpen by remember { mutableStateOf(false) }
     var metaPanel by remember { mutableIntStateOf(-1) } // 0 talents, 1 missions, 2 stats
     LaunchedEffect(Unit) { Missions.ensure() }
+    var backToast by remember { mutableStateOf(false) }
+    LaunchedEffect(backToast) { if (backToast) { delay(2000); backToast = false } }
+    LaunchedEffect(game) {
+        PlatformHooks.onBack = {
+            when {
+                settingsOpen -> settingsOpen = false
+                shopOpen -> { shopOpen = false; metaTick++ }
+                metaPanel >= 0 -> metaPanel = -1
+                game.transition > 0f -> game.skipTransition()
+                game.state == STATE_OVER -> { game.quitRun(); metaTick++ }
+                game.state == STATE_PLAY && (game.relicOpen || game.victoryOpen) -> Unit // a choice to make, nothing to go back to
+                game.state == STATE_PLAY && !game.paused -> game.paused = true
+                !backToast -> backToast = true
+                game.state == STATE_PLAY -> { backToast = false; game.quitRun() }
+                else -> PlatformHooks.exit?.invoke()
+            }
+        }
+    }
 
     var lastTapUp by remember { mutableLongStateOf(0L) }
     var lastTapX by remember { mutableFloatStateOf(0f) }
@@ -223,6 +250,9 @@ fun App() {
         if (shopOpen) ShopScreen(picked) { shopOpen = false; metaTick++ }
         ScreenFade(uiState, game.heroClass)
         if (settingsOpen) SettingsPanel(onReset = { game.best = 0; metaTick++ }) { settingsOpen = false }
+        if (backToast) Box(Modifier.fillMaxSize().padding(bottom = 96.dp), contentAlignment = Alignment.BottomCenter) {
+            Box(Modifier.background(Color(0xE6101828), RoundedCornerShape(24.dp)).padding(horizontal = 20.dp, vertical = 12.dp)) { GText(L["back.again"], 14) }
+        }
     }
 }
 

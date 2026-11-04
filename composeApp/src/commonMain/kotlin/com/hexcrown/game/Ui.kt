@@ -1,6 +1,7 @@
 package com.hexcrown.game
 
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -174,6 +175,7 @@ fun KitButton(
     width: Dp = 260.dp, height: Dp = 64.dp, textColor: Color = Color.White, enabled: Boolean = true,
     titleSize: Int = if (height >= 64.dp) 22 else 17, shine: Boolean = false, iconSize: Dp? = null, caps: Boolean = true, onClick: () -> Unit,
 ) {
+    val ink = if (res == Res.drawable.ui_button_green && textColor == Color.White) Pal.ink else textColor // white on this green is only 2.1:1
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val sc by animateFloatAsState(if (pressed) 0.97f else 1f, if (pressed) tween(100) else tween(160, easing = ExpoOut))
@@ -204,10 +206,10 @@ fun KitButton(
                 Spacer(Modifier.width(8.dp))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GText(text, titleSize, textColor, title = true, caps = caps)
+                GText(text, titleSize, ink, title = true, caps = caps)
                 if (sub != null) AnimatedContent(sub, transitionSpec = {
                     (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
-                }) { GText(it, 13, textColor.copy(alpha = 0.92f), shadow = textColor == Color.White) }
+                }) { GText(it, 13, ink.copy(alpha = 0.92f), shadow = ink == Color.White) }
             }
         }
     }
@@ -279,7 +281,7 @@ fun KitPanel(
         launch { veil.animateTo(1f, tween(150)) }
         pop.animateTo(1f, tween(220, easing = ExpoOut))
     }
-    val reduced = Prefs.cap60
+    val reduced = Prefs.reduceMotion
     Box(
         Modifier.fillMaxWidth().fillMaxHeight().graphicsLayer { alpha = veil.value }.background(Pal.veil)
             .then(if (onDismiss != null) Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() } else Modifier),
@@ -310,7 +312,7 @@ fun KitPanel(
 fun Modifier.stagger(i: Int): Modifier {
     val a = remember { Animatable(0f) }
     LaunchedEffect(Unit) { a.animateTo(1f, tween(220, delayMillis = 40 * minOf(i, 6), easing = ExpoOut)) }
-    val reduced = Prefs.cap60
+    val reduced = Prefs.reduceMotion
     return graphicsLayer { alpha = a.value; if (!reduced) translationY = (1f - a.value) * 12.dp.toPx() }
 }
 
@@ -318,7 +320,7 @@ fun Modifier.stagger(i: Int): Modifier {
 @Composable
 fun KitToggle(text: String, on: Boolean, dark: Boolean = false, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { Audio.play(Sfx.CLICK); onChange(!on) }.padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { Audio.play(Sfx.CLICK); onChange(!on) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f)) { GText(text, 14, if (dark) Color.White else Pal.ink, shadow = dark, align = TextAlign.Start) }

@@ -1,16 +1,16 @@
-# Hexcrown — fiche store (brouillon v1.0)
+# Hexcrown — fiche store (v1.2)
 
 ## Titre (30)
 FR : Hexcrown : roi, bannières, sièges   |   EN : Hexcrown: Banner Kingdom
 
 ## Courte description (80)
-FR : Mène ton roi, plante tes bannières, bâtis et tiens la ligne contre les hordes.
-EN : Lead your king, plant banners, build and hold the line against the hordes.
+FR : Mène ton roi, étends tes terres, bâtis et tiens la ligne contre les hordes.
+EN : Lead your king, claim land, build and hold the line against the hordes.
 
 ## Description longue
 FR :
 Un roi à cheval, une escouade d'archers et une seule règle : tiens la ligne.
-Plante des bannières pour réclamer des hexagones, encaisse leur revenu, bâtis tours et palissades sur
+Marche sur la carte pour réclamer des hexagones, encaisse leur revenu, bâtis tours et palissades sur
 tes terres et repousse des vagues de plus en plus rusées. Après chaque boss, choisis une relique et
 invente ton style : flèches ardentes, trésor maudit, loups domptés…
 • 3 classes de roi aux capacités signées (Tourbillon, Pluie de flèches, Réparation)
@@ -20,7 +20,7 @@ invente ton style : flèches ardentes, trésor maudit, loups domptés…
 • Sans publicité, sans achat intégré, hors ligne, 120 fps
 EN :
 A king on horseback, a squad of archers and one rule: hold the line.
-Plant banners to claim hexes, collect their income, build towers and palisades on your land and push back
+Walk the map to claim hexes, collect their income, build towers and palisades on your land and push back
 ever smarter waves. After each boss, pick a relic and shape your own style: burning arrows, cursed
 treasure, tamed wolves…
 • 3 king classes with signature abilities (Whirlwind, Arrow Rain, Repair)

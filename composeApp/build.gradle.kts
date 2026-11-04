@@ -58,7 +58,7 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         // one more per minute: minutes since 2026-01-01, above the old date-based codes (26110418), and it fits an Int for decades
         versionCode = 30_000_000 + ((Date().time - SimpleDateFormat("yyyy-MM-dd").parse("2026-01-01").time) / 60_000L).toInt()
-        versionName = "1.1.2"
+        versionName = "1.2.0"
     }
     // the release key lives outside git (docs/HEXCROWN.md §5); without it, release falls back to the debug key for local installs
     val keystoreFile = File(System.getProperty("user.home"), ".hexcrown/keystore.properties")

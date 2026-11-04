@@ -1310,7 +1310,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         }
         if (g.rainAmt > 0.01f) {
             drawRect(RAIN_TINT, alpha = 0.2f * g.rainAmt)
-            if (fi != null && !Prefs.cap60) {
+            if (fi != null && !Prefs.reduceMotion) {
                 val tn = tint(0xFFCFE0FFL)
                 val dw = 2f * density
                 for (i in 0 until 120) { // positions from the index and the clock: no state to keep
@@ -1533,6 +1533,17 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             val sx = viewOx + obj.x * scale
             val sy = viewOy + (obj.y - Pad.HALF - 30f) * scale - (8f + 8f * sin(g.time * 7f)) * u
             withTransform({ translate(sx, sy); rotate(90f, Offset.Zero); scale(22f * u, 22f * u, Offset.Zero) }) { drawPath(edgeArrow, GOLD) }
+        }
+        val camp = if (g.state == STATE_PLAY && !g.paused && g.transition <= 0f) g.nearestCamp else null
+        if (camp != null) { // off screen: a gold arrow on the way to the next camp
+            val sx = viewOx + camp.x * scale; val sy = viewOy + camp.y * scale
+            if (sx < 0f || sx > w || sy < 0f || sy > h) {
+                val a = atan2(sy - h / 2f, sx - w / 2f)
+                val ax = w / 2f + cos(a) * w * 0.42f; val ay = h / 2f + sin(a) * h * 0.38f
+                val pulse = if (Prefs.reduceMotion) 1f else 1f + 0.12f * sin(g.time * 5f)
+                withTransform({ translate(ax, ay); rotate(a * 57.2958f, Offset.Zero); scale(22f * u * pulse, 22f * u * pulse, Offset.Zero) }) { drawPath(edgeArrow, GOLD) }
+                label(text.str(L["word.camp"]), ax, ay + 26f * u, 13f * u, WHITE)
+            }
         }
         tutoOkRadius = 0f
         if (g.state == STATE_PLAY && g.tutorial < TUTO_DONE && g.transition <= 0f) {
