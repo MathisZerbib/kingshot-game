@@ -932,6 +932,62 @@ def build_palisade(gate=None):
             hinge.rotation_euler.z = sx * math.radians(105)
 
 
+# ----------------------------------------------------------------------------- v6: Hexcrown banners and torches
+
+def build_banner(state="blue"):
+    """Territory banner planted by the king: pole on a small stone hex base, pennant with a gold finial.
+    state = "blue" (ours), "burning" (scorched pennant, embers) or "neutral" (grey pennant, fallen look)."""
+    root = empty("banner")
+    stone = mat("hex_stone", (0.45, 0.46, 0.5), rough=0.9)
+    cyl((0, 0, 0.08), 0.42, 0.46, 0.16, stone, root, seg=6, smooth=False, bevel=0.02)
+    pole = M["obsidian"] if state == "burning" else M["wood"]
+    cyl((0, 0, 1.45), 0.05, 0.06, 2.7, pole, root, seg=10)
+    if state == "burning":
+        # charred stub of pennant and glowing embers on the pole
+        box((0.3, 0, 2.45), (0.55, 0.03, 0.32), mat("char", (0.05, 0.04, 0.04), rough=1.0), root, rot=(0, 0, math.radians(-12)))
+        ember = mat("ember", (1.0, 0.4, 0.1), emit=(1.0, 0.35, 0.05), strength=30.0)
+        for (x, z, r) in ((0.08, 2.75, 0.07), (0.2, 2.5, 0.05), (0.42, 2.38, 0.06)):
+            sphere((x, 0, z), r, ember, root, seg=8)
+    else:
+        cloth = M["velvet_blue"] if state == "blue" else mat("cloth_grey", (0.5, 0.5, 0.48), rough=0.9)
+        # pennant: three slightly rotated panels so it reads as waving
+        for i, (w, a) in enumerate(((0.34, 4), (0.34, -6), (0.3, 10))):
+            box((0.22 + i * 0.32, 0, 2.42 - i * 0.03), (w, 0.03, 0.8 - i * 0.12), cloth, root, rot=(math.radians(a), 0, 0))
+        if state == "blue":
+            # white crown emblem on the first panel
+            for (x, z, sz) in ((0.22, 2.4, (0.2, 0.05, 0.16)), (0.14, 2.52, (0.05, 0.05, 0.12)), (0.22, 2.56, (0.05, 0.05, 0.16)), (0.3, 2.52, (0.05, 0.05, 0.12))):
+                box((x, -0.02, z), sz, mat("emblem", (0.95, 0.95, 0.92), rough=0.6), root)
+        sphere((0, 0, 2.86), 0.09, M["gold"], root, seg=12)
+        cyl((0, 0, 2.95), 0.04, 0.0, 0.2, M["gold"], root, seg=8)
+    return root
+
+
+def build_torch():
+    """Night torch standing on our hexes: iron bracket pole, flame."""
+    root = empty("torch")
+    cyl((0, 0, 0.75), 0.04, 0.05, 1.5, M["wood"], root, seg=8)
+    cyl((0, 0, 1.5), 0.1, 0.07, 0.2, M["iron"], root, seg=8)
+    flame = mat("flame", (1.0, 0.6, 0.15), emit=(1.0, 0.55, 0.1), strength=40.0)
+    sphere((0, 0, 1.72), (0.13, 0.13, 0.2), flame, root, seg=10)
+    sphere((0, 0, 1.9), (0.07, 0.07, 0.12), mat("flame_tip", (1.0, 0.9, 0.5), emit=(1.0, 0.85, 0.4), strength=40.0), root, seg=8)
+    return root
+
+
+V6_NAMES = ("banner", "banner_burning", "banner_neutral", "torch")
+
+
+def v6_sprites():
+    for name, state in (("banner", "blue"), ("banner_burning", "burning"), ("banner_neutral", "neutral")):
+        if want(name):
+            clear_models()
+            build_banner(state)
+            static_sprite(name, 400, 96, center=(0.3, 0, 1.5))
+    if want("torch"):
+        clear_models()
+        build_torch()
+        static_sprite("torch", 300, 96, center=(0, 0, 1.0))
+
+
 # ----------------------------------------------------------------------------- v5: new enemies, units and buildings
 
 
@@ -1856,7 +1912,8 @@ def pack():
              "wallWood", "wallWoodV", "gateWoodClosed", "gateWoodOpen", "gateWoodClosedV", "gateWoodOpenV",
              "wolf", "enemyArcher", "shieldman", "ram", "ogre", "darkLord", "lancer", "archerElite",
              "farm", "barracks", "ballistaTop", "mine", "boulder",
-             "market", "blacksmith", "church", "stable", "watermill", "well", "lumbermill"]
+             "market", "blacksmith", "church", "stable", "watermill", "well", "lumbermill",
+             "banner", "bannerBurning", "bannerNeutral", "torch"]
     names = [n for n in order if n in existing] + [n for n in existing if n not in order]
     lines = [
         "package com.hexcrown.game",
@@ -1882,6 +1939,8 @@ if not os.environ.get("HEXCROWN_LIB"):  # render_ui.py imports this file as a li
         v4_sprites()
     if ONLY is not None and any(n in ONLY for n in V5_NAMES):
         v5_sprites()
+    if ONLY is not None and any(n in ONLY for n in V6_NAMES):
+        v6_sprites()
     if ONLY is not None and any(n in ONLY for n in ("grass_tile", "road_tile", "cliff_tile", "tuft0", "tuft1", "flower0", "flower1",
                                                       "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack")):
         terrain_sprites()

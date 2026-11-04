@@ -474,6 +474,119 @@ def build_icon(name):
         for o in objs:
             if o.parent is None: o.parent = root
         fit(root, 1.9)
+    elif name == "charge":
+        # horseshoe (open at the bottom) built from overlapping spheres, plus speed lines on the left
+        for k in range(29):
+            a = math.radians(-128 + 256 * k / 28)
+            R.sphere((0.2 + 0.6 * math.sin(a), 0, 0.05 + 0.6 * math.cos(a)), 0.17, g, root, seg=12)
+        for k in (0, 28):
+            a = math.radians(-128 + 256 * k / 28)
+            R.sphere((0.2 + 0.6 * math.sin(a), 0, 0.05 + 0.6 * math.cos(a)), 0.19, gd, root, seg=12)
+        for i, x in enumerate((-0.85, -0.8, -0.88)):
+            R.box((x, 0, 0.4 - i * 0.35), (0.42 - i * 0.08, 0.1, 0.1), gd, root)
+    elif name == "hex":
+        root.rotation_euler = (math.radians(90), 0, 0)
+        R.cyl((0, 0, 0), 0.95, 0.95, 0.2, g, root, seg=6, smooth=False, bevel=0.03)
+        R.cyl((0, 0, 0.06), 0.72, 0.72, 0.2, gd, root, seg=6, smooth=False)
+        # crown lying in the disc plane (local XY): cones point along local +Y = up on screen
+        for i in range(3):
+            x = (i - 1) * 0.3
+            R.cyl((x, 0.1 if i == 1 else 0.0, 0.2), 0.13, 0.0, 0.5 if i == 1 else 0.38, g, root, seg=8, rot=(math.radians(-90), 0, 0))
+        R.box((0, -0.3, 0.2), (0.86, 0.2, 0.14), g, root)
+    elif name == "relic_fire":
+        R.cyl((0, 0, 0), 0.05, 0.05, 1.7, M["wood"], root, rot=(0, math.radians(45), 0), seg=8)
+        R.cyl((0.62, 0, 0.62), 0.14, 0.0, 0.4, iron, root, rot=(0, math.radians(45), 0), seg=8)
+        flame = R.mat("ui_flame", (1.0, 0.32, 0.04), rough=0.4, coat=0.6)
+        R.sphere((0.7, 0, 0.75), (0.3, 0.3, 0.42), flame, root)
+        R.sphere((0.6, 0, 1.0), (0.14, 0.14, 0.22), R.mat("ui_flame2", (1.0, 0.78, 0.2), rough=0.4, coat=0.6), root)
+        for sx in (-1, 1):
+            R.box((-0.6, sx * 0.08, -0.6), (0.4, 0.05, 0.14), M["velvet"], root, rot=(0, math.radians(45), sx * 0.4))
+    elif name == "relic_curse":
+        R.box((0, 0, -0.35), (1.5, 1.0, 0.7), M["obsidian"], root, bevel=0.03)
+        R.cyl((0, 0, 0.0), 0.5, 0.5, 1.5, M["obsidian"], root, rot=(0, math.radians(90), 0), seg=24)
+        R.box((0, 0, 0.0), (1.56, 0.1, 0.1), g, root); R.box((0, 0, -0.35), (1.56, 1.06, 0.1), g, root)
+        R.sphere((0, -0.55, 0.2), (0.3, 0.26, 0.28), M["ui_white"], root)
+        for sx in (-1, 1):
+            R.sphere((sx * 0.11, -0.8, 0.22), 0.07, M["obsidian"], root)
+    elif name == "relic_boots":
+        for sx, dz in ((-1, 0.1), (1, -0.1)):
+            R.box((sx * 0.42, 0, 0.25 + dz), (0.46, 0.5, 0.9), M["wood"], root, bevel=0.06)
+            R.box((sx * 0.42, -0.2, -0.45 + dz), (0.5, 0.95, 0.3), M["wood"], root, bevel=0.06)
+            R.box((sx * 0.42, 0, 0.72 + dz), (0.52, 0.56, 0.12), g, root)
+        # wings
+        for sx in (-1, 1):
+            R.box((sx * 0.95, 0, 0.5), (0.45, 0.05, 0.14), M["ui_white"], root, rot=(0, sx * 0.5, 0))
+            R.box((sx * 0.85, 0, 0.3), (0.32, 0.05, 0.12), M["ui_white"], root, rot=(0, sx * 0.7, 0))
+    elif name == "relic_guard":
+        for i, sx in enumerate((-1, 1)):
+            objs = R.import_file(R.ACC + "shield_round.gltf"); goldify(objs)
+            sub = R.empty("sh%d" % i, (sx * 0.42, i * 0.3, 0), root)
+            for o in objs:
+                if o.parent is None: o.parent = sub
+            fit(sub, 1.2)
+            sub.location = (sx * 0.42, i * 0.3, 0)
+    elif name == "relic_iron":
+        R.cyl((-0.6, 0, 0), 0.06, 0.06, 2.0, iron, root, seg=8)
+        R.sphere((-0.6, 0, 1.03), 0.1, g, root)
+        R.box((0.05, 0, 0.4), (1.2, 0.08, 0.9), iron, root)
+        R.box((0.05, -0.05, 0.4), (0.9, 0.04, 0.6), gd, root)
+    elif name == "relic_phoenix":
+        R.sphere((0, 0, -0.1), (0.32, 0.3, 0.5), ruby, root)
+        R.sphere((0, 0, 0.45), 0.18, ruby, root)
+        R.cyl((0.22, 0, 0.45), 0.06, 0.0, 0.24, g, root, rot=(0, math.radians(90), 0), seg=6)
+        for sx in (-1, 1):
+            for j in range(3):
+                R.box((sx * (0.55 + j * 0.25), 0, 0.15 - j * 0.1), (0.5, 0.05, 0.18 - j * 0.03), g if j else ruby, root, rot=(0, sx * (0.35 + j * 0.25), 0))
+        for j in range(3):
+            R.box((0, 0, -0.75 - j * 0.1), (0.12, 0.05, 0.5), g, root, rot=(0, (j - 1) * 0.5, 0))
+    elif name == "relic_rain":
+        R.sphere((-0.25, 0, 0.55), 0.3, M["ui_white"], root); R.sphere((0.2, 0, 0.65), 0.38, M["ui_white"], root)
+        R.sphere((0.55, 0, 0.5), 0.26, M["ui_white"], root); R.box((0.12, 0, 0.35), (1.3, 0.5, 0.4), M["ui_white"], root, bevel=0.1)
+        for i, (x, z) in enumerate(((-0.5, -0.1), (-0.1, -0.45), (0.3, -0.15), (0.65, -0.55), (0.05, -0.85))):
+            R.cyl((x, 0, z), 0.17, 0.17, 0.07, g, root, seg=24, rot=(math.radians(90 - 20), 0, 0))
+    elif name == "relic_wall":
+        for i, x in enumerate((-0.7, -0.23, 0.23, 0.7)):
+            R.cyl((x, 0, -0.1 + (i % 2) * 0.12), 0.2, 0.2, 1.6 + (i % 2) * 0.2, M["wood"], root, seg=12)
+            R.cyl((x, 0, 0.75 + (i % 2) * 0.22), 0.2, 0.0, 0.3, M["wood"], root, seg=12)
+        R.box((0, -0.22, 0.15), (1.9, 0.08, 0.14), gd, root)
+        R.sphere((0.55, -0.3, 0.55), 0.16, R.mat("ui_leaf", (0.3, 0.75, 0.25), rough=0.8), root)
+        R.sphere((-0.6, -0.3, 0.3), 0.13, R.mat("ui_leaf2", (0.35, 0.8, 0.3), rough=0.8), root)
+    elif name == "relic_grapple":
+        R.cyl((0, 0, 0.5), 0.06, 0.06, 1.1, iron, root, seg=8)
+        R.torus((0, 0, 1.08), 0.14, 0.04, iron, root, rot=(math.radians(90), 0, 0))
+        for a in (0.5, 2.6, 4.7):
+            hook = R.empty("hook", (0, 0, -0.05), root, rot=(0, 0, a))
+            R.cyl((0.3, 0, -0.2), 0.05, 0.05, 0.7, g, hook, rot=(0, math.radians(-40), 0), seg=8)
+            R.cyl((0.55, 0, -0.5), 0.06, 0.0, 0.3, g, hook, rot=(0, math.radians(-100), 0), seg=8)
+    elif name == "relic_veteran":
+        R.cyl((0, 0, -0.3), 0.7, 0.7, 0.16, g, root, seg=48, bevel=0.03, rot=(math.radians(90), 0, 0))
+        R.cyl((0, -0.06, -0.3), 0.5, 0.5, 0.1, gd, root, seg=48, rot=(math.radians(90), 0, 0))
+        for i, x in enumerate((-0.2, 0, 0.2)):
+            R.box((x, -0.14, -0.3 + (0.1 if i == 1 else 0)), (0.1, 0.06, 0.4), g, root, rot=(0, (i - 1) * 0.3, 0))
+        for sx in (-1, 1):
+            R.box((sx * 0.28, 0, 0.55), (0.3, 0.1, 1.0), M["velvet"], root, rot=(0, sx * math.radians(-18), 0))
+    elif name == "relic_wolf":
+        fur = R.mat("ui_fur", (0.45, 0.45, 0.5), rough=0.9)
+        R.sphere((0, 0, 0.0), (0.62, 0.55, 0.6), fur, root)
+        R.box((0, -0.5, -0.25), (0.5, 0.6, 0.4), fur, root, bevel=0.1)
+        for sx in (-1, 1):
+            R.cyl((sx * 0.42, 0.05, 0.6), 0.18, 0.0, 0.5, fur, root, seg=8, rot=(-0.2, sx * 0.3, 0))
+            R.sphere((sx * 0.24, -0.5, 0.15), 0.1, g, root)
+        R.sphere((0, -0.8, -0.3), 0.1, M["obsidian"], root)
+        for sx in (-1, 1):
+            R.cyl((sx * 0.14, -0.72, -0.5), 0.05, 0.0, 0.2, M["ui_white"], root, seg=6, rot=(math.pi, 0, 0))
+    elif name == "relic_eye":
+        R.sphere((0, 0, 0), (0.95, 0.5, 0.62), M["ui_white"], root)
+        R.sphere((0, -0.2, 0), 0.4, R.mat("ui_iris", (0.2, 0.5, 1.0), rough=0.4), root)
+        R.sphere((0, -0.45, 0), 0.2, M["obsidian"], root)
+        R.sphere((0.1, -0.58, 0.1), 0.06, M["ui_white"], root)
+        R.torus((0, 0, 0), 0.92, 0.08, g, root, rot=(math.radians(90), 0, 0), seg=32)
+    elif name == "relic_clock":
+        R.cyl((0, 0, 0), 0.9, 0.9, 0.2, g, root, seg=48, bevel=0.03, rot=(math.radians(90), 0, 0))
+        R.cyl((0, -0.08, 0), 0.72, 0.72, 0.1, M["ui_white"], root, seg=48, rot=(math.radians(90), 0, 0))
+        R.box((0, -0.18, 0.25), (0.08, 0.05, 0.5), M["obsidian"], root)
+        R.box((0.2, -0.18, 0.02), (0.4, 0.05, 0.08), M["obsidian"], root)
+        R.sphere((0, 0, 1.0), 0.14, g, root)
     elif name == "hourglass":
         for z in (0.7, -0.7):
             R.cyl((0, 0, z), 0.62, 0.62, 0.12, M["wood"], root, seg=32)
@@ -541,7 +654,9 @@ def icons(names, px=160):
 
 
 ICONS = ["gear", "star", "crown", "shield", "sword", "bow", "hammer", "lock", "chest", "trophy", "book", "scroll", "heart",
-         "speaker", "vibrate", "play", "pause", "close", "arrow", "flag", "hourglass", "skull", "gift", "medal", "coins"]
+         "speaker", "vibrate", "play", "pause", "close", "arrow", "flag", "hourglass", "skull", "gift", "medal", "coins",
+         "charge", "hex", "relic_fire", "relic_curse", "relic_boots", "relic_guard", "relic_iron", "relic_phoenix", "relic_rain",
+         "relic_wall", "relic_grapple", "relic_veteran", "relic_wolf", "relic_eye", "relic_clock"]
 
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)

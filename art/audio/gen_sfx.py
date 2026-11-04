@@ -294,6 +294,91 @@ EFFECTS = {
 }
 
 
+# ----------------------------------------------------------------------------- Hexcrown v0.95 / v1.0
+
+def sfx_banner():
+    """Banner planted: wooden thud, then a short rising shimmer as the hexes unfold."""
+    d = 0.14
+    thud = lowpass(noise(d), 900) * env(int(SR * d), 0.001, 0.1, 0.0, 0.03)
+    body = osc(np.linspace(160, 90, int(SR * d)), d, "sine") * env(int(SR * d), 0.001, 0.1, 0.0, 0.03) * 0.8
+    out = mix(thud, body)
+    for i, f in enumerate((659.25, 783.99, 987.77, 1174.66)):
+        n = osc(f, 0.22, "tri") * env(int(SR * 0.22), 0.004, 0.15, 0.0, 0.06) * 0.35
+        out = at(out, 0.1 + i * 0.06, n)
+    return norm(reverb(out, 0.2), 0.7)
+
+
+def sfx_burn():
+    """A banner catches fire: short crackle with a low whoomp (looped softly by the game while the hex burns)."""
+    d = 0.5
+    crackle = highpass(noise(d), 1800) * (rng.uniform(0, 1, int(SR * d)) ** 6) * env(int(SR * d), 0.01, 0.3, 0.4, 0.15)
+    whoomp = lowpass(noise(0.3), np.linspace(300, 80, int(SR * 0.3))) * env(int(SR * 0.3), 0.01, 0.2, 0.0, 0.08)
+    return norm(mix(crackle * 0.8, whoomp), 0.55)
+
+
+def sfx_extinguish():
+    d = 0.35
+    hiss = lowpass(highpass(noise(d), 3000), 7000) * env(int(SR * d), 0.005, 0.25, 0.0, 0.08)
+    return norm(hiss, 0.45)
+
+
+def sfx_charge():
+    """Mount charge: rising whoosh plus three quick hoof beats."""
+    d = 0.4
+    whoosh = lowpass(noise(d), np.linspace(500, 4000, int(SR * d))) * env(int(SR * d), 0.03, 0.2, 0.4, 0.12)
+    out = whoosh * 0.8
+    for i, tm in enumerate((0.05, 0.16, 0.27)):
+        h = 0.09
+        beat = lowpass(noise(h), 700) * env(int(SR * h), 0.001, 0.06, 0.0, 0.02) + osc(110 - i * 8, h, "sine") * env(int(SR * h), 0.001, 0.07, 0.0, 0.02) * 0.7
+        out = at(out, tm, beat * 0.9)
+    return norm(out, 0.7)
+
+
+def sfx_relic():
+    """Relic chosen: slow bright arpeggio with a long tail, quieter than level_up."""
+    out = fanfare([523.25, 783.99, 1046.5, 1567.98], 0.11, "tri", 0.6)
+    shimmer = highpass(noise(0.9), 6000) * env(int(SR * 0.9), 0.2, 0.4, 0.2, 0.3) * 0.1
+    return norm(reverb(lowpass(mix(out, shimmer), 6000), 0.4), 0.6)
+
+
+def sfx_combo_break():
+    d = 0.3
+    thud = osc(np.linspace(140, 45, int(SR * d)), d, "sine") * env(int(SR * d), 0.001, 0.2, 0.0, 0.08)
+    grit = lowpass(noise(0.12), 600) * env(int(SR * 0.12), 0.001, 0.08, 0.0, 0.03) * 0.5
+    return norm(mix(thud, grit), 0.6)
+
+
+def sfx_combo_up():
+    d = 0.12
+    return norm(osc(1318.5, d, "tri") * env(int(SR * d), 0.002, 0.08, 0.0, 0.03) * 0.5 + osc(1975.5, d, "sine") * env(int(SR * d), 0.002, 0.06, 0.0, 0.03) * 0.3, 0.45)
+
+
+def sfx_achievement():
+    out = fanfare([783.99, 987.77, 1174.66, 1567.98], 0.08, "tri", 0.4)
+    out = at(out, 0.4, (osc(1567.98, 0.5, "tri") + osc(2349.3, 0.5, "sine") * 0.4) * env(int(SR * 0.5), 0.01, 0.2, 0.6, 0.25, hold=0.1))
+    return norm(reverb(lowpass(out, 6000), 0.3), 0.65)
+
+
+def sfx_night():
+    """Dusk falls: a single low bell with a long tail."""
+    d = 1.4
+    bell = (osc(220, d) + osc(220 * 2.76, d) * 0.3 + osc(220 * 5.4, d) * 0.12) * env(int(SR * d), 0.005, 0.6, 0.3, 0.7)
+    return norm(reverb(bell, 0.45), 0.5)
+
+
+def sfx_rain_start():
+    d = 1.0
+    patter = highpass(noise(d), 2500) * (rng.uniform(0, 1, int(SR * d)) ** 3) * env(int(SR * d), 0.3, 0.3, 0.6, 0.3)
+    return norm(lowpass(patter, 6000), 0.4)
+
+
+EFFECTS.update({
+    "banner": sfx_banner, "burn": sfx_burn, "extinguish": sfx_extinguish, "charge": sfx_charge, "relic": sfx_relic,
+    "combo_break": sfx_combo_break, "combo_up": sfx_combo_up, "achievement": sfx_achievement, "night": sfx_night,
+    "rain_start": sfx_rain_start,
+})
+
+
 # ----------------------------------------------------------------------------- music
 
 def midi(n):
