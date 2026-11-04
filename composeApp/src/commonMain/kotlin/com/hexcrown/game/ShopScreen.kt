@@ -113,9 +113,10 @@ fun ShopScreen(hero: Int, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(10.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                for (k in 0..3) CatTab(k, k == cat, Modifier.weight(1f)) { if (k != cat) { Audio.play(Sfx.CLICK); cat = k } }
+                for (k in 0..3) CatTab(k, k == cat, Modifier.weight(1f)) { if (k != cat) { Audio.play(Sfx.TAB); cat = k } }
             }
-            Spacer(Modifier.height(10.dp))
+            GlideUnderline(cat, 4)
+            Spacer(Modifier.height(8.dp))
             val item = Shop.item(sel) ?: items.first()
             AnimatedContent(item.id, transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(120)) }) { id ->
                 Showcase(Shop.item(id) ?: item, hero) { buy(it) }
@@ -217,7 +218,7 @@ private fun ShopAction(item: ShopItem, big: Boolean, onBuy: () -> Unit) {
     val ts = if (big) 17 else 13
     val eq = Shop.equipped(item.kind, item.cls)?.id == item.id || (Shop.equipped(item.kind, item.cls) == null && item.price == 0)
     when {
-        eq -> KitButton(Res.drawable.ui_button_green, L["shop.equipped"], width = w, height = h, titleSize = ts, enabled = false) {}
+        eq -> KitButton(Res.drawable.ui_button_green, L["shop.equipped"], width = w, height = h, titleSize = ts) {}
         Shop.comingSoon(item) -> Box(Modifier.height(h), contentAlignment = Alignment.Center) {
             GText(if (big) L["shop.soon.long"] else L["shop.soon"], 13, Color(0xFFC8C8DC), shadow = false)
         }
@@ -246,7 +247,7 @@ private fun ShopCard(item: ShopItem, selected: Boolean, modifier: Modifier, stag
     val eq = Shop.equipped(item.kind, item.cls)?.id == item.id || (Shop.equipped(item.kind, item.cls) == null && item.price == 0)
     val locked = !Shop.unlocked(item.id)
     val inA = remember(item.id) { Animatable(0f) }
-    LaunchedEffect(item.id) { kotlinx.coroutines.delay(40L * minOf(stagger, 6)); inA.animateTo(1f, tween(220, easing = ExpoOut)) }
+    LaunchedEffect(item.id) { inA.animateTo(1f, tween(220, delayMillis = 40 * minOf(stagger, 6), easing = ExpoOut)) }
     Column(
         modifier.graphicsLayer { alpha = inA.value; translationY = (1f - inA.value) * 12.dp.toPx() }
             .drawBehind {

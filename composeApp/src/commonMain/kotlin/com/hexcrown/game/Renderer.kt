@@ -371,7 +371,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             translate(ox, oy)
             scale(scale, scale, Offset.Zero)
         }) {
-            drawGround(vl, vt, vr, vb)
+            drawGround(vl, vt, vr, vb, g.isRealm)
             drawRealmGround(g, vl, vt, vr, vb)
             drawHexes(g, vl, vt, vr, vb)
             for (p in g.pads) if (p.visible) drawPad(p, (p.kind == PAD_TOWER_ARCHER && g.squad == 0) || !g.padOpen(p))
@@ -551,7 +551,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         else -> L["pad.wall"]
     }
 
-    private fun DrawScope.drawGround(vl: Float, vt: Float, vr: Float, vb: Float) {
+    private fun DrawScope.drawGround(vl: Float, vt: Float, vr: Float, vb: Float, realm: Boolean) {
         val winter = season === SEASONS[2]
         val gb = grassBrush
         val rb = roadBrush
@@ -559,6 +559,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
             if (gb != null) drawRect(gb, Offset(vl * 2f, vt * 2f), Size((vr - vl) * 2f, (vb - vt) * 2f), alpha = if (winter) 0.22f else 1f, colorFilter = tint)
         }
+        if (realm) return // the level's roads, river and cliffs don't exist in the Realm
         val gp = World.grassPatches
         var i = 0
         while (i < gp.size) {
@@ -726,14 +727,16 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         var n = 0
         fun vis(x: Float, y: Float) = x > vl && x < vr && y > vt && y < vb
         val t = World.trees
-        var i = 0
-        while (i < t.size) { if (vis(t[i], t[i + 1])) n = push(n, t[i + 1], K_TREE, i); i += 3 }
         val r = World.rocks
-        i = 0
-        while (i < r.size) { if (vis(r[i], r[i + 1])) n = push(n, r[i + 1], K_ROCK, i); i += 3 }
         val pr = World.props
-        i = 0
-        while (i < pr.size) { if (vis(pr[i], pr[i + 1])) n = push(n, pr[i + 1], K_PROP, i); i += 3 }
+        if (!g.isRealm) { // the Realm has its own decor, per chunk
+            var j = 0
+            while (j < t.size) { if (vis(t[j], t[j + 1])) n = push(n, t[j + 1], K_TREE, j); j += 3 }
+            j = 0
+            while (j < r.size) { if (vis(r[j], r[j + 1])) n = push(n, r[j + 1], K_ROCK, j); j += 3 }
+            j = 0
+            while (j < pr.size) { if (vis(pr[j], pr[j + 1])) n = push(n, pr[j + 1], K_PROP, j); j += 3 }
+        }
         // enclosure: stakes every point (wood), a stone block every 3rd point (stone/royal)
         val ringStride = 2
         for (k in 0 until g.ringCount) if (k % ringStride == 0 && vis(g.ringX[k], g.ringY[k])) n = push(n, g.ringY[k], K_RING, k)
@@ -867,6 +870,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             enemySprite(sp, c.kind, c.bossType, 0f, 0f, c.dir, c.x, c.y + f * 12f, k, hitTint, a)
         }
     }
+    private val confettiTints = arrayOf(0xFFFFD65A, 0xFFFF5F57, 0xFF5AA9FF, 0xFF6FDC6A, 0xFFFFFFFF).map { ColorFilter.tint(Color(it), BlendMode.Modulate) }.toTypedArray()
     private val hitTint = ColorFilter.tint(Color(0x55FFFFFF), BlendMode.SrcAtop)
 
     private fun walkFrame(phase: Float, frames: Int): Int {
@@ -1225,6 +1229,12 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
 
     private fun DrawScope.drawFx(g: Game, ground: Boolean) {
         val fi = fxi ?: return
+        if (!ground) for (k in g.confetti.indices) { // ribbons of a crowned region
+            val c = g.confetti[k]
+            if (!c.active) continue
+            val al = (1f - c.t / c.life) * 3f
+            fxDraw(fi.confetti, c.gen, c.x, c.y - c.z, 22f, 22f, c.a, al, confettiTints[k % confettiTints.size], false)
+        }
         for (f in g.fx) {
             if (!f.active || f.t < 0f) continue
             val k = (f.t / f.life).coerceIn(0f, 1f)
@@ -1706,6 +1716,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
 
     private var dangerBrush: Brush? = null
     private val fogPath = Path()
+    private val fogPathEdge = Path()
     private val fogPathThin = Path() // a touch more see-through: the mist is not one flat colour
     private val waterPath = Path()
     private val tintPaths = Array(REGIONS * 3) { Path() }
@@ -1803,7 +1814,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         val key = ((vl / (HEX_R * 1.732f)).toInt().toLong() shl 40) xor ((vt / (HEX_R * 1.5f)).toInt().toLong() shl 20) xor m.fogVersion.toLong()
         if (key != fogKey) {
             fogKey = key
-            fogPath.reset(); fogPathThin.reset(); fogBorderCount = 0
+            fogPath.reset(); fogPathThin.reset(); fogPathEdge.reset(); fogBorderCount = 0
             val r0 = grid.hexAt(vl, vt).r - 1; val r1 = grid.hexAt(vr, vb).r + 1
             for (r in r0..r1) {
                 val y = r * HEX_R * 1.5f
@@ -1813,17 +1824,18 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                     if (m.explored[h.index]) continue
                     var border = false
                     for (d in 0..5) if (m.explored[Hex.of(q + DQ[d], r + DR[d]).index]) border = true
-                    if (border) { if (fogBorderCount < fogBorder.size) fogBorder[fogBorderCount++] = h.key }
+                    if (border) { if (fogBorderCount < fogBorder.size) fogBorder[fogBorderCount++] = h.key; addHex(fogPathEdge, h.x, h.y) }
                     else addHex(if (hexNoise(q, r) == 0) fogPathThin else fogPath, h.x, h.y)
                 }
             }
         }
         drawPath(fogPath, REALM_FOG, alpha = 0.85f)
         drawPath(fogPathThin, REALM_FOG, alpha = 0.8f)
+        drawPath(fogPathEdge, REALM_FOG, alpha = 0.42f)
         val fi = fxi ?: return
         val tn = tint(0xFF101A30L)
-        val size = HEX_R * 3.6f
-        for (i in 0 until fogBorderCount) { val h = Hex(fogBorder[i]); fxDraw(fi.glow, 0, h.x, h.y, size, size, 0f, 0.85f, tn, false) }
+        val size = HEX_R * 3f
+        for (i in 0 until fogBorderCount) { val h = Hex(fogBorder[i]); fxDraw(fi.glow, 0, h.x, h.y, size, size, 0f, 0.3f, tn, false) }
     }
 
     // ------------------------------------------------------------ territory

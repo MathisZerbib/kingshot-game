@@ -33,6 +33,11 @@ class LArr(private vararg val keys: String) {
 expect fun systemLanguage(): String
 
 private val TEXTS: Map<String, Array<String>> = mapOf(
+    "tip.lands" to arrayOf("Marche autour du donjon : tes terres rapportent de l'or.", "Walk around the keep: your lands earn gold."),
+    "tip.archers" to arrayOf("Recrute des archers avant la prochaine vague.", "Recruit archers before the next wave."),
+    "tip.walls" to arrayOf("Une palissade sur chaque route retient l'ennemi.", "A palisade on each road holds the enemy back."),
+    "tip.repair" to arrayOf("Ta Réparation soigne tous les murs et le donjon.", "Your Repair heals every wall and the keep."),
+    "tip.forge" to arrayOf("Passe à la forge : tes tirs feront plus mal.", "Visit the forge: your shots will hurt more."),
     "last.enemy" to arrayOf("Dernier ennemi !", "Last enemy!"),
     "wave.stats" to arrayOf("+{0} or · {1} ennemis · combo {2} · {3} hex", "+{0} gold · {1} enemies · combo {2} · {3} hexes"),
     "boss.down" to arrayOf("BOSS VAINCU !", "BOSS DEFEATED!"),

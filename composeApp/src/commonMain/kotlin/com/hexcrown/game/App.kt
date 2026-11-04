@@ -1,9 +1,13 @@
 package com.hexcrown.game
 
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import com.hexcrown.game.resources.Res
 import com.hexcrown.game.resources.logo
+import com.hexcrown.game.resources.ui_icon_hex
 import com.hexcrown.game.resources.portrait_builder
 import com.hexcrown.game.resources.portrait_ranger
 import com.hexcrown.game.resources.portrait_warrior
@@ -163,6 +167,7 @@ fun App() {
                 awaitEachGesture {
                     val first = awaitFirstDown(requireUnconsumed = false)
                     val id = first.id
+                    if (game.transition > 0f) { game.skipTransition(); first.consume(); return@awaitEachGesture }
                     // HUD buttons take the touch instead of the joystick
                     if (game.state == STATE_PLAY && !game.paused) {
                         val p = first.position
@@ -216,7 +221,31 @@ fun App() {
         }
         if (metaPanel >= 0) MetaPanel(metaPanel, metaTick, picked, onChange = { metaTick++ }) { metaPanel = -1 }
         if (shopOpen) ShopScreen(picked) { shopOpen = false; metaTick++ }
+        ScreenFade(uiState, game.heroClass)
         if (settingsOpen) SettingsPanel(onReset = { game.best = 0; metaTick++ }) { settingsOpen = false }
+    }
+}
+
+private var splashShown = false
+
+/** Launch: the hexagon badge on night blue, 600 ms, then the menu fades in. Menu <-> game: 180 ms through black, the hero's portrait sliding across. */
+@Composable
+private fun ScreenFade(state: Int, hero: Int) {
+    val fade = remember { Animatable(0f) }
+    var last by remember { mutableIntStateOf(state) }
+    LaunchedEffect(state) {
+        if (state != last && (state == STATE_PLAY || state == STATE_MENU)) { fade.snapTo(1f); fade.animateTo(0f, tween(180)) }
+        last = state
+    }
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = fade.value }.background(Color.Black), contentAlignment = Alignment.Center) {
+        if (state == STATE_PLAY) Image(painterResource(PORTRAITS[hero]), null, Modifier.size(140.dp).graphicsLayer { translationX = -(1f - fade.value) * 60.dp.toPx() })
+    }
+    val splash = remember { Animatable(if (splashShown) 0f else 1f) }
+    LaunchedEffect(Unit) {
+        if (!splashShown) { splashShown = true; splash.animateTo(0f, tween(300, delayMillis = 600)) }
+    }
+    if (splash.value > 0f) Box(Modifier.fillMaxSize().graphicsLayer { alpha = splash.value }.background(Pal.navyDeep), contentAlignment = Alignment.Center) {
+        Image(painterResource(Res.drawable.ui_icon_hex), "Hexcrown", Modifier.size(150.dp))
     }
 }
 

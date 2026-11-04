@@ -84,7 +84,8 @@ object Music {
     const val MENU = 0
     const val BATTLE = 1
     const val BOSS = 2
-    val names = arrayOf("menu", "battle", "boss")
+    const val REALM = 3
+    val names = arrayOf("menu", "battle", "boss", "realm")
 }
 
 object Haptic {
