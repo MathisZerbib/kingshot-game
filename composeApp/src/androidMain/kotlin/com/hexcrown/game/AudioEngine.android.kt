@@ -25,6 +25,7 @@ actual class AudioEngine actual constructor() {
     private val soundIds = IntArray(64) { -1 }
     private val musicFiles = HashMap<Int, File>()
     private var player: MediaPlayer? = null
+    private var nextPlayer: MediaPlayer? = null
     private var track = Music.NONE
     private var sfxVol = 1f
     private var musicVol = 1f
@@ -80,34 +81,56 @@ actual class AudioEngine actual constructor() {
         if (track == Music.NONE) return
         val f = musicFiles[track] ?: return
         runCatching {
-            player = MediaPlayer().apply {
-                setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_GAME)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build(),
-                )
-                setDataSource(f.path)
-                // battle music breathes: 20 s of silence between loops (menu and boss keep looping)
-                isLooping = track != Music.BATTLE
-                setOnCompletionListener { mp -> handler.postDelayed({ if (player === mp && !pausedByApp) runCatching { mp.start() } }, 20_000) }
-                setVolume(musicVol, musicVol)
-                prepare()
+            player = newPlayer(f.path).apply {
+                // battle music breathes: 20 s of silence between loops; the Realm chains two players, AAC looping leaves a gap
+                when (track) {
+                    Music.BATTLE -> setOnCompletionListener { mp -> handler.postDelayed({ if (player === mp && !pausedByApp) runCatching { mp.start() } }, 20_000) }
+                    Music.REALM -> chainNext(this, f.path)
+                    else -> isLooping = true
+                }
                 if (!pausedByApp) start()
             }
         }.onFailure { stopPlayer() }
     }
 
+    private fun newPlayer(path: String) = MediaPlayer().apply {
+        setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                .build(),
+        )
+        setDataSource(path)
+        setVolume(musicVol, musicVol)
+        prepare()
+    }
+
+    /** Seamless loop: when [cur] ends, the prepared next player takes over and prepares its own successor. */
+    private fun chainNext(cur: MediaPlayer, path: String) {
+        val next = newPlayer(path)
+        nextPlayer = next
+        cur.setNextMediaPlayer(next)
+        cur.setOnCompletionListener { done ->
+            if (player !== done) return@setOnCompletionListener
+            done.release()
+            player = next
+            runCatching { chainNext(next, path) }
+        }
+    }
+
     private fun stopPlayer() {
         runCatching { player?.stop() }
         runCatching { player?.release() }
+        runCatching { nextPlayer?.release() }
         player = null
+        nextPlayer = null
     }
 
     actual fun setVolumes(sfx: Float, music: Float) {
         sfxVol = sfx
         musicVol = music
         runCatching { player?.setVolume(music, music) }
+        runCatching { nextPlayer?.setVolume(music, music) }
     }
 
     actual fun vibrate(kind: Int) {

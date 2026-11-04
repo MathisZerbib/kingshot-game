@@ -4,7 +4,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.LinearEasing
@@ -182,6 +181,7 @@ fun KitButton(
     val sweep = if (shine) rememberInfiniteTransition().animateFloat(0f, 1f, infiniteRepeatable(tween(6000, easing = LinearEasing))) else null
     Box(
         Modifier.width(width).height(height).scale(sc)
+            .graphicsLayer { if (!enabled) alpha = 0.4f }
             .nine(res, IN_BUTTON, height.value / 150f)
             .drawWithContent {
                 drawContent()
@@ -309,7 +309,7 @@ fun KitPanel(
 @Composable
 fun Modifier.stagger(i: Int): Modifier {
     val a = remember { Animatable(0f) }
-    LaunchedEffect(Unit) { delay(40L * minOf(i, 6)); a.animateTo(1f, tween(220, easing = ExpoOut)) }
+    LaunchedEffect(Unit) { a.animateTo(1f, tween(220, delayMillis = 40 * minOf(i, 6), easing = ExpoOut)) }
     val reduced = Prefs.cap60
     return graphicsLayer { alpha = a.value; if (!reduced) translationY = (1f - a.value) * 12.dp.toPx() }
 }
@@ -371,7 +371,7 @@ fun rememberHud(): HudImages {
 class FxImages(
     val slash: ImageBitmap, val ring: ImageBitmap, val spark: ImageBitmap, val puff: ImageBitmap, val sparkle: ImageBitmap,
     val glow: ImageBitmap, val shadow: ImageBitmap, val trail: ImageBitmap, val reticle: ImageBitmap, val rune: ImageBitmap,
-    val stuck: ImageBitmap, val dot: ImageBitmap,
+    val stuck: ImageBitmap, val dot: ImageBitmap, val confetti: ImageBitmap,
 )
 
 @Composable
@@ -379,6 +379,6 @@ fun rememberFx(): FxImages {
     val a = imageResource(Res.drawable.fx_slash); val b = imageResource(Res.drawable.fx_ring); val c = imageResource(Res.drawable.fx_spark)
     val d = imageResource(Res.drawable.fx_puff); val e = imageResource(Res.drawable.fx_sparkle); val f = imageResource(Res.drawable.fx_glow)
     val g = imageResource(Res.drawable.fx_shadow); val h = imageResource(Res.drawable.fx_trail); val i = imageResource(Res.drawable.fx_reticle)
-    val j = imageResource(Res.drawable.fx_rune); val k = imageResource(Res.drawable.fx_arrow_stuck); val l = imageResource(Res.drawable.fx_dot)
-    return remember(a, b, c, d, e, f, g, h, i, j, k, l) { FxImages(a, b, c, d, e, f, g, h, i, j, k, l) }
+    val j = imageResource(Res.drawable.fx_rune); val k = imageResource(Res.drawable.fx_arrow_stuck); val l = imageResource(Res.drawable.fx_dot); val m = imageResource(Res.drawable.fx_confetti)
+    return remember(a, b, c, d, e, f, g, h, i, j, k, l, m) { FxImages(a, b, c, d, e, f, g, h, i, j, k, l, m) }
 }

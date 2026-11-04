@@ -276,16 +276,21 @@ class Realm(val seed: Int) {
     private fun scatter(i: Int, rnd: Random, trees: MutableList<Float>, rocks: MutableList<Float>, props: MutableList<Float>, flats: MutableList<Float>, homes: MutableList<Float>) {
         val cx = centerX[i]; val cy = centerY[i]
         val density = REGION_DENSITY[i]
-        fun spot(): FloatArray { val a = rnd.nextFloat() * 6.28f; val r = 420f + rnd.nextFloat() * (CHUNK_RADIUS - 420f); return floatArrayOf(cx + cos(a) * r, cy + sin(a) * r) }
-        repeat((10 * density).toInt()) { // groves of 3-7
+        fun spot(): FloatArray { val a = rnd.nextFloat() * 6.28f; val r = 240f + rnd.nextFloat() * (CHUNK_RADIUS - 240f); return floatArrayOf(cx + cos(a) * r, cy + sin(a) * r) }
+        repeat((26 * density).toInt()) { // groves of 3-7
             val p = spot()
             repeat(3 + rnd.nextInt(5)) { trees.add(p[0] + (rnd.nextFloat() - 0.5f) * 220f); trees.add(p[1] + (rnd.nextFloat() - 0.5f) * 160f); trees.add(0.7f + rnd.nextFloat() * 0.6f) }
         }
-        repeat((14 * density).toInt()) { val p = spot(); rocks.add(p[0]); rocks.add(p[1]); rocks.add(0.5f + rnd.nextFloat() * 0.7f) }
-        repeat((10 * density).toInt()) { val p = spot(); props.add(p[0]); props.add(p[1]); props.add(if (rnd.nextBoolean()) PROP_STUMP else PROP_BUSH) }
-        repeat((70 * density).toInt()) { val p = spot(); flats.add(p[0]); flats.add(p[1]); flats.add(rnd.nextInt(4).toFloat()) }
+        repeat((28 * density).toInt()) { val p = spot(); rocks.add(p[0]); rocks.add(p[1]); rocks.add(0.5f + rnd.nextFloat() * 0.7f) }
+        repeat((30 * density).toInt()) { val p = spot(); props.add(p[0]); props.add(p[1]); props.add(if (rnd.nextBoolean()) PROP_STUMP else PROP_BUSH) }
+        repeat((320 * density).toInt()) { val p = spot(); flats.add(p[0]); flats.add(p[1]); flats.add(rnd.nextInt(4).toFloat()) }
         repeat(3) { k -> // red houses around the main camp
-            val a = rnd.nextFloat() * 0.6f + k * 2.1f
+            val a0 = rnd.nextFloat() * 0.6f + k * 2.1f
+            // turn around the camp until the house clears the road; a walled-in camp keeps the first spot
+            val a = (0 until 8).map { a0 + it * 0.785f }.firstOrNull { an ->
+                val h = grid.hexAt(cx + cos(an) * 360f, cy + sin(an) * 260f)
+                !roadHex[h.index] && blocked[h.index] == BLOCK_NONE
+            } ?: a0
             homes.add(cx + cos(a) * 360f); homes.add(cy + sin(a) * 260f)
         }
     }

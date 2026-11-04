@@ -423,6 +423,16 @@ class Game {
     var abilityT = -1f // seconds since the cast, -1 when no ability is playing
     var abilityCls = 0
     var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
+    val confetti = Array(80) { Fx() }
+    private var lastFightT = -100f
+    /** Advice on the defeat panel, from what went wrong. */
+    val defeatTip: String get() = when {
+        grid.owned < 12 -> "tip.lands"
+        squad < 3 -> "tip.archers"
+        walls.any { !it.built } -> "tip.walls"
+        heroClass == CLASS_BUILDER -> "tip.repair"
+        else -> "tip.forge"
+    }
     // feel (docs/POLISH.md, pass A)
     var shakeDirX = 0f // when set, the shake follows the impact instead of being random
     var shakeDirY = 0f
@@ -771,7 +781,8 @@ class Game {
     /** Music that fits the moment: a live boss gets its own track. */
     val musicTrack: Int get() = when {
         state != STATE_PLAY -> Music.MENU
-        enemies.any { it.active && it.kind == KIND_BOSS } -> Music.BOSS
+        bossInSight >= 0 || (realm == null && enemies.any { it.active && it.kind == KIND_BOSS }) -> Music.BOSS
+        realm != null -> if (time - lastFightT < 4f) Music.BATTLE else Music.REALM // exploration until a fight, and for 4 s after it
         else -> Music.BATTLE
     }
 
@@ -1039,6 +1050,9 @@ class Game {
     val revealT: Float get() = ((TRANSITION_TIME - transition - 1.9f) / 1.1f).coerceIn(0f, 1f)
 
     private fun smooth(t: Float): Float { val c = t.coerceIn(0f, 1f); return c * c * (3f - 2f * c) }
+
+    /** A tap during the level change skips to its end. */
+    fun skipTransition() { if (transition > 0.02f) transition = 0.01f }
 
     private fun updateTransition(dt: Float) {
         val before = TRANSITION_TIME - transition
@@ -1320,6 +1334,7 @@ class Game {
     private fun attachRealm(m: Realm) {
         realm = m
         tutorial = TUTO_DONE
+        bossZoom = 0.9f // the world opens up: 0.9 eases to 1
         World.boundMinX = m.minX; World.boundMinY = m.minY; World.boundMaxX = m.maxX; World.boundMaxY = m.maxY
         fogR = 0f
         for (i in m.villages.indices) { val v = m.villages[i]; if (!v.rebuilt) addPad(Pad(PAD_VILLAGE, v.x, v.y, i).also { it.cost = price(v.cost) }) }
@@ -1440,9 +1455,16 @@ class Game {
         val m = realm ?: return
         m.crowned[region] = true
         crownRegion = region; crownBanner = 3f
-        Audio.play(Sfx.VICTORY)
+        Audio.play(Sfx.CROWN)
         Audio.haptic(Haptic.HEAVY)
         Meta.treasure += 200 * (region + 1)
+        for (c in confetti) { // a burst of ribbons over the king
+            val a = rnd.nextFloat() * 6.28f; val v = 200f + rnd.nextFloat() * 420f
+            c.active = true; c.t = 0f; c.life = 1.6f + rnd.nextFloat() * 0.8f; c.x = kx; c.y = ky - 40f; c.z = 60f
+            c.sx = cos(a) * v; c.sy = sin(a) * v * 0.55f; c.tx = 380f + rnd.nextFloat() * 300f // tx: rise speed
+            c.a = rnd.nextFloat() * 360f; c.gen = rnd.nextInt(6)
+        }
+        spawnFx(FX_RING, kx, ky, 0.7f, 0xFFFFD65AL)?.let { it.r0 = 60f; it.r1 = 560f }
         Ach.unlock("crown_$region")
         relicDelay = 0.6f
         spawnFx(FX_GLOW, kx, ky, 0.8f, 0xFFFFD65AL)?.r1 = 6f
@@ -1462,6 +1484,12 @@ class Game {
         for (p in pads) p.shownPaid += (p.paid - p.shownPaid) * min(1f, dt / 0.08f)
         if (shake <= 0f) { shakeDirX = 0f; shakeDirY = 0f }
         if (whiteFlash > 0f) whiteFlash -= dt
+        for (c in confetti) if (c.active) {
+            c.t += dt
+            if (c.t >= c.life) { c.active = false; continue }
+            c.x += c.sx * dt; c.y += c.sy * dt; c.tx -= 620f * dt; c.z = max(0f, c.z + c.tx * dt); c.a += 240f * dt
+            c.sx *= 1f - min(1f, dt * 1.2f); c.sy *= 1f - min(1f, dt * 1.2f)
+        }
         if (bossDownT > 0f) bossDownT -= dt
         if (bossGaugeFlash > 0f) bossGaugeFlash -= dt
         if (waveSummary > 0f) waveSummary -= dt
@@ -1475,6 +1503,7 @@ class Game {
             val e = enemies[i]
             if (!e.active) continue
             enemiesUp++; one = i
+            if (realm != null && hypot(e.x - kx, e.y - ky) < 500f) lastFightT = time
             if (e.kind == KIND_BOSS && (boss < 0 || hypot(e.x - kx, e.y - ky) < hypot(enemies[boss].x - kx, enemies[boss].y - ky))) boss = i
         }
         val near = boss >= 0 && (realm == null || hypot(enemies[boss].x - kx, enemies[boss].y - ky) < 900f)
@@ -1962,12 +1991,12 @@ class Game {
             }
         }
         ny = ny.coerceIn(World.boundMinY + 60f, World.boundMaxY - 40f)
-        if (World.river.isNotEmpty() && World.inRiver(nx, ny)) {
+        if (!isRealm && World.river.isNotEmpty() && World.inRiver(nx, ny)) {
             if (!World.inRiver(nx, ky)) ny = ky
             else if (!World.inRiver(kx, ny)) nx = kx
             else { nx = kx; ny = ky }
         }
-        if (World.insideCliff(nx, ny, 18f)) {
+        if (!isRealm && World.insideCliff(nx, ny, 18f)) {
             if (!World.insideCliff(nx, ky, 18f)) ny = ky
             else if (!World.insideCliff(kx, ny, 18f)) nx = kx
             else { nx = kx; ny = ky }

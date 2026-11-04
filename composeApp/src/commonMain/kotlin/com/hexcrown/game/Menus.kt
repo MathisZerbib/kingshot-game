@@ -5,6 +5,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import com.hexcrown.game.resources.allDrawableResources
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -134,6 +135,7 @@ fun MainMenu(
                 onDragEnd = {
                     val far = kotlin.math.abs(dx) > 80f * density
                     if (far || kotlin.math.abs(dx) > 24f * density) {
+                        Audio.play(Sfx.SWIPE)
                         if (dx < 0f) pick((picked + 1) % 3, 1) else pick((picked + 2) % 3, -1)
                     }
                 },
@@ -149,7 +151,8 @@ fun MainMenu(
                     if (Daily.available && Daily.nextStreak > 1) GText(L.f("streak", Daily.nextStreak), 13, Color.White)
                 }
                 Spacer(Modifier.weight(1f))
-                Pill(Res.drawable.ui_icon_coins, "${Meta.treasure}", width = 120.dp)
+                val shown by animateIntAsState(Meta.treasure, tween(500, easing = ExpoOut))
+                Pill(Res.drawable.ui_icon_coins, "$shown", width = 120.dp)
             }
             Box(Modifier.fillMaxWidth().enter(0, 420, 0f, 1.05f), contentAlignment = Alignment.Center) {
                 Image(painterResource(Res.drawable.ui_logotype), "Hexcrown", Modifier.fillMaxWidth(0.63f), contentScale = ContentScale.FillWidth)
@@ -182,6 +185,19 @@ fun MainMenu(
     }
 }
 
+/** The line under the selected tab, sliding from one to the next. */
+@Composable
+fun GlideUnderline(selected: Int, count: Int) {
+    val x = remember { Animatable(selected.toFloat()) }
+    LaunchedEffect(selected) { x.animateTo(selected.toFloat(), tween(220, easing = ExpoOut)) }
+    Box(Modifier.fillMaxWidth().height(3.dp)) {
+        Box(
+            Modifier.fillMaxWidth(1f / count).height(3.dp).graphicsLayer { translationX = x.value * size.width }
+                .padding(horizontal = 14.dp).background(Color(0xFFFFD65A), RoundedCornerShape(2.dp)),
+        )
+    }
+}
+
 /** Realm entry: a glass card with the hex icon; padlock until level 5 is done, « New » until first opened. */
 @Composable
 private fun RealmEntry(onRealm: () -> Unit) {
@@ -201,6 +217,8 @@ private fun RealmEntry(onRealm: () -> Unit) {
 @Composable
 private fun RealmMap(m: Realm) {
     GText(L["realm.map"], 14, Color.White, title = true, caps = false)
+    val gold = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { gold.animateTo(1f, tween(400, easing = ExpoOut)) }
     Canvas(Modifier.size(200.dp)) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val k = size.minDimension / 2f / (m.maxX - m.minX).coerceAtLeast(m.maxY - m.minY) * 1.8f
@@ -211,7 +229,7 @@ private fun RealmMap(m: Realm) {
             drawPath(p, col)
         }
         hex(c.x, c.y, 22.dp.toPx(), Color(0xFF4A7BD6))
-        for (i in 0 until REGIONS) hex(c.x + (m.centerX[i] - World.CASTLE_X) * k, c.y + (m.centerY[i] - World.CASTLE_Y) * k, 18.dp.toPx(), if (m.crowned[i]) Color(0xFFFFD65A) else Color(0xFF3A4464))
+        for (i in 0 until REGIONS) hex(c.x + (m.centerX[i] - World.CASTLE_X) * k, c.y + (m.centerY[i] - World.CASTLE_Y) * k, 18.dp.toPx(), if (m.crowned[i]) androidx.compose.ui.graphics.lerp(Color(0xFF3A4464), Color(0xFFFFD65A), gold.value) else Color(0xFF3A4464))
     }
 }
 
@@ -482,10 +500,13 @@ private fun StatPill(value: String, name: String, modifier: Modifier) {
 
 @Composable
 fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, onMenu: () -> Unit) {
+    // the scene goes grey behind the panel
+    val grey = remember { Animatable(0f) }
+    LaunchedEffect(Unit) { grey.animateTo(1f, tween(400)) }
+    Box(Modifier.fillMaxSize().graphicsLayer { alpha = grey.value }.background(Color(0x996E7078)))
     KitPanel(if (game.kDead) L["over.king"] else L["over.keep"], red = true, widthFrac = 0.9f) {
         KitIcon(Res.drawable.ui_icon_skull, 52.dp)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            StatPill("${game.level}", L["word.level"], Modifier.weight(1f))
             StatPill("${game.wave}", L["word.wave"], Modifier.weight(1f))
             StatPill("${game.kills}", L["word.enemies"], Modifier.weight(1f))
             StatPill("${game.coinsCollected}", L["word.gold"], Modifier.weight(1f))
@@ -494,14 +515,20 @@ fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, onMenu: (
         Row(verticalAlignment = Alignment.CenterVertically) {
             KitIcon(Res.drawable.ui_icon_coins, 20.dp)
             Spacer(Modifier.width(4.dp))
-            GText(L.f("over.treasure", game.treasureWon), 12, Pal.ink, shadow = false)
+            GText(L.f("over.treasure", game.treasureWon), 14, Pal.ink, shadow = false)
         }
+        GText(L[game.defeatTip], 14, Color(0xFF3A4464), shadow = false)
         if (game.canRevive) KitButton(
-            Res.drawable.ui_button_gold, L["revive"], L.f("revive.sub", game.reviveCost), Res.drawable.ui_icon_heart,
-            textColor = Pal.ink, onClick = onRevive,
+            Res.drawable.ui_button_blue, L["revive"], L.f("revive.sub", game.reviveCost), Res.drawable.ui_icon_heart,
+            width = 250.dp, height = 56.dp, onClick = onRevive,
         )
-        KitButton(Res.drawable.ui_button_green, L["retry"], icon = Res.drawable.ui_icon_arrow, width = 230.dp, height = 52.dp, onClick = onRetry)
-        KitButton(Res.drawable.ui_button_wood, L["menu"], icon = Res.drawable.ui_icon_flag, width = 200.dp, height = 48.dp, onClick = onMenu)
+        KitButton(Res.drawable.ui_button_gold, L["retry"], icon = Res.drawable.ui_icon_arrow, width = 250.dp, height = 60.dp, textColor = Pal.ink, onClick = onRetry)
+        Box(Modifier.height(44.dp).padding(horizontal = 24.dp).clickable { Audio.play(Sfx.CLICK); onMenu() }, contentAlignment = Alignment.Center) {
+            BasicText(
+                L["menu"],
+                style = TextStyle(color = Color(0xFF3A4464), fontSize = 15.sp, fontFamily = nunito(), fontWeight = FontWeight.ExtraBold, textDecoration = TextDecoration.Underline),
+            )
+        }
     }
 }
 
@@ -551,10 +578,11 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     for (k in 0..2) Box(
                         Modifier.weight(1f).height(38.dp).nine(if (sub == k) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.26f)
-                            .clickable { Audio.play(Sfx.CLICK); sub = k },
+                            .clickable { Audio.play(Sfx.TAB); sub = k },
                         contentAlignment = Alignment.Center,
                     ) { GText(L["statsub.$k"], 13, Color.White, title = true, caps = false) }
                 }
+                GlideUnderline(sub, 3)
                 when (sub) {
                     0 -> {
                 val secs = Stats.playSeconds
@@ -668,14 +696,17 @@ fun VictoryPanel(game: Game, onNext: () -> Unit) {
     val wob by shake.animateFloat(-6f, 6f, infiniteRepeatable(tween(120), RepeatMode.Reverse))
     KitPanel(L.f("victory.title", game.level - 1), widthFrac = 0.9f) {
         Row(verticalAlignment = Alignment.Bottom) {
-            for (k in 0 until 3) KitIcon(Res.drawable.ui_icon_star, if (k == 1) 64.dp else 48.dp, grey = k >= game.lastStars)
+            for (k in 0 until 3) FallingStar(k, k < game.lastStars)
         }
         GText(L["victory.stars"], 11, Color(0xFF2E7D32), shadow = false)
         Box(
             Modifier.size(110.dp).rotate(if (chestOpen) 0f else wob).clickable(enabled = !chestOpen) { chestOpen = true; game.openChest() },
             contentAlignment = Alignment.Center,
         ) { KitIcon(Res.drawable.ui_icon_chest, 100.dp) }
-        GText(if (chestOpen) L.f("chest.got", game.chestCoins, game.chestTreasure) else L["chest.tap"], 13, Pal.ink, title = !chestOpen, shadow = false)
+        // the coins count up instead of appearing
+        val count = remember { Animatable(0f) }
+        LaunchedEffect(chestOpen) { if (chestOpen) count.animateTo(1f, tween(800, easing = ExpoOut)) }
+        GText(if (chestOpen) L.f("chest.got", (game.chestCoins * count.value).toInt(), (game.chestTreasure * count.value).toInt()) else L["chest.tap"], 13, Pal.ink, title = !chestOpen, shadow = false)
         val id = game.newUnlockId
         if (id >= 0) {
             Column(
@@ -691,8 +722,24 @@ fun VictoryPanel(game: Game, onNext: () -> Unit) {
                 }
             }
         }
-        KitButton(Res.drawable.ui_button_green, L["next"], icon = Res.drawable.ui_icon_arrow) { if (!chestOpen) game.openChest(); onNext() }
+        KitButton(Res.drawable.ui_button_gold, L["next"], icon = Res.drawable.ui_icon_arrow, textColor = Pal.ink) { if (!chestOpen) game.openChest(); onNext() }
     }
+}
+
+/** Falls into place, 120 ms after the previous one, with its own ding. */
+@Composable
+private fun FallingStar(k: Int, earned: Boolean) {
+    val a = remember { Animatable(0f) }
+    LaunchedEffect(Unit) {
+        var rang = false
+        a.animateTo(1f, tween(320, delayMillis = 200 + 120 * k, easing = ExpoOut)) {
+            if (!rang && value > 0f) { rang = true; if (earned) Audio.play(Sfx.STAR, 1f, 1f + 0.08f * k) }
+        }
+    }
+    Box(Modifier.graphicsLayer {
+        alpha = a.value
+        if (!Prefs.cap60) { translationY = -(1f - a.value) * 70.dp.toPx(); val s = 1.5f - 0.5f * a.value; scaleX = s; scaleY = s }
+    }) { KitIcon(Res.drawable.ui_icon_star, if (k == 1) 64.dp else 48.dp, grey = !earned) }
 }
 
 private fun unlockArt(id: Int): DrawableResource = when (id) {
