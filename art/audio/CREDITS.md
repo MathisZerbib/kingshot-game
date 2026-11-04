@@ -23,6 +23,6 @@ Since v1.2 every effect in `files/sfx/` is assembled from real recordings (no os
 
 Converted to mono 22 050 Hz 16-bit WAV, leading silence trimmed, loudest 50 ms window normalised per sound.
 
-## Généré (art/audio/gen_sfx.py)
+## Musique du Royaume (art/audio/make_music_realm.py)
 
-`files/music/realm.m4a` (exploration du Royaume) est encore synthétisé par le script, sans source tierce. Les anciens effets synthétisés de `gen_sfx.py` sont remplacés par les enregistrements ci-dessus.
+`files/music/realm.m4a` (exploration du Royaume, 92 bpm, ré dorien, boucle de 41,7 s) est composée dans le script et jouée avec les échantillons CC0 de la VCSL : harpe celtique, flûte à bec basse et alto, glockenspiel, tambour sur cadre, carillon éolien. Les anciens sons et musiques synthétisés de `gen_sfx.py` ne sont plus utilisés.
