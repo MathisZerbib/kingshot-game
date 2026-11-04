@@ -104,6 +104,9 @@ au camp à la reprise.
 - **Visuels store** : icône 512 (`art/icon/store_icon_512.png`), feature graphic 1024×500
   (`art/icon/feature_graphic.png`), 6 captures 1080×1920 (`docs/store/`), texte FR/EN
   (`docs/store/listing.md`). Classification : PEGI 7 / Everyone 10+ (violence cartoon).
+- **Poids** : les planches PNG sont passées en palette 8 bits + alpha par `art/tools/shrink_png.py`
+  (libimagequant, erreur contrôlée) après tout rendu Blender / FX / UI : drawables 44 → 13 Mo, APK ≈ 27 Mo.
+  Les feuilles FX en dégradé et `dark_lord.png` restent en RGBA (le script les garde seul).
 - **Qualité** : 0 jank sur Pixel 8a (p95 ≤ 12 ms), test rotation/arrière-plan/reprise, 3 tailles d'écran
   (émulateurs Mac), `proguard` conservant les classes Compose Resources, AAB `bundleRelease`.
 - **Onboarding** : 1er lancement = tutoriel de 60 s dans le niveau 1 (bouger, ramasser, planter une
