@@ -1,6 +1,7 @@
 package com.hexcrown.game
 
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -279,7 +280,7 @@ fun KitPanel(
         launch { veil.animateTo(1f, tween(150)) }
         pop.animateTo(1f, tween(220, easing = ExpoOut))
     }
-    val reduced = Prefs.cap60
+    val reduced = Prefs.reduceMotion
     Box(
         Modifier.fillMaxWidth().fillMaxHeight().graphicsLayer { alpha = veil.value }.background(Pal.veil)
             .then(if (onDismiss != null) Modifier.clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onDismiss() } else Modifier),
@@ -310,7 +311,7 @@ fun KitPanel(
 fun Modifier.stagger(i: Int): Modifier {
     val a = remember { Animatable(0f) }
     LaunchedEffect(Unit) { a.animateTo(1f, tween(220, delayMillis = 40 * minOf(i, 6), easing = ExpoOut)) }
-    val reduced = Prefs.cap60
+    val reduced = Prefs.reduceMotion
     return graphicsLayer { alpha = a.value; if (!reduced) translationY = (1f - a.value) * 12.dp.toPx() }
 }
 
@@ -318,7 +319,7 @@ fun Modifier.stagger(i: Int): Modifier {
 @Composable
 fun KitToggle(text: String, on: Boolean, dark: Boolean = false, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { Audio.play(Sfx.CLICK); onChange(!on) }.padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable { Audio.play(Sfx.CLICK); onChange(!on) },
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Box(Modifier.weight(1f)) { GText(text, 14, if (dark) Color.White else Pal.ink, shadow = dark, align = TextAlign.Start) }

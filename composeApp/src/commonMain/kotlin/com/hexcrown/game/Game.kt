@@ -458,12 +458,12 @@ class Game {
 
     /** Hit-stop by kind of impact; never more than one every 150 ms, none in reduced motion. */
     private fun stopFor(s: Float) {
-        if (Prefs.cap60 || stopCd > 0f) return
+        if (Prefs.reduceMotion || stopCd > 0f) return
         hitStop = max(hitStop, s); stopCd = 0.15f
     }
 
     private fun shakeFrom(amount: Float, dx: Float, dy: Float) {
-        if (Prefs.cap60) return
+        if (Prefs.reduceMotion) return
         val l = max(0.001f, hypot(dx, dy))
         shake = max(shake, amount); shakeDirX = dx / l; shakeDirY = dy / l
     }
@@ -1082,7 +1082,7 @@ class Game {
         Audio.play(when (heroClass) { CLASS_RANGER -> Sfx.ABILITY_RANGER; CLASS_BUILDER -> Sfx.ABILITY_BUILDER; else -> Sfx.ABILITY })
         Audio.haptic(Haptic.MEDIUM)
         // common opening: hit-stop, white flash on the king, ground halo, edge vignette, title, button bounce
-        val calm = Prefs.cap60 // reduced motion: no hit-stop, no shake; the effects stay
+        val calm = Prefs.reduceMotion // reduced motion: no hit-stop, no shake; the effects stay
         abilityCls = heroClass; abilityT = 0f; abilityStep = 0
         if (!calm) abilityStop = if (heroClass == CLASS_RANGER) 0.05f else 0.09f
         kFlash = 0.06f; vignette = 0.22f; abilityTitle = 0f; abilityPress = 0f
@@ -1159,7 +1159,7 @@ class Game {
             }
             CLASS_RANGER -> {
                 for (salvo in 0..2) if (at(250 + 180 * salvo)) {
-                    if (!Prefs.cap60) shake = max(shake, 3f)
+                    if (!Prefs.reduceMotion) shake = max(shake, 3f)
                     var k = salvo
                     while (k < rainCount) {
                         val i = rainTarget[k]
@@ -1275,8 +1275,9 @@ class Game {
     /** Continue the saved game if any, else a new game with [cls]. */
     fun start(cls: Int = heroClass) {
         val save = Storage.loadGame()
-        if (save == null || !restore(save)) { heroClass = cls; reset() }
-        checkpoint = save ?: saveString()
+        val good = if (save == null) null else if (restore(save)) save else Storage.loadText("game_prev")?.takeIf { restore(it) }
+        if (good == null) { heroClass = cls; reset() }
+        checkpoint = good ?: saveString()
         state = STATE_PLAY
     }
 
@@ -1301,28 +1302,29 @@ class Game {
     /** Resumes the saved realm, or founds a new one. Levels and their save are left alone. */
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
     fun startRealm(cls: Int = heroClass) {
-        val saved = Storage.loadText("realm")
         var m: Realm? = null
-        if (saved != null) runCatching {
-            val parts = saved.split('#', limit = 3)
-            val r = VarReader(kotlin.io.encoding.Base64.decode(parts[0]))
-            m = Realm.unpack(r)
-            val loaded = m
-            if (loaded != null && restore(parts[2])) {
-                grid.unpackFrom(r)
-                repeat(r.int()) { // the enemies on the march, exactly where they were
-                    val kind = r.int(); val bt = r.int(); val camp = r.int(); val x = r.int().toFloat(); val y = r.int().toFloat()
-                    val hp = r.int() / 10f; val mhp = r.int() / 10f; val sp = r.int() / 10f; val dm = r.int() / 10f
-                    spawnEnemy(kind, 0, 0f, x, y)?.let { e ->
-                        e.bossType = bt; e.camp = camp; e.hp = hp; e.maxHp = mhp; e.speed = sp; e.dmg = dm
-                        if (camp >= 0) loaded.camps[camp].alive++
-                        else if (camp <= -2) { val b = loaded.bosses[-2 - camp]; b.enemy = enemies.indexOf(e); b.gen = e.gen }
+        for (saved in arrayOf(Storage.loadText("realm"), Storage.loadText("realm_prev"))) { // a damaged save falls back on the one before
+            if (saved != null && m == null) runCatching {
+                val parts = saved.split('#', limit = 3)
+                val r = VarReader(kotlin.io.encoding.Base64.decode(parts[0]))
+                m = Realm.unpack(r)
+                val loaded = m
+                if (loaded != null && restore(parts[2])) {
+                    grid.unpackFrom(r)
+                    repeat(r.int()) { // the enemies on the march, exactly where they were
+                        val kind = r.int(); val bt = r.int(); val camp = r.int(); val x = r.int().toFloat(); val y = r.int().toFloat()
+                        val hp = r.int() / 10f; val mhp = r.int() / 10f; val sp = r.int() / 10f; val dm = r.int() / 10f
+                        spawnEnemy(kind, 0, 0f, x, y)?.let { e ->
+                            e.bossType = bt; e.camp = camp; e.hp = hp; e.maxHp = mhp; e.speed = sp; e.dmg = dm
+                            if (camp >= 0) loaded.camps[camp].alive++
+                            else if (camp <= -2) { val b = loaded.bosses[-2 - camp]; b.enemy = enemies.indexOf(e); b.gen = e.gen }
+                        }
                     }
-                }
-                val pos = parts[1].split(',')
-                kx = pos[0].toFloat(); ky = pos[1].toFloat(); cycleT = pos[2].toFloat(); wave = pos[3].toInt()
-            } else m = null
-        }.onFailure { m = null }
+                    val pos = parts[1].split(',')
+                    kx = pos[0].toFloat(); ky = pos[1].toFloat(); cycleT = pos[2].toFloat(); wave = pos[3].toInt()
+                } else m = null
+            }.onFailure { m = null }
+        }
         if (m == null) {
             heroClass = cls
             reset()
@@ -1360,6 +1362,7 @@ class Game {
             w.int(e.kind); w.int(e.bossType); w.int(e.camp); w.int(e.x.toInt()); w.int(e.y.toInt())
             w.int((e.hp * 10f).toInt()); w.int((e.maxHp * 10f).toInt()); w.int((e.speed * 10f).toInt()); w.int((e.dmg * 10f).toInt())
         }
+        Storage.saveText("realm_prev", Storage.loadText("realm"))
         Storage.saveText("realm", kotlin.io.encoding.Base64.encode(w.bytes()) + "#" + kx + "," + ky + "," + cycleT + "," + wave + "#" + saveString())
     }
 
@@ -1509,7 +1512,7 @@ class Game {
         val near = boss >= 0 && (realm == null || hypot(enemies[boss].x - kx, enemies[boss].y - ky) < 900f)
         if (near && bossInSight != boss) { bossBandEntry = 0f; bossGauge = 0f } // a new boss: the gauge fills up
         bossInSight = if (near) boss else -1
-        bossZoom += ((if (near && !Prefs.cap60) 0.92f else 1f) - bossZoom) * min(1f, dt * 4f)
+        bossZoom += ((if (near && !Prefs.reduceMotion) 0.92f else 1f) - bossZoom) * min(1f, dt * 4f)
         if (near) {
             val e = enemies[boss]
             val real = (e.hp / e.maxHp).coerceIn(0f, 1f)
@@ -1593,7 +1596,7 @@ class Game {
         for (w in walls) if (w.built) defence += w.hp
         if (lastDefence >= 0f && defence < lastDefence - 0.01f && combo > 0) {
             combo = 0; comboBreak = 0.15f
-            if (!Prefs.cap60) shake = max(shake, 4f)
+            if (!Prefs.reduceMotion) shake = max(shake, 4f)
             Audio.play(Sfx.COMBO_BREAK)
         }
         lastDefence = defence
@@ -1718,7 +1721,12 @@ class Game {
     // ---------------------------------------------------------------- save
     // shortcut: plain "k=v" text, written at each wave start and level-up; a format change just drops old saves.
 
-    private fun saveGame() { if (realm != null) saveRealm() else Storage.saveGame(saveString()) }
+    // the previous save stays as a backup; SharedPreferences writes the whole file then renames it, so a kill can't truncate it
+    private fun saveGame() {
+        if (realm != null) { saveRealm(); return }
+        Storage.saveText("game_prev", Storage.loadGame())
+        Storage.saveGame(saveString())
+    }
 
     private fun saveString(): String {
         val sb = StringBuilder("v1")
@@ -2563,7 +2571,7 @@ class Game {
                         stackBump = 1f
                         if (!c.auto) {
                             coinCombo = if (time - lastCoinTime < 0.4f) coinCombo + 1 else 0
-                            if (coinCombo > 0 && coinCombo % 10 == 0 && !Prefs.cap60) shake = max(shake, 2f)
+                            if (coinCombo > 0 && coinCombo % 10 == 0 && !Prefs.reduceMotion) shake = max(shake, 2f)
                             lastCoinTime = time
                             Audio.play(Sfx.COIN, 0.5f, 1f + min(coinCombo, 30) * 0.02f) // the tick climbs 2 % per coin
                             if (coins % 10 == 0) Audio.haptic(Haptic.LIGHT)
@@ -2658,7 +2666,7 @@ class Game {
             impact = true
             if (++chargeHits >= 5) Ach.unlock("charge_trample")
         }
-        if (impact && !Prefs.cap60) hitStop = max(hitStop, 0.04f)
+        if (impact && !Prefs.reduceMotion) hitStop = max(hitStop, 0.04f)
         for (c in coinsOnGround) if (c.active && c.state == 1 && hypot(c.x - kx, c.y - ky) < 90f) { c.state = 2; c.t = 0f; c.vx = 0f }
     }
 

@@ -1310,7 +1310,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         }
         if (g.rainAmt > 0.01f) {
             drawRect(RAIN_TINT, alpha = 0.2f * g.rainAmt)
-            if (fi != null && !Prefs.cap60) {
+            if (fi != null && !Prefs.reduceMotion) {
                 val tn = tint(0xFFCFE0FFL)
                 val dw = 2f * density
                 for (i in 0 until 120) { // positions from the index and the clock: no state to keep
