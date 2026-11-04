@@ -976,7 +976,56 @@ def build_torch():
     return root
 
 
-V6_NAMES = ("banner", "banner_burning", "banner_neutral", "torch")
+V6_NAMES = ("banner", "banner_burning", "banner_neutral", "torch",
+            "camp_red", "camp_main_red", "ruin", "village_ruined", "village", "home_red", "mountain", "hills")
+
+
+def build_camp(main=False):
+    """Enemy camp for the Realm: red tents around a fire, red flag, weapon rack and barrels; the main camp of a
+    region is a red castle with two towers."""
+    if main:
+        prop(HEX + "buildings/red/building_castle_red.gltf", 3.0, rot_z=math.radians(12))
+        prop(HEX + "buildings/red/building_tower_A_red.gltf", 2.2, loc=(-2.6, -1.2, 0))
+        prop(HEX + "buildings/red/building_tower_B_red.gltf", 2.2, loc=(2.6, 0.8, 0))
+        prop(HEX + "decoration/props/flag_red.gltf", 2.2, loc=(-1.4, -2.6, 0))
+        return
+    for (x, y, r) in ((-1.05, 0.55, 30), (1.05, 0.65, -40), (0.15, -1.15, 160)):
+        prop(HEX + "decoration/props/tent.gltf", 1.9, loc=(x, y, 0), rot_z=math.radians(r))
+    prop(HEX + "decoration/props/flag_red.gltf", 2.4, loc=(0.0, 1.5, 0))
+    prop(HEX + "decoration/props/weaponrack.gltf", 1.8, loc=(-1.6, -0.9, 0), rot_z=math.radians(20))
+    prop(HEX + "decoration/props/barrel.gltf", 1.8, loc=(1.7, -0.5, 0))
+    prop(HEX + "decoration/props/crate_A_small.gltf", 1.8, loc=(1.5, -1.0, 0))
+    # crude stake palisade around the camp, open at the front
+    for i in range(10):
+        a = math.radians(30 + 300 * i / 9)
+        cyl((2.1 * math.cos(a), 2.1 * math.sin(a), 0.45), 0.09, 0.05, 1.0, M["wood"], rot=(math.radians(8) * math.sin(a), math.radians(8) * math.cos(a), 0), seg=6)
+    # camp fire: ring of stones, logs, flame
+    for i in range(7):
+        a = i * 2 * math.pi / 7
+        sphere((0.45 * math.cos(a), 0.45 * math.sin(a), 0.07), 0.11, mat("stone", (0.45, 0.46, 0.5), rough=0.9), seg=8)
+    cyl((0, 0, 0.1), 0.06, 0.06, 0.6, M["wood"], rot=(0, math.pi / 2, 0), seg=8)
+    cyl((0, 0, 0.1), 0.06, 0.06, 0.6, M["wood"], rot=(math.pi / 2, 0, 0), seg=8)
+    sphere((0, 0, 0.35), (0.26, 0.26, 0.42), mat("flame", (1.0, 0.6, 0.15), emit=(1.0, 0.55, 0.1), strength=40.0), seg=10)
+
+
+def v7_sprites():
+    """Realm props."""
+    if want("camp_red"):
+        clear_models(); build_camp(False); static_sprite("camp_red", 800, 64, center=(0, 0, 1.0))
+    if want("camp_main_red"):
+        clear_models(); build_camp(True); static_sprite("camp_main_red", 900, 64, center=(0, 0, 2.6))
+    for name, path, scale, rot, h in (
+            ("ruin", "buildings/neutral/building_destroyed.gltf", 2.6, 10, 1.2),
+            ("village_ruined", "buildings/neutral/building_scaffolding.gltf", 2.6, -10, 1.6),
+            ("village", "buildings/blue/building_home_A_blue.gltf", 2.6, 15, 1.8),
+            ("home_red", "buildings/red/building_home_A_red.gltf", 2.6, -20, 1.8),
+            ("mountain", "decoration/nature/mountain_B_grass_trees.gltf", 2.6, 0, 2.4),
+            ("hills", "decoration/nature/hills_A_trees.gltf", 2.6, 0, 1.4)):
+        if want(name):
+            clear_models()
+            prop(HEX + path, scale, rot_z=math.radians(rot))
+            static_sprite(name, 800, 64, center=(0, 0, h))
+
 
 
 def v6_sprites():
@@ -1916,7 +1965,8 @@ def pack():
              "wolf", "enemyArcher", "shieldman", "ram", "ogre", "darkLord", "lancer", "archerElite",
              "farm", "barracks", "ballistaTop", "mine", "boulder",
              "market", "blacksmith", "church", "stable", "watermill", "well", "lumbermill",
-             "banner", "bannerBurning", "bannerNeutral", "torch"]
+             "banner", "bannerBurning", "bannerNeutral", "torch",
+             "campRed", "campMainRed", "ruin", "villageRuined", "village", "homeRed", "mountain", "hills"]
     names = [n for n in order if n in existing] + [n for n in existing if n not in order]
     lines = [
         "package com.hexcrown.game",
@@ -1944,6 +1994,7 @@ if not os.environ.get("HEXCROWN_LIB"):  # render_ui.py imports this file as a li
         v5_sprites()
     if ONLY is not None and any(n in ONLY for n in V6_NAMES):
         v6_sprites()
+        v7_sprites()
     if ONLY is not None and any(n in ONLY for n in ("grass_tile", "road_tile", "cliff_tile", "tuft0", "tuft1", "flower0", "flower1",
                                                       "bush", "stump", "barrel", "crate", "tent", "wheelbarrow", "lumber", "weaponrack")):
         terrain_sprites()
