@@ -76,6 +76,7 @@ private val TEXTS: Map<String, Array<String>> = mapOf(
     "boss.3" to arrayOf("Le Seigneur Errant", "The Roaming Lord"),
     "realm" to arrayOf("Royaume", "Realm"),
     "realm.locked" to arrayOf("Termine le niveau 5", "Finish level 5"),
+    "word.camp" to arrayOf("Camp", "Camp"),
     "realm.new" to arrayOf("Nouveau", "New"),
     "realm.pill" to arrayOf("Royaume {0} / {1}", "Realm {0} / {1}"),
     "realm.crowned" to arrayOf("RÉGION COURONNÉE !", "REGION CROWNED!"),

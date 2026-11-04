@@ -1303,7 +1303,8 @@ class Game {
     @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
     fun startRealm(cls: Int = heroClass) {
         var m: Realm? = null
-        for (saved in arrayOf(Storage.loadText("realm"), Storage.loadText("realm_prev"))) { // a damaged save falls back on the one before
+        val current = Storage.loadText("realm") // no save means a new Realm: the backup only stands in for a damaged save
+        for (saved in arrayOf(current, if (current != null) Storage.loadText("realm_prev") else null)) {
             if (saved != null && m == null) runCatching {
                 val parts = saved.split('#', limit = 3)
                 val r = VarReader(kotlin.io.encoding.Base64.decode(parts[0]))
@@ -2212,6 +2213,15 @@ class Game {
     private fun cheapestSite(): Int {
         var best = -1
         for (p in pads) if (p.visible && p.kind != PAD_TOWER_ARCHER) { val c = p.cost - p.paid; if (best < 0 || c < best) best = c }
+        return best
+    }
+
+    /** The nearest camp still standing, what the Realm's edge arrow points at. */
+    val nearestCamp: RealmCamp? get() {
+        val m = realm ?: return null
+        var best: RealmCamp? = null
+        var bestD = Float.MAX_VALUE
+        for (c in m.camps) if (!c.cleared) { val d = hypot(c.x - kx, c.y - ky); if (d < bestD) { bestD = d; best = c } }
         return best
     }
 

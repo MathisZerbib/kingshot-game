@@ -17,4 +17,22 @@ class SaveTest {
         assertEquals(3, h.level)
         Storage.saveGame(null); Storage.saveText("game_prev", null)
     }
+
+    @Test fun anErasedRealmStaysErased() {
+        val g = Game()
+        Storage.saveText("realm", null); Storage.saveText("realm_prev", null)
+        g.startRealm(CLASS_WARRIOR)
+        g.realm!!.crowned[0] = true
+        g.onBackground()
+        Storage.saveText("realm_prev", Storage.loadText("realm"))
+        Storage.saveText("realm", null)
+        val fresh = Game()
+        fresh.startRealm(CLASS_WARRIOR)
+        assertEquals(false, fresh.realm!!.crowned[0])
+        Storage.saveText("realm", "abimee")
+        val back = Game()
+        back.startRealm(CLASS_WARRIOR)
+        assertEquals(true, back.realm!!.crowned[0])
+        Storage.saveText("realm", null); Storage.saveText("realm_prev", null)
+    }
 }

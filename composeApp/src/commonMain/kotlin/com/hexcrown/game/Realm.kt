@@ -13,6 +13,10 @@ const val BLOCK_NONE: Byte = 0
 const val BLOCK_WATER: Byte = 1
 const val BLOCK_ROCK: Byte = 2
 const val CHUNK_RADIUS = 2000f // 12 hexes
+// x, y of the decor guaranteed around the spawn (grove, rock, bush in turn); the view is about 610 x 1360 around the king
+private val HOME_DECOR = floatArrayOf(589f, 1808f, 630f, 1944f, 582f, 1462f, 596f, 2162f, 616f, 1720f, 956f, 2100f, 895f, 1332f, 1092f, 1890f, 700f, 2240f, 936f, 2284f)
+private const val HOME_CLEAR = 540f // the keep, its buildings and pads stand inside
+private const val HOME_REACH = 2600f // where the regions start
 const val REALM_VERSION = 2
 
 /** Varints in a growing buffer: the realm save. */
@@ -133,9 +137,10 @@ class Realm(val seed: Int) {
         buildSeams(mountainLists, spin)
         // the tile props may have landed on a road: drop them, then scatter the rest of the decor around
         for (i in 0 until REGIONS) scatter(i, rnd, treeLists[i], rockLists[i], propLists[i], flatLists[i], homeLists[i])
-        chunks = Array(REGIONS) { i ->
+        val regionChunks = Array(REGIONS) { i ->
             RealmChunk(centerX[i], centerY[i], offRoad(treeLists[i]), offRoad(rockLists[i]), offRoad(propLists[i]), mountainLists[i].toFloatArray(), homeLists[i].toFloatArray(), offRoad(flatLists[i]))
         }
+        chunks = regionChunks + homeChunk(seed)
         bosses = arrayOf(
             RealmBoss("boss.0", 0, 1, 2), RealmBoss("boss.1", 1, 3, 4), RealmBoss("boss.2", 1, 5, 6), RealmBoss("boss.3", 2, 7, 8),
         )
@@ -293,6 +298,39 @@ class Realm(val seed: Int) {
             } ?: a0
             homes.add(cx + cos(a) * 360f); homes.add(cy + sin(a) * 260f)
         }
+    }
+
+    /**
+     * The land around the keep, outside every region: decor guaranteed on the view seen from the first second, then a looser scatter.
+     * Its own generator: the camps and roads of an existing save don't move.
+     */
+    private fun homeChunk(seed: Int): RealmChunk {
+        val rnd = Random(seed xor 0x48C0)
+        val cx = World.CASTLE_X; val cy = World.CASTLE_Y
+        val trees = ArrayList<Float>(); val rocks = ArrayList<Float>(); val props = ArrayList<Float>(); val flats = ArrayList<Float>(); val homes = ArrayList<Float>()
+        fun free(x: Float, y: Float): Boolean { val h = grid.hexAt(x, y); return !roadHex[h.index] && blocked[h.index] == BLOCK_NONE }
+        fun tree(x: Float, y: Float) { trees.add(x); trees.add(y); trees.add(0.7f + rnd.nextFloat() * 0.6f) }
+        fun rock(x: Float, y: Float) { rocks.add(x); rocks.add(y); rocks.add(0.5f + rnd.nextFloat() * 0.7f) }
+        fun prop(x: Float, y: Float) { props.add(x); props.add(y); props.add(if (rnd.nextBoolean()) PROP_STUMP else PROP_BUSH) }
+        fun grove(x: Float, y: Float) { tree(x, y); repeat(2) { tree(x + (rnd.nextFloat() - 0.5f) * 170f, y + (rnd.nextFloat() - 0.5f) * 120f) } }
+        var k = 0
+        while (k < HOME_DECOR.size) { // placed by hand in the free spots of the first screen, between the pads and the buildings
+            val x0 = HOME_DECOR[k]; val y0 = HOME_DECOR[k + 1]
+            val x = (0 until 6).map { x0 + it * 50f }.firstOrNull { free(it, y0) } ?: x0
+            when (k / 2 % 3) { 0 -> grove(x, y0); 1 -> rock(x, y0); else -> prop(x, y0) }
+            k += 2
+        }
+        repeat(3) { k -> // the keep's own hamlet; houses keep the spots the ring left free
+            val a0 = 0.9f + k * 2.1f
+            val a = (0 until 8).map { a0 + it * 0.3f }.firstOrNull { free(cx + cos(it) * 700f, cy + sin(it) * 700f) } ?: a0
+            homes.add(cx + cos(a) * 700f); homes.add(cy + sin(a) * 700f)
+        }
+        fun spot(from: Float): FloatArray { val a = rnd.nextFloat() * 6.28f; val r = from + rnd.nextFloat() * (HOME_REACH - from); return floatArrayOf(cx + cos(a) * r, cy + sin(a) * r) }
+        repeat(30) { val p = spot(900f); grove(p[0], p[1]) }
+        repeat(40) { val p = spot(HOME_CLEAR); rock(p[0], p[1]) }
+        repeat(40) { val p = spot(HOME_CLEAR); prop(p[0], p[1]) }
+        repeat(500) { val p = spot(HOME_CLEAR); flats.add(p[0]); flats.add(p[1]); flats.add(rnd.nextInt(4).toFloat()) }
+        return RealmChunk(cx, cy, offRoad(trees), offRoad(rocks), offRoad(props), FloatArray(0), homes.toFloatArray(), offRoad(flats))
     }
 
     /** Keeps decor off the roads, off the camps and off blocked hexes. */

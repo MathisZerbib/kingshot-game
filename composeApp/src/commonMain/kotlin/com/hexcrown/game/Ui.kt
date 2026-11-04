@@ -175,6 +175,7 @@ fun KitButton(
     width: Dp = 260.dp, height: Dp = 64.dp, textColor: Color = Color.White, enabled: Boolean = true,
     titleSize: Int = if (height >= 64.dp) 22 else 17, shine: Boolean = false, iconSize: Dp? = null, caps: Boolean = true, onClick: () -> Unit,
 ) {
+    val ink = if (res == Res.drawable.ui_button_green && textColor == Color.White) Pal.ink else textColor // white on this green is only 2.1:1
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
     val sc by animateFloatAsState(if (pressed) 0.97f else 1f, if (pressed) tween(100) else tween(160, easing = ExpoOut))
@@ -205,10 +206,10 @@ fun KitButton(
                 Spacer(Modifier.width(8.dp))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GText(text, titleSize, textColor, title = true, caps = caps)
+                GText(text, titleSize, ink, title = true, caps = caps)
                 if (sub != null) AnimatedContent(sub, transitionSpec = {
                     (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
-                }) { GText(it, 13, textColor.copy(alpha = 0.92f), shadow = textColor == Color.White) }
+                }) { GText(it, 13, ink.copy(alpha = 0.92f), shadow = ink == Color.White) }
             }
         }
     }
