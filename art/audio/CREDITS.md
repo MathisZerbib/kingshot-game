@@ -12,33 +12,17 @@ All third-party audio below is **CC0 1.0 (public domain)**: free for any use, no
 
 Converted to AAC 128 kb/s, loudness normalised to -18 LUFS.
 
-## Sound effects (Kenney.nl)
+## Sound effects (recorded CC0 sources, built by art/audio/make_sfx_natural.py)
 
-Packs: RPG Audio, Impact Sounds, UI Audio, Music Jingles by Kenney Vleugels (https://kenney.nl/assets), CC0.
+Since v1.2 every effect in `files/sfx/` is assembled from real recordings (no oscillators), layered, filtered and loudness-matched by `art/audio/make_sfx_natural.py`. The per-file source list is generated in [`sfx_sources.md`](sfx_sources.md).
 
-| Game file | Kenney file | Pack |
-|---|---|---|
-| `hit.wav` | impactMetal_light_000 | Impact Sounds |
-| `hit_flesh.wav` | impactPunch_medium_000 | Impact Sounds |
-| `coin_stack.wav` | handleCoins2 | RPG Audio |
-| `build.wav` | impactWood_heavy_000 | Impact Sounds |
-| `gate.wav` | doorOpen_1 | RPG Audio |
-| `victory.wav` | jingles_PIZZI02 | Music Jingles |
-| `defeat.wav` | jingles_PIZZI07 | Music Jingles |
-| `click.wav` | click1 | UI Audio |
-| `level_up.wav` | jingles_PIZZI12 | Music Jingles |
-| `king_hurt.wav` | impactPunch_heavy_000 | Impact Sounds |
-| `wall_break.wav` | impactWood_heavy_003 | Impact Sounds |
-| `recruit.wav` | drawKnife1 | RPG Audio |
-| `forge.wav` | impactMetal_heavy_000 | Impact Sounds |
-| `repair.wav` | impactMining_001 | Impact Sounds |
+| Library | Author | Licence | Used for |
+|---|---|---|---|
+| CC0 Public Domain Sounds collection (Kenney RPG Audio / Impact Sounds / Interface Sounds / UI Audio, 80 CC0 RPG SFX, 80 CC0 creature SFX 1 & 2, 100 CC0 wood & metal SFX, 75 CC0 breaking-falling-hit SFX, 40 CC0 water-splash-slime SFX, 30 CC0 SFX loops, Micro Pack Organic Wooshes, Micro Pack Record Fuzzies) | Kenney Vleugels (https://kenney.nl), rubberduck, Lavender (https://github.com/lavenderdotpet/CC0-Public-Domain-Sounds) and the pack authors listed there | CC0 1.0 | impacts, wood, cloth, coins, doors, creatures, whooshes, rain |
+| Versilian Community Sample Library (VCSL) | Versilian Studios, Samuel Gossner and contributors (https://github.com/sgossner/VCSL) | CC0 1.0 | glockenspiel, tubular bells, hand chimes, mark tree, bell tree, finger cymbals, clash and suspended cymbals, anvil, timpani, bass drum, frame drum, concert and folk harps, bass recorder, didgeridoo |
 
-Converted to mono 22 050 Hz 16-bit WAV, leading silence trimmed, loudness normalised.
-
-## Generated in-house (art/audio/gen_sfx.py)
-
-`shoot.wav`, `coin.wav`, `wave_horn.wav`, `boss_roar.wav`, `ability.wav`: no CC0 equivalent fitted (bow release, coin ping, war horn, roar, magic burst).
+Converted to mono 22 050 Hz 16-bit WAV, leading silence trimmed, loudest 50 ms window normalised per sound.
 
 ## Généré (art/audio/gen_sfx.py)
 
-`files/music/realm.m4a` (exploration du Royaume) et les effets `banner`, `burn`, `extinguish`, `charge`, `relic`, `combo_*`, `achievement`, `night`, `rain_start`, `boss_down`, `star`, `crown`, `tab`, `swipe` sont synthétisés par le script, sans source tierce.
+`files/music/realm.m4a` (exploration du Royaume) est encore synthétisé par le script, sans source tierce. Les anciens effets synthétisés de `gen_sfx.py` sont remplacés par les enregistrements ci-dessus.
