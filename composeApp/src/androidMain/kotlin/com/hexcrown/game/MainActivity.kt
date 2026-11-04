@@ -20,6 +20,10 @@ actual object Storage {
         prefs?.edit()?.putInt("best", value)?.apply()
     }
     actual fun loadInt(key: String): Int = prefs?.getInt(key, 0) ?: 0
+    actual fun loadText(key: String): String? = prefs?.getString("text_$key", null)
+    actual fun saveText(key: String, value: String?) {
+        prefs?.edit()?.apply { if (value == null) remove("text_$key") else putString("text_$key", value) }?.apply()
+    }
     actual fun saveInt(key: String, value: Int) {
         prefs?.edit()?.putInt(key, value)?.apply()
     }

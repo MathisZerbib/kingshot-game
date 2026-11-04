@@ -14,6 +14,13 @@ actual object Storage {
     actual fun saveBest(value: Int) = prefs.putInt("best", value)
     actual fun loadInt(key: String): Int = prefs.getInt(key, 0)
     actual fun saveInt(key: String, value: Int) = prefs.putInt(key, value)
+    // Preferences cap values at 8 KB, too small for the realm: a plain file on desktop
+    private fun textFile(key: String) = java.io.File(System.getProperty("user.home"), ".hexcrown/desktop-$key.txt")
+    actual fun loadText(key: String): String? = textFile(key).takeIf { it.exists() }?.readText()
+    actual fun saveText(key: String, value: String?) {
+        val f = textFile(key)
+        if (value == null) f.delete() else { f.parentFile.mkdirs(); f.writeText(value) }
+    }
     actual fun loadGame(): String? = prefs.get("game", null)
     actual fun saveGame(value: String?) = if (value == null) prefs.remove("game") else prefs.put("game", value)
 }

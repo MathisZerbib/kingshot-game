@@ -83,6 +83,12 @@ l'architecture, **zéro plagiat** de Kingshot (Century Games), publication Play 
   `class HexGrid(chunks)`, `object Flow { fun dir(x,y, target): Vec }`, `class Spawner(camp)` ; `Game.update`
   ne doit plus itérer sur des tableaux globaux mais sur les chunks actifs.
 
+### État du Royaume en v1.1
+Livré : carte par graine (maison au centre, 7 régions en anneau), 12 camps, 4 boss, 5 villages, flux vers la bannière la
+plus proche, brouillard, couronnes, sauvegarde `realm`. Pas encore : `Game.update` ne parcourt pas tout par chunk (seuls les
+ennemis et le décor dorment hors de portée), la maison reste la carte du niveau 1, les ennemis sur le terrain rentrent
+au camp à la reprise.
+
 ## 5. Publication (Play Store d'abord)
 - **Signature** : keystore `~/.hexcrown/release.jks` créé sur le Mac (hors git), `keystore.properties`
   ignoré par git, lu par `composeApp/build.gradle.kts` ; sinon fallback debug pour les installs locales.

@@ -109,7 +109,7 @@ fun MainMenu(
     hasSave: Boolean, savedLevel: Int, savedClass: Int, best: Int,
     picked: Int, onPick: (Int) -> Unit, metaTick: Int,
     onContinue: () -> Unit, onNew: () -> Unit, onSettings: () -> Unit, onMeta: (Int) -> Unit, onDaily: () -> Unit,
-    onShop: () -> Unit = {},
+    onShop: () -> Unit = {}, onRealm: () -> Unit = {},
 ) {
     metaTick // re-read Meta after purchases
     val reduced = Prefs.cap60
@@ -170,6 +170,7 @@ fun MainMenu(
                     Res.drawable.ui_button_gold, L["play.new"], L.f("play.new.sub", CLASS_NAMES[picked]), Res.drawable.ui_icon_play,
                     width = 253.dp, height = 56.dp, textColor = Pal.ink, titleSize = 24, shine = true, onClick = onNew,
                 )
+                RealmEntry(onRealm)
                 if (hasSave) NewGameLink(onNew) else Spacer(Modifier.height(10.dp))
             }
             Box(Modifier.enter(340, 420, 16f)) {
@@ -178,6 +179,46 @@ fun MainMenu(
             }
             Spacer(Modifier.height(6.dp))
         }
+    }
+}
+
+/** Realm entry: a glass card with the hex icon; padlock until level 5 is done, « New » until first opened. */
+@Composable
+private fun RealmEntry(onRealm: () -> Unit) {
+    val open = Stats.bestLevel >= 6
+    val src = remember { MutableInteractionSource() }
+    Box(Modifier.padding(top = 8.dp)) {
+        Row(
+            Modifier.width(253.dp).height(48.dp).nine(Res.drawable.ui_card, IN_CARD, 0.2f)
+                .clickable(src, indication = null, enabled = open) { Audio.play(Sfx.CLICK); Storage.saveInt("realm_seen", 1); onRealm() }.padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
+        ) {
+            KitIcon(Res.drawable.ui_icon_hex, 30.dp, grey = !open)
+            Spacer(Modifier.width(8.dp))
+            GText(if (open) L["realm"] else L["realm.locked"], if (open) 18 else 14, if (open) Color.White else Color(0xFFAAB4D2), title = open, caps = false)
+            if (!open) { Spacer(Modifier.width(6.dp)); KitIcon(Res.drawable.ui_icon_lock, 20.dp) }
+        }
+        if (open && Storage.loadInt("realm_seen") == 0) Box(
+            Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp).background(Pal.red, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
+        ) { GText(L["realm.new"], 11, weight = FontWeight.Black, shadow = false) }
+    }
+}
+
+/** The 7 regions around home, as hexes; crowned ones in gold. */
+@Composable
+private fun RealmMap(m: Realm) {
+    GText(L["realm.map"], 14, Color.White, title = true, caps = false)
+    Canvas(Modifier.size(200.dp)) {
+        val c = Offset(size.width / 2f, size.height / 2f)
+        val k = size.minDimension / 2f / (m.maxX - m.minX).coerceAtLeast(m.maxY - m.minY) * 1.8f
+        fun hex(x: Float, y: Float, r: Float, col: Color) {
+            val p = androidx.compose.ui.graphics.Path()
+            for (i in 0..5) { val a = (60f * i - 90f) * 0.0174533f; val px = x + kotlin.math.cos(a) * r; val py = y + kotlin.math.sin(a) * r; if (i == 0) p.moveTo(px, py) else p.lineTo(px, py) }
+            p.close()
+            drawPath(p, col)
+        }
+        hex(c.x, c.y, 22.dp.toPx(), Color(0xFF4A7BD6))
+        for (i in 0 until REGIONS) hex(c.x + (m.centerX[i] - World.CASTLE_X) * k, c.y + (m.centerY[i] - World.CASTLE_Y) * k, 18.dp.toPx(), if (m.crowned[i]) Color(0xFFFFD65A) else Color(0xFF3A4464))
     }
 }
 
@@ -382,8 +423,9 @@ fun PausePanel(game: Game, onResume: () -> Unit, onSettings: () -> Unit, onMenu:
     var tick by remember { mutableIntStateOf(0) }
     tick
     KitPanel(L["pause"], dark = true) {
-        GText(L.f("pause.sub", CLASS_NAMES[game.heroClass], game.level, game.wave), 14)
-        GText(L["pause.saved"], 11, Color(0xFFB8C4E0))
+        val rm = game.realm
+        if (rm != null) RealmMap(rm) else GText(L.f("pause.sub", CLASS_NAMES[game.heroClass], game.level, game.wave), 14)
+        if (!game.isRealm) GText(L["pause.saved"], 11, Color(0xFFB8C4E0))
         KitButton(Res.drawable.ui_button_green, L["resume"], icon = Res.drawable.ui_icon_play, onClick = onResume)
         KitButton(Res.drawable.ui_button_blue, L["settings"], icon = Res.drawable.ui_icon_gear, width = 220.dp, height = 52.dp, onClick = onSettings)
         KitButton(Res.drawable.ui_button_wood, L["mainmenu"], icon = Res.drawable.ui_icon_flag, width = 220.dp, height = 52.dp, onClick = onMenu)

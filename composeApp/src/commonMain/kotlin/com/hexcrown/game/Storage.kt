@@ -10,4 +10,7 @@ expect object Storage {
     /** Small persistent counters (treasure, hero upgrades). */
     fun loadInt(key: String): Int
     fun saveInt(key: String, value: Int)
+    /** Long text (the realm save); null when absent, null to delete. */
+    fun loadText(key: String): String?
+    fun saveText(key: String, value: String?)
 }

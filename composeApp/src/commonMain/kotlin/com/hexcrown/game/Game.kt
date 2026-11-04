@@ -129,6 +129,7 @@ class Enemy {
     var swing = 0f
     var hitFlash = 0f
     var chargedBy = 0 // last king charge that hit this enemy
+    var camp = -1 // Realm: index of its camp; -2 - i for roaming boss i; -1 otherwise
     var knockT = -1f // animated knockback (Tourbillon, charge): seconds elapsed, -1 when none
     var knockDx = 0f
     var knockDy = 0f
@@ -204,6 +205,9 @@ class FlyCoin {
 
 // ---------------------------------------------------------------- ability effects (art/fx/FX.md)
 const val TUTO_DONE = 6
+const val PAD_VILLAGE = 40
+const val REALM_REACH = 1900f // 1.5 screens around the king, in world px
+const val REALM_MAX_ENEMIES = 60
 const val INCOME_CAP = 2f // territory income ceiling, coins per second
 const val INCOME_CAP_TALENT = 0.5f // per rank of the Purse talent
 const val FX_RING = 0
@@ -407,6 +411,20 @@ class Game {
     var abilityT = -1f // seconds since the cast, -1 when no ability is playing
     var abilityCls = 0
     var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
+    // the open world, null in the levels
+    var realm: Realm? = null; private set
+    val isRealm get() = realm != null
+    private val flowOut = FloatArray(2)
+    private var flowVersion = -1
+    private var flowTimer = 0f
+    private var cycleT = 0f
+    private var autosaveT = 0f
+    private var lastKingHex = -1
+    var crownBanner = 0f // seconds left on the « region crowned » title
+    var crownRegion = 0
+    /** Roaming boss within sight, for the HUD band (pool index), or -1. */
+    var bossInSight = -1; private set
+
     // run relics
     val relics = BooleanArray(RELIC_COUNT)
     val relicChoices = IntArray(3)
@@ -748,6 +766,9 @@ class Game {
         heroPower = (1f + 0.08f * Meta.level(heroClass, UP_POWER)) * (1f + 0.01f * min(50, Hero.level - 1))
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
         for (f in fx) f.active = false
+        realm = null
+        World.boundMinX = 0f; World.boundMinY = 0f; World.boundMaxX = World.W; World.boundMaxY = World.H
+        bossInSight = -1; crownBanner = 0f; flowVersion = -1; lastKingHex = -1; cycleT = 0f; autosaveT = 0f
         grid.clear(); bannersPlanted = 0; kChargeT = 0f; kChargeCd = 0f
         grid.plant(grid.hexAt(World.CASTLE_X, World.CASTLE_Y), animated = false) // starting lands: a flower around the keep
         relics.fill(false); aWolf.fill(false); relicOpen = false; relicDelay = 0f; draftsNoRare = 0; nextRare = false; freeRevive = false; wolvesTamedRun = 0
@@ -861,6 +882,7 @@ class Game {
 
     /** Share of this level's construction done (towers, their archers, walls): the HUD progress bar. */
     val levelProgress: Float get() {
+        realm?.let { m -> return m.crowned.count { it } / REGIONS.toFloat() }
         if (isEndless) return (wave % 10) / 10f
         if (level >= 5) return (levelWaves.toFloat() / goalWaves).coerceIn(0f, 1f)
         var done = 0
@@ -878,7 +900,7 @@ class Game {
     val goalWaves get() = if (level <= 4) 0 else if (level > World.LAST_LEVEL) Int.MAX_VALUE else 3 + level / 4
     val isEndless get() = level > World.LAST_LEVEL
 
-    private fun levelDone(): Boolean = level <= 4 &&
+    private fun levelDone(): Boolean = realm == null && level <= 4 &&
         towers.all { it.built && it.archers >= TOWER_SLOTS } && walls.all { it.built && it.hp > 0f }
 
     /** Next level: bank loose coins, clear the field, grow the map (everything built stays), maybe enter a new age. */
@@ -1204,6 +1226,138 @@ class Game {
         state = STATE_PLAY
     }
 
+    // ---------------------------------------------------------------- the Realm
+
+    /** Resumes the saved realm, or founds a new one. Levels and their save are left alone. */
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    fun startRealm(cls: Int = heroClass) {
+        val saved = Storage.loadText("realm")
+        var m: Realm? = null
+        if (saved != null) runCatching {
+            val parts = saved.split('#', limit = 3)
+            val r = VarReader(kotlin.io.encoding.Base64.decode(parts[0]))
+            m = Realm.unpack(r)
+            val loaded = m
+            if (loaded != null && restore(parts[2])) {
+                grid.unpackFrom(r)
+                val pos = parts[1].split(',')
+                kx = pos[0].toFloat(); ky = pos[1].toFloat(); cycleT = pos[2].toFloat(); wave = pos[3].toInt()
+            } else m = null
+        }.onFailure { m = null }
+        if (m == null) {
+            heroClass = cls
+            reset()
+            m = Realm(Random.nextInt(1, Int.MAX_VALUE))
+        }
+        attachRealm(m!!)
+    }
+
+    private fun attachRealm(m: Realm) {
+        realm = m
+        tutorial = TUTO_DONE
+        World.boundMinX = m.minX; World.boundMinY = m.minY; World.boundMaxX = m.maxX; World.boundMaxY = m.maxY
+        fogR = 0f
+        for (i in m.villages.indices) { val v = m.villages[i]; if (!v.rebuilt) pads.add(Pad(PAD_VILLAGE, v.x, v.y, i).also { it.cost = price(v.cost) }) }
+        val home = grid.hexAt(World.CASTLE_X, World.CASTLE_Y)
+        m.reveal(home, 9)
+        for (i in 0 until grid.count) { val h = grid.at(i); if (grid.hasBanner(h)) m.reveal(h, 3) }
+        for (b in m.bosses) b.enemy = -1
+        camX = kx; camY = ky
+        state = STATE_PLAY
+        checkpoint = null
+    }
+
+    /** The world in varints (map, camps, villages, fog, hexes), then the run through the usual save string. Enemies on the field go back to their camps. */
+    @OptIn(kotlin.io.encoding.ExperimentalEncodingApi::class)
+    private fun saveRealm() {
+        val m = realm ?: return
+        val w = VarWriter()
+        m.packTo(w)
+        grid.packTo(w)
+        Storage.saveText("realm", kotlin.io.encoding.Base64.encode(w.bytes()) + "#" + kx + "," + ky + "," + cycleT + "," + wave + "#" + saveString())
+    }
+
+    private fun updateRealm(dt: Float) {
+        val m = realm ?: return
+        m.updateActive(kx, ky, REALM_REACH)
+        // the fog lifts around the king
+        val kh = grid.hexAt(kx, ky)
+        if (kh.key != lastKingHex) { lastKingHex = kh.key; m.reveal(kh, 2) }
+        // the field only needs recomputing when the territory changed
+        flowTimer -= dt
+        if (grid.version != flowVersion && flowTimer <= 0f) { flowVersion = grid.version; flowTimer = 0.5f; Flow.compute(grid, m.blocked) }
+        // time of day: the cycle goes on by the minute instead of by the wave
+        cycleT += dt
+        if (cycleT >= 60f) {
+            cycleT -= 60f
+            wave++
+            raining = rnd.nextInt(6) == 0
+            if (raining) { rainSeen = true; Audio.play(Sfx.RAIN_START) }
+            if (max(wave - 1, 0) % 6 == 4) Audio.play(Sfx.NIGHT)
+        }
+        var onField = 0
+        for (e in enemies) if (e.active) onField++
+        for (ci in m.camps.indices) {
+            val c = m.camps[ci]
+            if (c.cleared) continue
+            val near = m.isActive(c.x, c.y, kx, ky, REALM_REACH)
+            if (near && c.garrison > 0 && onField < REALM_MAX_ENEMIES) {
+                val kind = c.spawner.update(dt)
+                if (kind >= 0) {
+                    val a = rnd.nextFloat() * 6.28f
+                    spawnEnemy(kind, 0, 0f, c.x + cos(a) * 120f, c.y + sin(a) * 80f)?.let { e ->
+                        val k = 1f + 0.35f * c.region
+                        e.maxHp *= k; e.hp = e.maxHp; e.dmg *= 1f + 0.15f * c.region; e.camp = ci
+                    }
+                    c.garrison--; c.alive++; onField++
+                }
+            }
+            if (c.garrison <= 0 && c.alive <= 0 && grid.stateAt(c.x, c.y) == HEX_OURS) {
+                c.cleared = true // a friendly ruin now
+                Audio.play(Sfx.BUILD)
+                if (c.main && !m.crowned[c.region]) crown(c.region) else rainLeft += 30 + 10 * c.region
+                if (rainLeft > 0) { rainX = c.x; rainY = c.y; rainRate = 40f }
+                saveRealm()
+            }
+        }
+        bossInSight = -1
+        for (bi in m.bosses.indices) {
+            val b = m.bosses[bi]
+            if (b.dead) continue
+            val home = m.camps[b.campA]
+            if (b.enemy < 0 || !enemies[b.enemy].active || enemies[b.enemy].gen != b.gen) {
+                if (hypot(home.x - kx, home.y - ky) > REALM_REACH + CHUNK_RADIUS) continue
+                val e = spawnEnemy(KIND_BOSS, 0, 0f, home.x, home.y) ?: continue
+                e.bossType = b.bossType; e.camp = -2 - bi
+                e.maxHp *= 1f + 0.5f * bi; e.hp = e.maxHp
+                b.enemy = enemies.indexOf(e); b.gen = e.gen
+            }
+            if (hypot(enemies[b.enemy].x - kx, enemies[b.enemy].y - ky) < 900f) bossInSight = b.enemy
+        }
+        for (v in m.villages) if (v.rebuilt) { // rebuilt villages pay their way
+            v.timer += dt
+            if (v.timer >= 8f && hypot(v.x - kx, v.y - ky) < 1600f) { v.timer = 0f; repeat(3) { dropCoin(v.x, v.y + 40f) } }
+        }
+        if (crownBanner > 0f) crownBanner -= dt
+        autosaveT += dt
+        if (autosaveT >= 30f) { autosaveT = 0f; saveRealm() }
+    }
+
+    /** A region's main camp fell under our banner: fanfare, relic draft, treasure. */
+    private fun crown(region: Int) {
+        val m = realm ?: return
+        m.crowned[region] = true
+        crownRegion = region; crownBanner = 3f
+        Audio.play(Sfx.VICTORY)
+        Audio.haptic(Haptic.HEAVY)
+        Meta.treasure += 300 + 100 * region
+        Ach.unlock("crown_$region")
+        relicDelay = 0.6f
+        spawnFx(FX_GLOW, kx, ky, 0.8f, 0xFFFFD65AL)?.r1 = 6f
+    }
+
+    fun bossName(i: Int): String { val m = realm ?: return ""; return L[m.bosses[-2 - enemies[i].camp].nameKey] }
+
     // ---------------------------------------------------------------- relics, combo, day cycle
 
     /** Removes one squad member; the last one takes its slot. */
@@ -1328,6 +1482,7 @@ class Game {
     /** Back to the start of the current level (same hero, the treasure gets its share first). */
     fun retryLevel() {
         finishRun()
+        if (realm != null) { startRealm(heroClass); return }
         val cp = checkpoint
         if (cp == null || !restore(cp)) reset()
         Storage.saveGame(cp)
@@ -1335,7 +1490,7 @@ class Game {
     }
 
     fun quitRun() {
-        if (state == STATE_OVER) finishRun()
+        if (state == STATE_OVER) finishRun() else if (realm != null) saveRealm()
         toMenu()
     }
 
@@ -1388,7 +1543,7 @@ class Game {
     // ---------------------------------------------------------------- save
     // shortcut: plain "k=v" text, written at each wave start and level-up; a format change just drops old saves.
 
-    private fun saveGame() = Storage.saveGame(saveString())
+    private fun saveGame() { if (realm != null) saveRealm() else Storage.saveGame(saveString()) }
 
     private fun saveString(): String {
         val sb = StringBuilder("v1")
@@ -1540,7 +1695,7 @@ class Game {
         if (state == STATE_PLAY) {
             updateKing(dt)
             updateSquad(dt)
-            updateWaves(dt)
+            if (realm != null) updateRealm(dt) else updateWaves(dt)
             updateEnemies(dt)
             updateTowers(dt)
             updateBuildings(dt)
@@ -1571,7 +1726,7 @@ class Game {
         if (levelUpPending) levelUp()
         if (ringDirty) rebuildRing()
         val ft = fogTarget()
-        fogR = if (fogR <= 0f) ft else fogR + (ft - fogR) * min(1f, dtReal * 1.2f)
+        fogR = if (realm != null) 0f else if (fogR <= 0f) ft else fogR + (ft - fogR) * min(1f, dtReal * 1.2f)
         val zt = max(0.78f, 1f - 0.04f * (level - 1))
         worldZoom += (zt - worldZoom) * min(1f, dtReal * 1.5f)
         if (waveBanner > 0f) waveBanner -= dt
@@ -1640,8 +1795,15 @@ class Game {
         val fdy = ny - World.CASTLE_Y
         val fd = hypot(fdx, fdy)
         if (fogR > 0f && fd > fogR - 70f) { nx = World.CASTLE_X + fdx / fd * (fogR - 70f); ny = World.CASTLE_Y + fdy / fd * (fogR - 70f) }
-        nx = nx.coerceIn(40f, World.W - 40f)
-        ny = ny.coerceIn(60f, World.H - 40f)
+        nx = nx.coerceIn(World.boundMinX + 40f, World.boundMaxX - 40f)
+        realm?.let { m -> // water and rock of the regions stop the king, one axis at a time
+            if (m.blocked[grid.hexAt(nx, ny).index] != BLOCK_NONE) {
+                if (m.blocked[grid.hexAt(nx, ky).index] == BLOCK_NONE) ny = ky
+                else if (m.blocked[grid.hexAt(kx, ny).index] == BLOCK_NONE) nx = kx
+                else { nx = kx; ny = ky }
+            }
+        }
+        ny = ny.coerceIn(World.boundMinY + 60f, World.boundMaxY - 40f)
         if (World.river.isNotEmpty() && World.inRiver(nx, ny)) {
             if (!World.inRiver(nx, ky)) ny = ky
             else if (!World.inRiver(kx, ny)) nx = kx
@@ -1858,6 +2020,7 @@ class Game {
 
     /** Pad the player should go for next (levels 1-3 objective sign), or null. */
     val objective: Pad? get() {
+        if (realm != null) return null
         if (level > 3 || tutorial < TUTO_DONE) return null
         for (k in intArrayOf(PAD_TOWER, PAD_TOWER_ARCHER, PAD_WALL)) for (p in pads) if (p.visible && p.kind == k) return p
         return null
@@ -2094,6 +2257,10 @@ class Game {
 
     private fun killEnemy(e: Enemy) {
         e.active = false
+        realm?.let { m ->
+            if (e.camp >= 0) m.camps[e.camp].alive--
+            else if (e.camp <= -2) m.bosses[-2 - e.camp].dead = true
+        }
         kills++
         pendKills++; pendXp++
         if (e.kind == KIND_BOSS) { pendBosses++; pendXp += 20 }
@@ -2204,7 +2371,7 @@ class Game {
     }
 
     /** Sites only stand on our hexes; repairs (keep, built walls) stay open everywhere. */
-    fun padOpen(p: Pad) = p.kind == PAD_REPAIR || (p.kind == PAD_WALL && walls[p.ref].built) || grid.stateAt(p.x, p.y) == HEX_OURS
+    fun padOpen(p: Pad) = p.kind == PAD_REPAIR || p.kind == PAD_VILLAGE || (p.kind == PAD_WALL && walls[p.ref].built) || grid.stateAt(p.x, p.y) == HEX_OURS
 
     /** Plants a banner on the neutral hex under the king: pays, claims the flower of 7, plays the signature moment. */
     fun plantBanner(): Boolean {
@@ -2213,6 +2380,7 @@ class Game {
         bannersPlanted++
         val h = grid.hexAt(kx, ky)
         grid.plant(h)
+        realm?.reveal(h, 3)
         Ach.unlock("first_banner")
         val held = grid.owned
         if (held >= 7) Ach.unlock("seven_hex")
@@ -2365,6 +2533,13 @@ class Game {
         p.bump = 1f
         burst(p.x, p.y, 10f, 26, 0xFFFFD84AL, 300f)
         when (p.kind) {
+            PAD_VILLAGE -> {
+                realm?.let { m -> m.villages[p.ref].rebuilt = true; m.villages[p.ref].timer = 0f }
+                p.visible = false
+                Audio.play(Sfx.BUILD)
+                if (squad < MAX_SQUAD) { ax[squad] = p.x; ay[squad] = p.y; aDir[squad] = 0; aShoot[squad] = 0f; acd[squad] = 0.3f; aWolf[squad] = false; squad++ }
+                saveGame()
+            }
             PAD_RECRUIT -> {
                 Audio.play(Sfx.RECRUIT)
                 if (squad < MAX_SQUAD) {
@@ -2595,7 +2770,7 @@ class Game {
         World.paths[e.path].sample(s, tmp)
         e.x = tmp.x + e.offX; e.y = tmp.y + e.offY
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
-        e.special = 0f; e.mdx = 0f; e.mdy = 0f; e.stun = 0f; e.slam = 0f
+        e.special = 0f; e.mdx = 0f; e.mdy = 0f; e.stun = 0f; e.slam = 0f; e.camp = -1
         e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
         val hpScale = (if (level == 1) 0.7f else if (level == 2) 0.85f else 1.2f) * (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
         when (kind) {
@@ -2629,6 +2804,8 @@ class Game {
         for (i in enemies.indices) {
             val e = enemies[i]
             if (!e.active) continue
+            val rm = realm
+            if (rm != null && !rm.isActive(e.x, e.y, kx, ky, REALM_REACH)) continue // chunks out of reach sleep
             if (e.hitFlash > 0f) e.hitFlash -= dt
             if (e.swing > 0f) e.swing = max(0f, e.swing - dt * 4f)
             e.atkCd -= dt
@@ -2676,6 +2853,21 @@ class Game {
             }
             if (!kDead && dk < aggro) {
                 tx = kx; ty = ky; target = 1
+            } else if (rm != null) {
+                if (e.camp <= -2) { // roaming boss: back and forth between its two camps
+                    val b = rm.bosses[-2 - e.camp]
+                    val c = rm.camps[if (b.towardsB) b.campB else b.campA]
+                    tx = c.x; ty = c.y
+                    if (hypot(c.x - e.x, c.y - e.y) < 80f) b.towardsB = !b.towardsB
+                } else if (hypot(World.CASTLE_X - e.x, World.CASTLE_Y - e.y) < 340f) {
+                    target = 3
+                    tx = World.CASTLE_X + e.offX * 1.5f
+                    ty = World.CASTLE_Y + 40f + e.offY
+                } else if (Flow.dir(grid, e.x, e.y, flowOut)) {
+                    tx = e.x + flowOut[0] * 80f; ty = e.y + flowOut[1] * 80f
+                } else { // standing on a banner hex: it stays and the hex burns
+                    tx = e.x; ty = e.y
+                }
             } else {
                 val slipsThrough = wall.gate > 0.5f && hypot(e.x - wall.x, e.y - wall.y) < 60f + e.radius
                 val wallBlocks = wall.built && !slipsThrough && e.s >= wall.s - 30f - e.radius && e.s < wall.s + 10f
@@ -2739,7 +2931,7 @@ class Game {
                         damageKing(e.dmg)
                         if (e.kind == KIND_BOSS) shake = max(shake, 9f)
                         if (e.kind == KIND_BOSS && e.bossType == 1 && dk > 1f) { // ogre: hurls the king and scatters the squad
-                            kx = (kx + dkx / dk * 150f).coerceIn(40f, World.W - 40f); ky = (ky + dky / dk * 150f).coerceIn(60f, World.H - 40f)
+                            kx = (kx + dkx / dk * 150f).coerceIn(World.boundMinX + 40f, World.boundMaxX - 40f); ky = (ky + dky / dk * 150f).coerceIn(World.boundMinY + 60f, World.boundMaxY - 40f)
                             for (q in 0 until squad) { ax[q] += (rnd.nextFloat() - 0.5f) * 160f; ay[q] += (rnd.nextFloat() - 0.5f) * 120f }
                             burst(kx, ky, 20f, 20, 0xFF9DA3AAL, 260f)
                         }
@@ -2839,7 +3031,7 @@ class Game {
 
     private fun gameOver() {
         Audio.play(Sfx.DEFEAT)
-        Storage.saveGame(null)
+        if (realm == null) Storage.saveGame(null) // the realm keeps its last autosave, and never touches the level run
         treasureWon = (coins + rainLeft) / 2 // shown on the panel; banked by finishRun()
         castleHp = 0f
         state = STATE_OVER

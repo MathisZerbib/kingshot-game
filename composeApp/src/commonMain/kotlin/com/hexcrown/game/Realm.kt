@@ -33,7 +33,7 @@ class VarReader(private val b: ByteArray) {
 }
 
 /** Decor of one region: same flat formats as World.trees / rocks / props, drawn only while the chunk is active. */
-class RealmChunk(val x: Float, val y: Float, val trees: FloatArray, val rocks: FloatArray, val props: FloatArray) {
+class RealmChunk(val x: Float, val y: Float, val trees: FloatArray, val rocks: FloatArray, val props: FloatArray, val mountains: FloatArray) {
     var active = false
 }
 
@@ -87,8 +87,14 @@ class Realm(val seed: Int) {
             centerX[i] = cx; centerY[i] = cy
             lx = minOf(lx, cx - CHUNK_RADIUS); ly = minOf(ly, cy - CHUNK_RADIUS)
             hx = maxOf(hx, cx + CHUNK_RADIUS); hy = maxOf(hy, cy + CHUNK_RADIUS)
-            val trees = ArrayList<Float>(); val rocks = ArrayList<Float>(); val props = ArrayList<Float>()
+            val trees = ArrayList<Float>(); val rocks = ArrayList<Float>(); val props = ArrayList<Float>(); val mountains = ArrayList<Float>()
             campList.add(camp(i, cx, cy, true))
+            // sparse trees and rocks everywhere, away from the camp, so no region feels bare
+            repeat(45) {
+                val sa = rnd.nextFloat() * 6.28f; val sr = 420f + rnd.nextFloat() * (CHUNK_RADIUS - 420f)
+                if (it % 4 == 0) { rocks.add(cx + cos(sa) * sr); rocks.add(cy + sin(sa) * sr); rocks.add(0.6f + rnd.nextFloat() * 0.6f) }
+                else { trees.add(cx + cos(sa) * sr); trees.add(cy + sin(sa) * sr); trees.add(0.7f + rnd.nextFloat() * 0.5f) }
+            }
             // 6 tiles around the main camp; each keeps away from its neighbours, so any two fit side by side
             val order = TILES.toMutableList().also { it.shuffle(rnd) }
             for (k in 0 until 6) {
@@ -101,10 +107,10 @@ class Realm(val seed: Int) {
                     TILE_RUINS -> ruins(tx, ty, rnd, rocks, props)
                     TILE_VILLAGE -> if (villageList.size < 5 && i >= 1) villageList.add(RealmVillage(i, tx, ty, 40 + 20 * i)) else forest(tx, ty, rnd, trees)
                     TILE_CAMP -> if (campList.size < 12 && i >= 2) campList.add(camp(i, tx, ty, false)) else ruins(tx, ty, rnd, rocks, props)
-                    else -> pass(tx, ty, rnd)
+                    else -> pass(tx, ty, rnd, mountains)
                 }
             }
-            chunkList.add(RealmChunk(cx, cy, trees.toFloatArray(), rocks.toFloatArray(), props.toFloatArray()))
+            chunkList.add(RealmChunk(cx, cy, trees.toFloatArray(), rocks.toFloatArray(), props.toFloatArray(), mountains.toFloatArray()))
         }
         // the ring always holds 12 camps and 5 villages: any shortfall goes to the last regions
         var fill = REGIONS - 1
@@ -171,12 +177,14 @@ class Realm(val seed: Int) {
     }
 
     /** Two rock walls and a gap between them. */
-    private fun pass(x: Float, y: Float, rnd: Random) {
+    private fun pass(x: Float, y: Float, rnd: Random, mountains: MutableList<Float>) {
         val horizontal = rnd.nextBoolean()
         for (k in -3..3) {
             if (k == -1 || k == 0 || k == 1) continue
             val px = x + (if (horizontal) k * 166f else 0f); val py = y + (if (horizontal) 0f else k * 144f)
             setBlock(px, py, BLOCK_ROCK)
+            val c = grid.hexAt(px, py)
+            mountains.add(c.x); mountains.add(c.y)
         }
     }
 

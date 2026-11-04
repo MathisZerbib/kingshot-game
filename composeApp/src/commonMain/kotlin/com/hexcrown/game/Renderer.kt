@@ -53,6 +53,12 @@ private const val K_ENEMY = 6
 private const val K_ARCHER = 7
 private const val K_KING = 8
 private const val K_BANNER = 30
+private const val K_RTREE = 31
+private const val K_RROCK = 32
+private const val K_RPROP = 33
+private const val K_RMOUNT = 34
+private const val K_RCAMP = 35
+private const val K_RVILLAGE = 36
 private const val K_COIN = 9
 private const val K_PROP = 10
 private const val K_RING = 11
@@ -125,6 +131,8 @@ private val SILVER = Color(0xFFD4DAE2)
 private val GOLD = Color(0xFFFFC531)
 private val GOLD_DARK = Color(0xFFD9901A)
 private val HEAL_GREEN = Color(0xFF7CFF8A)
+private val REALM_FOG = Color(0xFF101A30)
+private val REALM_WATER = Color(0xFF3F86C9)
 private val HEX_LINE = Color(0x0FFFFFFF)
 private val BAG_BROWN = Color(0xFF7A4E24)
 private val NIGHT_VEIL = Color(0xFF0A1030)
@@ -331,8 +339,8 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         scale = (if (portrait) w / 560f else min(w / 1000f, h / 620f)) * g.camZoom * g.worldZoom
         val halfW = w / 2f / scale
         val halfH = h / 2f / scale
-        val cx = if (halfW * 2 >= World.W) World.W / 2 else g.camX.coerceIn(halfW, World.W - halfW)
-        val cy = if (halfH * 2 >= World.H) World.H / 2 else g.camY.coerceIn(halfH - 200f, World.H - halfH)
+        val cx = if (halfW * 2 >= World.boundMaxX - World.boundMinX) (World.boundMinX + World.boundMaxX) / 2 else g.camX.coerceIn(World.boundMinX + halfW, World.boundMaxX - halfW)
+        val cy = if (halfH * 2 >= World.boundMaxY - World.boundMinY) (World.boundMinY + World.boundMaxY) / 2 else g.camY.coerceIn(World.boundMinY + halfH - 200f, World.boundMaxY - halfH)
         val shx = if (g.shake > 0f) sin(g.time * 93f) * g.shake else 0f
         val shy = if (g.shake > 0f) cos(g.time * 71f) * g.shake else 0f
         val ox = w / 2f - cx * scale + shx
@@ -344,7 +352,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         viewTop = vt
         val vb = cy + halfH + 260f
 
-        if (L.lang != labelLang) { labelLang = L.lang; waveLabels.clear(); lockLabels.clear(); nextLabels.clear(); newLabels.clear(); levelLabels.clear(); levelDoneLabels.clear() }
+        if (L.lang != labelLang) { labelLang = L.lang; waveLabels.clear(); realmLabels.clear(); lockLabels.clear(); nextLabels.clear(); newLabels.clear(); levelLabels.clear(); levelDoneLabels.clear() }
         time = g.time
         syncRoads()
         syncTiles()
@@ -374,6 +382,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             drawFlyCoins(g)
             drawParticles(g, vl, vt, vr, vb)
             drawFx(g, ground = false)
+            drawRealmFog(g, vl, vt, vr, vb)
         }
 
         // world-anchored labels in screen space
@@ -523,6 +532,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     private val nightPaint = androidx.compose.ui.graphics.Paint()
 
     private fun padName(p: Pad, g: Game): String = if (p.kind == PAD_WALL && g.walls[p.ref].built) L["pad.repairwall"] else when (p.kind) {
+        PAD_VILLAGE -> L["pad.village"]
         PAD_RECRUIT -> L["pad.archer"]
         PAD_FORGE -> L["pad.forge"]
         PAD_REPAIR -> L["pad.repairkeep"]
@@ -703,7 +713,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
 
     private fun push(n: Int, y: Float, kind: Int, idx: Int): Int {
         if (n >= keys.size) return n
-        val yk = ((y + 1000f) * 8f).toLong().coerceIn(0L, 65535L)
+        val yk = ((y - viewTop + 1000f) * 8f).toLong().coerceIn(0L, 65535L) // relative to the view: the Realm has negative coordinates
         keys[n] = (yk shl 24) or (kind.toLong() shl 16) or idx.toLong()
         return n + 1
     }
@@ -739,6 +749,23 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         for (k in g.enemies.indices) { val e = g.enemies[k]; if (e.active && vis(e.x, e.y)) n = push(n, e.y, K_ENEMY, k) }
         for (k in g.corpses.indices) { val c = g.corpses[k]; if (c.active && vis(c.x, c.y)) n = push(n, c.y - 2f, K_CORPSE, k) }
         for (k in 0 until g.grid.count) { val h = g.grid.at(k); if (g.grid.hasBanner(h) && vis(h.x, h.y)) n = push(n, h.y, K_BANNER, k) }
+        val m = g.realm
+        if (m != null) { // only the decor of the active chunks is even looked at
+            for (ci in m.chunks.indices) {
+                val c = m.chunks[ci]
+                if (!c.active) continue
+                var a = 0
+                while (a < c.trees.size) { if (vis(c.trees[a], c.trees[a + 1])) n = push(n, c.trees[a + 1], K_RTREE, ci * 4096 + a / 3); a += 3 }
+                a = 0
+                while (a < c.rocks.size) { if (vis(c.rocks[a], c.rocks[a + 1])) n = push(n, c.rocks[a + 1], K_RROCK, ci * 4096 + a / 3); a += 3 }
+                a = 0
+                while (a < c.props.size) { if (vis(c.props[a], c.props[a + 1])) n = push(n, c.props[a + 1], K_RPROP, ci * 4096 + a / 3); a += 3 }
+                a = 0
+                while (a < c.mountains.size) { if (vis(c.mountains[a], c.mountains[a + 1])) n = push(n, c.mountains[a + 1], K_RMOUNT, ci * 4096 + a / 2); a += 2 }
+            }
+            for (k in m.camps.indices) if (vis(m.camps[k].x, m.camps[k].y)) n = push(n, m.camps[k].y, K_RCAMP, k)
+            for (k in m.villages.indices) if (vis(m.villages[k].x, m.villages[k].y)) n = push(n, m.villages[k].y, K_RVILLAGE, k)
+        }
         for (k in 0 until g.squad) if (vis(g.ax[k], g.ay[k])) n = push(n, g.ay[k], K_ARCHER, k)
         if (!g.kDead && g.state != STATE_MENU) n = push(n, g.ky, K_KING, 0)
         for (k in g.coinsOnGround.indices) { val c = g.coinsOnGround[k]; if (c.active && c.state != 2 && vis(c.x, c.y)) n = push(n, c.y - 1f, K_COIN, k) }
@@ -773,6 +800,12 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                     }
                 }
                 K_ARCHER -> drawArcher(g, idx)
+                K_RTREE -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; drawTree(c.trees[a], c.trees[a + 1], c.trees[a + 2], a / 3) }
+                K_RROCK -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; drawRock(c.rocks[a], c.rocks[a + 1], c.rocks[a + 2], a / 3) }
+                K_RPROP -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; drawProp(c.props[a], c.props[a + 1], c.props[a + 2]) }
+                K_RMOUNT -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 2; val sp = sprites; if (sp != null) sprite(sp.mountain, SpriteData.mountain, 0, 0, c.mountains[a], c.mountains[a + 1] + 40f, 0.9f) }
+                K_RCAMP -> drawCamp(g, m!!.camps[idx])
+                K_RVILLAGE -> { val v = m!!.villages[idx]; val sp = sprites; if (sp != null) { if (v.rebuilt) sprite(sp.village, SpriteData.village, 0, 0, v.x, v.y - 60f, 1.2f) else sprite(sp.villageRuined, SpriteData.villageRuined, 0, 0, v.x, v.y - 60f, 1f) } }
                 K_BANNER -> {
                     val h = g.grid.at(idx)
                     val sp = sprites
@@ -1299,7 +1332,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 rr(GOLD, lx + 8f * u, top + 37f * u, (lw - 16f * u) * g.levelProgress, 6f * u, 3f * u)
             }
             val nu = g.nextUnlock
-            if (nu >= 0) label(text.str(nextLabel(nu)), lx + lw / 2f, top + 56f * u, 9.5f * u, WHITE)
+            if (nu >= 0 && !g.isRealm) label(text.str(nextLabel(nu)), lx + lw / 2f, top + 56f * u, 9.5f * u, WHITE)
             // --- top-right: coins and pause
             val ph = 34f * u
             val pauseR = 17f * u
@@ -1346,7 +1379,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             }
             label(text.str(L["keep"]), w / 2f, hy + 17f * u, 11f * u, WHITE)
             // wave countdown
-            if (g.toSpawn == 0 && !g.bossPending && g.waveBreak < 7f && g.waveBreak > 0f && g.enemies.none { it.active }) {
+            if (!g.isRealm && g.toSpawn == 0 && !g.bossPending && g.waveBreak < 7f && g.waveBreak > 0f && g.enemies.none { it.active }) {
                 label(text.str(L["nextwave"]), w / 2f, hy + 38f * u, 14f * u, WHITE)
                 if (g.revealNext) label(text.str(L.f("wave.reveal", g.nextWaveSize)), w / 2f, hy + 80f * u, 13f * u, GOLD)
                 label(text.num(g.waveBreak.toInt() + 1), w / 2f, hy + 62f * u, 24f * u, GOLD)
@@ -1451,6 +1484,20 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 val sx = viewOx + p.x * scale
                 val sy = viewOy + (p.y - Pad.HALF - 30f) * scale - (8f + 8f * sin(g.time * 7f)) * u
                 withTransform({ translate(sx, sy); rotate(90f, Offset.Zero); scale(22f * u, 22f * u, Offset.Zero) }) { drawPath(edgeArrow, GOLD) }
+            }
+        }
+        if (g.crownBanner > 0f) {
+            val k = g.crownBanner / 3f
+            label((titleText ?: text).str(L["realm.crowned"]), w / 2f, h * 0.32f, 30f * u, GOLD, min(1f, k * 3f))
+            label(text.str(L["region.${g.crownRegion}"]), w / 2f, h * 0.32f + 36f * u, 18f * u, WHITE, min(1f, k * 3f))
+        }
+        if (g.bossInSight >= 0) { // roaming boss: name and gauge
+            val e = g.enemies[g.bossInSight]
+            if (e.active && g.state == STATE_PLAY) {
+                val by = top + 120f * u
+                label((titleText ?: text).str(g.bossName(g.bossInSight)), w / 2f, by, 16f * u, ALERT_RED)
+                val ui = hud
+                if (ui != null) bar(ui, ui.barRed, w / 2f - 110f * u, by + 12f * u, 220f * u, 11f * u, e.hp / e.maxHp)
             }
         }
         // achievement toast: a 56 dp glass band at the top, never during a boss (Ach holds the queue)
@@ -1598,6 +1645,46 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     private val sunRay = Path().apply { moveTo(0f, 0f); lineTo(1f, -1f); lineTo(1f, 1f); close() }
 
     private var labelLang = -1 // the label caches below hold text in this language
+    // ------------------------------------------------------------ the Realm
+
+    private fun DrawScope.drawCamp(g: Game, c: RealmCamp) {
+        val sp = sprites ?: return
+        if (c.cleared) { sprite(sp.ruin, SpriteData.ruin, 0, 0, c.x, c.y, 1.1f); return }
+        if (c.main) sprite(sp.campMainRed, SpriteData.campMainRed, 0, 0, c.x, c.y, 0.8f)
+        else sprite(sp.campRed, SpriteData.campRed, 0, 0, c.x, c.y, 1.2f)
+        val fi = fxi ?: return
+        val flick = 0.95f + 0.15f * sin(g.time * 37.7f) // the campfire flickers at 6 Hz
+        fxDraw(fi.glow, 0, c.x, c.y + 10f, 150f * flick, 100f * flick, 0f, 0.6f, tint(0xFFFFB347L), true)
+    }
+
+    private val fogPath = Path()
+    private val waterPath = Path()
+    private var fogKey = Long.MIN_VALUE
+
+    /** Unexplored hexes in view under one cached path, rebuilt only when the view moves to other hexes or the fog lifts. */
+    private fun DrawScope.drawRealmFog(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
+        val m = g.realm ?: return
+        val grid = g.grid
+        val r0 = grid.hexAt(vl, vt).r - 1; val r1 = grid.hexAt(vr, vb).r + 1
+        val xl = (vl / (HEX_R * 1.732f)).toInt(); val yt = (vt / (HEX_R * 1.5f)).toInt()
+        val key = (xl.toLong() shl 40) xor (yt.toLong() shl 20) xor m.fogVersion.toLong()
+        if (key != fogKey) {
+            fogKey = key
+            fogPath.reset(); waterPath.reset()
+            for (r in r0..r1) {
+                val y = r * HEX_R * 1.5f
+                val q0 = grid.hexAt(vl, y).q - 1; val q1 = grid.hexAt(vr, y).q + 1
+                for (q in q0..q1) {
+                    val h = Hex.of(q, r)
+                    if (!m.explored[h.index]) addHex(fogPath, h.x, h.y)
+                    else if (m.blocked[h.index] == BLOCK_WATER) addHex(waterPath, h.x, h.y)
+                }
+            }
+        }
+        drawPath(waterPath, REALM_WATER, alpha = 0.85f)
+        drawPath(fogPath, REALM_FOG)
+    }
+
     // ------------------------------------------------------------ territory
 
     private val hexOursPath = Path()
@@ -1664,7 +1751,10 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     }
 
     private val waveLabels = HashMap<Int, String>()
+    private val realmLabels = HashMap<Int, String>()
     private fun waveLabel(n: Int, g: Game): String {
+        val rm = g.realm
+        if (rm != null) { val c = rm.crowned.count { it }; return realmLabels.getOrPut(c) { L.f("realm.pill", c, REGIONS) } }
         val mood = if (g.raining) 2 else if (g.dayPhase == 2) 1 else 0
         return waveLabels.getOrPut(n * 4 + mood) {
             val base = L.f("wave.n", max(n, 1))

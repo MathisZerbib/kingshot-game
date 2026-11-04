@@ -13,6 +13,11 @@ actual object Storage {
     actual fun saveBest(value: Int) = NSUserDefaults.standardUserDefaults.setInteger(value.toLong(), "hexcrown.best")
     actual fun loadInt(key: String): Int = NSUserDefaults.standardUserDefaults.integerForKey("hexcrown.$key").toInt()
     actual fun saveInt(key: String, value: Int) = NSUserDefaults.standardUserDefaults.setInteger(value.toLong(), "hexcrown.$key")
+    actual fun loadText(key: String): String? = NSUserDefaults.standardUserDefaults.stringForKey("hexcrown.text.$key")
+    actual fun saveText(key: String, value: String?) {
+        if (value == null) NSUserDefaults.standardUserDefaults.removeObjectForKey("hexcrown.text.$key")
+        else NSUserDefaults.standardUserDefaults.setObject(value, "hexcrown.text.$key")
+    }
     actual fun loadGame(): String? = NSUserDefaults.standardUserDefaults.stringForKey("hexcrown.game")
     actual fun saveGame(value: String?) =
         if (value == null) NSUserDefaults.standardUserDefaults.removeObjectForKey("hexcrown.game")

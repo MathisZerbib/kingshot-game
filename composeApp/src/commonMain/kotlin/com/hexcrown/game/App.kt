@@ -207,6 +207,7 @@ fun App() {
                 onMeta = { metaPanel = it },
                 onDaily = { Daily.claim(); metaTick++ },
                 onShop = { shopOpen = true },
+                onRealm = { game.startRealm(picked); focus.requestFocus() },
             )
             uiState == STATE_OVER -> DefeatPanel(game, onRevive = { game.revive(); focus.requestFocus() },
                 onRetry = { game.retryLevel(); focus.requestFocus() }, onMenu = { game.quitRun(); metaTick++ })

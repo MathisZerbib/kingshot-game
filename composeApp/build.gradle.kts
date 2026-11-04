@@ -57,7 +57,7 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = Integer.parseInt(SimpleDateFormat("yyMMddHH").format(Date()))
-        versionName = "1.0.1"
+        versionName = "1.1.0"
     }
     // the release key lives outside git (docs/HEXCROWN.md §5); without it, release falls back to the debug key for local installs
     val keystoreFile = File(System.getProperty("user.home"), ".hexcrown/keystore.properties")
