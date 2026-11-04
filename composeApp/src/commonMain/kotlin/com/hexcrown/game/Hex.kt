@@ -20,11 +20,12 @@ const val DEPLOY_MS = 120 // each hex of the flower unfolds in 120 ms, one after
 
 private const val CHUNK = 24
 private const val TABLE = 8
+const val HEX_SPAN = CHUNK * TABLE // hexes per side of the whole table
 private const val OFFSET = CHUNK * TABLE / 2
 private const val MAX_HEX = 1024
 private val SQRT3 = sqrt(3f)
-private val DQ = intArrayOf(1, 1, 0, -1, -1, 0)
-private val DR = intArrayOf(0, -1, -1, 0, 1, 1)
+val DQ = intArrayOf(1, 1, 0, -1, -1, 0)
+val DR = intArrayOf(0, -1, -1, 0, 1, 1)
 
 /** A hex position, packed so it never allocates. */
 @kotlin.jvm.JvmInline
@@ -33,6 +34,8 @@ value class Hex(val key: Int) {
     val r get() = (key and 0xFFFF) - OFFSET
     val x get() = HEX_R * SQRT3 * (q + r / 2f)
     val y get() = HEX_R * 1.5f * r
+    /** Position in a flat HEX_SPAN x HEX_SPAN array. */
+    val index get() = (key shr 16) * HEX_SPAN + (key and 0xFFFF)
     companion object { fun of(q: Int, r: Int) = Hex(((q + OFFSET) shl 16) or (r + OFFSET)) }
 }
 
@@ -162,6 +165,43 @@ class HexGrid : Terrain {
         }
     }
 
+    /** Bit-packed per chunk for the realm save: chunk count, then for each used chunk its index and 3 bits per cell. */
+    fun packTo(w: VarWriter) {
+        var used = 0
+        for (c in chunks) if (c != null) used++
+        w.int(used)
+        for (i in chunks.indices) {
+            val c = chunks[i] ?: continue
+            w.int(i)
+            var acc = 0; var bits = 0
+            for (cell in c) {
+                acc = acc or ((cell and 7) shl bits); bits += 3
+                while (bits >= 8) { w.byte(acc and 255); acc = acc ushr 8; bits -= 8 }
+            }
+            if (bits > 0) w.byte(acc and 255)
+        }
+    }
+
+    fun unpackFrom(r: VarReader) {
+        clear()
+        repeat(r.int()) {
+            val i = r.int()
+            var acc = 0; var bits = 0
+            val q = i / TABLE; val rr = i % TABLE
+            for (cq in 0 until CHUNK) for (cr in 0 until CHUNK) {
+                while (bits < 3) { acc = acc or (r.byte() shl bits); bits += 8 }
+                val v = acc and 7; acc = acc ushr 3; bits -= 3
+                val st = v and 3
+                if (st != HEX_NEUTRAL && count < MAX_HEX) {
+                    val h = Hex(((q * CHUNK + cq) shl 16) or (rr * CHUNK + cr))
+                    list[count++] = h.key
+                    store(h, st or (v and 4))
+                }
+            }
+        }
+        version++
+    }
+
     fun load(s: String) {
         clear()
         if (s.isEmpty()) return
@@ -176,19 +216,55 @@ class HexGrid : Terrain {
     }
 }
 
-/** Direction to walk from (x, y) towards a target, written into [out] (no allocation per call). */
+/** Flow field: from every hex, the neighbour to walk to in order to reach the nearest of our banners. */
 object Flow {
-    // shortcut: straight line, upgrade to a per-chunk flow field with the Royaume mode (levels keep their scripted roads)
-    fun dir(x: Float, y: Float, tx: Float, ty: Float, out: FloatArray) {
-        val dx = tx - x; val dy = ty - y
+    private const val NONE: Byte = -1
+    private val field = ByteArray(HEX_SPAN * HEX_SPAN) { NONE }
+    private val queue = IntArray(HEX_SPAN * HEX_SPAN)
+    private val dist = ShortArray(HEX_SPAN * HEX_SPAN)
+
+    /** Multi-source search from our banners over the walkable hexes. Preallocated; only run when the territory changes. */
+    fun compute(grid: HexGrid, blocked: ByteArray) {
+        field.fill(NONE)
+        dist.fill(-1)
+        var head = 0; var tail = 0
+        for (i in 0 until grid.count) {
+            val h = grid.at(i)
+            if (!grid.hasBanner(h) || grid.state(h) != HEX_OURS) continue
+            queue[tail++] = h.index
+            dist[h.index] = 0
+        }
+        while (head < tail) {
+            val at = queue[head++]
+            val q = at / HEX_SPAN; val r = at % HEX_SPAN
+            for (d in 0..5) {
+                val nq = q + DQ[d]; val nr = r + DR[d]
+                if (nq < 0 || nr < 0 || nq >= HEX_SPAN || nr >= HEX_SPAN) continue
+                val n = nq * HEX_SPAN + nr
+                if (dist[n] >= 0 || blocked[n] != 0.toByte()) continue
+                dist[n] = (dist[at] + 1).toShort()
+                field[n] = ((d + 3) % 6).toByte() // from n, walk back towards the source
+                queue[tail++] = n
+            }
+        }
+    }
+
+    /** Unit direction at (x, y) written into [out]; false when no banner can be reached (or we stand on one). */
+    fun dir(grid: HexGrid, x: Float, y: Float, out: FloatArray): Boolean {
+        val h = grid.hexAt(x, y)
+        val d = field[h.index].toInt()
+        if (d < 0) return false
+        val next = Hex.of(h.q + DQ[d], h.r + DR[d])
+        val dx = next.x - x; val dy = next.y - y
         val l = max(0.001f, sqrt(dx * dx + dy * dy))
         out[0] = dx / l; out[1] = dy / l
+        return true
     }
 }
 
 class Camp(val x: Float, val y: Float, val kinds: IntArray, val every: Float)
 
-/** Emits a camp's enemies at its pace. shortcut: interface only for now, the levels still spawn through Game.updateWaves, upgrade with the Royaume mode. */
+/** Emits a camp's enemies at its pace. */
 class Spawner(val camp: Camp) {
     private var t = 0f
     private var next = 0
