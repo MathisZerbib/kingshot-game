@@ -13,7 +13,7 @@ nouveau ne doit coûter plus de 0,5 ms par image sur le Pixel 8a. Chaque passe e
    critiques en or 1,4× avec `fx_spark`. Mort : les ennemis tombent avec rotation 15° + fondu 400 ms, pièces
    éjectées en arc (vz 260 px/s, gravité) avant l'aimant.
 3. **Pièces** : « tic » dont la hauteur monte de 2 % par pièce (reset 400 ms), compteur HUD qui tween (jamais de
-   saut), pulse de la pilule +6 % à l'arrivée. Dépense : les pièces partent du HUD vers le chantier (déjà fait),
+   saut), pulse de la pilule +6 % à l'arrivée. Dépense : les pièces partent du haut de la pile sur la tête du roi vers le chantier,
    le chantier « respire » 1,05 et sa jauge se remplit en 250 ms.
 4. **Vagues** : bandeau « Vague N » qui glisse de 12 dp + fondu, 1,2 s, puis « Dernier ennemi ! » quand il en
    reste 1 (contour or pulsé sur lui). Fin de vague : bilan 2 s (pièces, kills, combo max, hex tenus) qui n'empêche
