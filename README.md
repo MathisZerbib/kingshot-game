@@ -1,8 +1,9 @@
-# Kingshot — le vrai jeu, sans pub
+# Hexcrown — roi, bannières, sièges (sans pub)
 
-Jeu mobile inspiré des pubs Kingshot : un roi à cheval mène une escouade d'archers, ramasse l'or
-des chevaliers rouges, le dépose sur les chantiers (archers, tours, palissades, forge) et défend
-son donjon contre des vagues de plus en plus dures, avec un boss toutes les 5 vagues.
+Jeu mobile de défense : un roi à cheval mène une escouade d'archers, plante des bannières pour réclamer des
+hexagones, bâtit sur ses terres (archers, tours, palissades, forge) et tient la ligne contre des vagues de plus en
+plus rusées, avec un boss et un choix de relique toutes les 5 vagues. Identité, mécaniques et plan de publication :
+`docs/HEXCROWN.md`.
 
 Kotlin Multiplatform + Compose Multiplatform (Canvas). Cibles : Android, iOS, desktop (JVM).
 

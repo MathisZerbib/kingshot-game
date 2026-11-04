@@ -208,10 +208,10 @@ def circle(red, size=200):
 
 
 def logotype(w=1200, h=360):
-    """KINGSHOT in Lilita One: white→gold gradient fill, navy outline, drop shadow, slight upward arc."""
+    """HEXCROWN in Lilita One: white→gold gradient fill, navy outline, drop shadow, slight upward arc."""
     c = canvas(w, h)
     W, H = w * SS, h * SS
-    text = "KINGSHOT"
+    text = "HEXCROWN"
     size = 290 * SS
     while True:  # largest size whose letters (plus outline) fit the width
         font = ImageFont.truetype(os.path.join(FONTS, "lilita_one_regular.ttf"), int(size))
