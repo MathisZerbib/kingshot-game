@@ -40,3 +40,5 @@ actual fun imageFromPixels(w: Int, h: Int, argb: IntArray): androidx.compose.ui.
     bmp.installPixels(bytes)
     return bmp.asComposeImageBitmap()
 }
+
+actual fun systemLanguage(): String = java.util.Locale.getDefault().language

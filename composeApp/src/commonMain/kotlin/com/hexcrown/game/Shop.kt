@@ -21,38 +21,42 @@ const val UNLOCK_WAVE50 = 3
 const val UNLOCK_CHAPTER3STARS = 4
 
 /** [cls] is the hero class for a skin, -1 otherwise; [look] indexes the kind's look table (skin tint, banner colour...). */
-class ShopItem(val id: String, val kind: Int, val cls: Int, val name: String, val desc: String, val price: Int, val unlock: Int, val look: Int, val short: String = name)
+class ShopItem(val id: String, val kind: Int, val cls: Int, private val nameKey: String, private val descKey: String, val price: Int, val unlock: Int, val look: Int, private val shortKey: String = nameKey) {
+    val name get() = L[nameKey]
+    val desc get() = L[descKey]
+    val short get() = L[shortKey]
+}
 
 /** Cosmetic shop: bought with the treasure only (no real money, no gems). Equipped looks are cached in memory for the renderer. */
 object Shop {
     private const val KEY = "shop1_" // versioned save keys
     val SKIN_PREFIX = arrayOf("warrior", "ranger", "builder")
     val SKIN_KEY = arrayOf("base", "gold", "frost", "shadow")
-    private val SKIN_SHORT = arrayOf("Pourpre", "Givre", "Ombres")
+    private val SKIN_SHORT = arrayOf("skin.gold.short", "skin.frost.short", "skin.shadow.short")
 
 
     val items: List<ShopItem> = buildList {
         val skins = arrayOf(
-            Triple("gold", "Roi pourpre et or", "Armure d'or, cape pourpre"),
-            Triple("frost", "Roi de givre", "Armure d'argent et de glace, couronne d'argent"),
-            Triple("shadow", "Roi des ombres", "Armure noire, cape de sang"),
+            Triple("gold", "skin.gold", "skin.gold.desc"),
+            Triple("frost", "skin.frost", "skin.frost.desc"),
+            Triple("shadow", "skin.shadow", "skin.shadow.desc"),
         )
         val skinPrice = intArrayOf(1500, 3000, 6000)
         val skinUnlock = intArrayOf(UNLOCK_NONE, UNLOCK_LEVEL10, UNLOCK_CHAPTER3STARS)
         for (c in 0..2) {
-            add(ShopItem("${SKIN_PREFIX[c]}_base", SHOP_SKIN, c, "Roi d'origine", "L'armure du premier jour", 0, UNLOCK_NONE, 0, "Origine"))
+            add(ShopItem("${SKIN_PREFIX[c]}_base", SHOP_SKIN, c, "skin.base", "skin.base.desc", 0, UNLOCK_NONE, 0, "skin.base.short"))
             for (k in 0..2) add(ShopItem("${SKIN_PREFIX[c]}_${skins[k].first}", SHOP_SKIN, c, skins[k].second, skins[k].third, skinPrice[k], skinUnlock[k], k + 1, SKIN_SHORT[k]))
         }
-        val banners = arrayOf("Bleu royal", "Pourpre", "Émeraude", "Noir et or", "Blanc neige")
+        val banners = Array(5) { "banner.$it" }
         val bannerUnlock = intArrayOf(UNLOCK_NONE, UNLOCK_NONE, UNLOCK_NONE, UNLOCK_BOSS1, UNLOCK_NONE)
         val bannerId = arrayOf("royal", "purple", "emerald", "blackgold", "snow")
-        for (k in banners.indices) add(ShopItem("banner_${bannerId[k]}", SHOP_BANNER, -1, banners[k], "Étendards, toits et bannières", if (k == 0) 0 else 800, bannerUnlock[k], k))
-        val mounts = arrayOf("Blanc", "Bai", "Noir", "Gris pommelé", "Palomino")
+        for (k in banners.indices) add(ShopItem("banner_${bannerId[k]}", SHOP_BANNER, -1, banners[k], "banner.desc", if (k == 0) 0 else 800, bannerUnlock[k], k))
+        val mounts = Array(5) { "mount.$it" }
         val mountId = arrayOf("white", "bay", "black", "dapple", "palomino")
-        for (k in mounts.indices) add(ShopItem("mount_${mountId[k]}", SHOP_MOUNT, -1, mounts[k], "Robe du cheval royal", if (k == 0) 0 else 1200, if (k == 4) UNLOCK_LEVEL10 else UNLOCK_NONE, k, if (k == 3) "Pommelé" else mounts[k]))
-        val trails = arrayOf("Or", "Étincelles bleues", "Feuilles", "Flammes")
+        for (k in mounts.indices) add(ShopItem("mount_${mountId[k]}", SHOP_MOUNT, -1, mounts[k], "mount.desc", if (k == 0) 0 else 1200, if (k == 4) UNLOCK_LEVEL10 else UNLOCK_NONE, k, if (k == 3) "mount.3.short" else mounts[k]))
+        val trails = Array(4) { "trail.$it" }
         val trailId = arrayOf("gold", "sparks", "leaves", "flames")
-        for (k in trails.indices) add(ShopItem("trail_${trailId[k]}", SHOP_TRAIL, -1, trails[k], "Traînée des pièces", if (k == 0) 0 else 600, if (k == 3) UNLOCK_WAVE50 else UNLOCK_NONE, k, if (k == 1) "Étincelles" else trails[k]))
+        for (k in trails.indices) add(ShopItem("trail_${trailId[k]}", SHOP_TRAIL, -1, trails[k], "trail.desc", if (k == 0) 0 else 600, if (k == 3) UNLOCK_WAVE50 else UNLOCK_NONE, k, if (k == 1) "trail.1.short" else trails[k]))
     }
 
         /** Bumped on every purchase or equip, so Compose can re-read the shop. */
@@ -69,10 +73,10 @@ object Shop {
     fun comingSoon(it: ShopItem) = it.kind == SHOP_MOUNT && it.price > 0
 
     fun unlockText(cond: Int) = when (cond) {
-        UNLOCK_LEVEL10 -> "Atteins le niveau 10"
-        UNLOCK_BOSS1 -> "Bats un boss"
-        UNLOCK_WAVE50 -> "Atteins la vague 50"
-        UNLOCK_CHAPTER3STARS -> "3 étoiles sur tout un chapitre"
+        UNLOCK_LEVEL10 -> L["lock.level10"]
+        UNLOCK_BOSS1 -> L["lock.boss"]
+        UNLOCK_WAVE50 -> L["lock.wave50"]
+        UNLOCK_CHAPTER3STARS -> L["lock.stars"]
         else -> ""
     }
 

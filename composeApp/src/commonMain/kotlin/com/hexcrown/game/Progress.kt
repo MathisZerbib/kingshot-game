@@ -16,11 +16,8 @@ const val TAL_BOSS_LOOT = 6
 const val TAL_KEEP_HP = 7
 const val TAL_START_ARCHERS = 8
 const val TALENT_MAX = 5
-val TALENT_NAMES = arrayOf("Cadence", "Aimant", "Chantiers", "Murs", "Bourse", "Vitesse", "Butin boss", "Donjon", "Escouade")
-val TALENT_DESC = arrayOf(
-    "Archers et tours -5 % de recharge", "Portée de l'aimant +10 %", "Chantiers -4 %", "PV des murs +10 %",
-    "+10 pièces au départ", "Roi +4 % plus rapide", "Butin des boss +15 %", "PV du donjon +10 %", "+1 archer de départ tous les 2 rangs",
-)
+val TALENT_NAMES = LArr("talent.0", "talent.1", "talent.2", "talent.3", "talent.4", "talent.5", "talent.6", "talent.7", "talent.8")
+val TALENT_DESC = LArr("talentdesc.0", "talentdesc.1", "talentdesc.2", "talentdesc.3", "talentdesc.4", "talentdesc.5", "talentdesc.6", "talentdesc.7", "talentdesc.8")
 
 object Talents {
     fun level(t: Int) = Storage.loadInt("tal_$t")
@@ -64,12 +61,12 @@ object Missions {
     fun reward(s: Int) = 40 + tier(s) * 50
     fun done(s: Int) = progress(s) >= target(s)
     fun label(s: Int): String = when (type(s)) {
-        MIS_KILLS -> "Vaincre ${target(s)} ennemis"
-        MIS_COINS -> "Ramasser ${target(s)} pièces"
-        MIS_BUILD -> "Construire ${target(s)} fois"
-        MIS_WAVES -> "Repousser ${target(s)} vagues"
-        MIS_BOSSES -> "Abattre ${target(s)} boss"
-        else -> "Atteindre le niveau ${target(s)}"
+        MIS_KILLS -> L.f("mis.kills", target(s))
+        MIS_COINS -> L.f("mis.coins", target(s))
+        MIS_BUILD -> L.f("mis.build", target(s))
+        MIS_WAVES -> L.f("mis.waves", target(s))
+        MIS_BOSSES -> L.f("mis.bosses", target(s))
+        else -> L.f("mis.level", target(s))
     }
 
     /** First launch: three different missions. */

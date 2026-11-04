@@ -334,6 +334,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         viewTop = vt
         val vb = cy + halfH + 260f
 
+        if (L.lang != labelLang) { labelLang = L.lang; waveLabels.clear(); lockLabels.clear(); nextLabels.clear(); newLabels.clear(); levelLabels.clear(); levelDoneLabels.clear() }
         time = g.time
         syncRoads()
         syncTiles()
@@ -418,7 +419,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         rr(HUD_SHADOW, cx - cw / 2f, cy - chh / 2f + 6f * u, cw, chh, 22f * u)
         rr(CARD_BG, cx - cw / 2f, cy - chh / 2f, cw, chh, 22f * u)
         drawRoundRect(GOLD, Offset(cx - cw / 2f, cy - chh / 2f), Size(cw, chh), CornerRadius(22f * u, 22f * u), style = cardBorder, alpha = a)
-        label(text.str("NOUVEAU !"), cx, cy - chh / 2f + 20f * u, 20f * u * pop, GOLD, a)
+        label(text.str(L["new.bang"]), cx, cy - chh / 2f + 20f * u, 20f * u * pop, GOLD, a)
         // the building itself, scaled to fit the card
         val id = g.newUnlockId
         withTransform({ translate(cx, cy + 30f * u); scale(u * 0.55f, u * 0.55f, Offset.Zero) }) {
@@ -435,8 +436,8 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 else -> sprite(sp.towerStone, SpriteData.towerStone, 0, 0, 0f, 0f, 0.8f)
             }
         }
-        val name = if (id == UNLOCK_MINE_CARD) "Mine et Caserne" else UNLOCK_NAMES[id]
-        val desc = if (id == UNLOCK_MINE_CARD) "butin x1,5 · 3 lanciers" else UNLOCK_DESC[id]
+        val name = if (id == UNLOCK_MINE_CARD) L["mine.barracks"] else UNLOCK_NAMES[id]
+        val desc = if (id == UNLOCK_MINE_CARD) L["mine.short"] else UNLOCK_DESC[id]
         label(text.str(name), cx, cy + chh / 2f - 42f * u, 18f * u, WHITE, a)
         label(text.str(desc), cx, cy + chh / 2f - 20f * u, 12f * u, GOLD, a)
     }
@@ -508,19 +509,19 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     }
     private val nightPaint = androidx.compose.ui.graphics.Paint()
 
-    private fun padName(p: Pad, g: Game): String = if (p.kind == PAD_WALL && g.walls[p.ref].built) "Réparer le mur" else when (p.kind) {
-        PAD_RECRUIT -> "Archer"
-        PAD_FORGE -> "Forge  +dégâts"
-        PAD_REPAIR -> "Réparer le donjon"
-        PAD_TOWER -> "Tour"
-        PAD_TOWER_ARCHER -> "1 archer → tour"
-        PAD_FARM -> "Ferme  +or"
-        PAD_BARRACKS -> "Caserne  3 lanciers"
-        PAD_MINE -> "Mine  butin x2"
-        PAD_BALLISTA -> "Baliste"
-        PAD_ELITE -> "Archers d'élite"
+    private fun padName(p: Pad, g: Game): String = if (p.kind == PAD_WALL && g.walls[p.ref].built) L["pad.repairwall"] else when (p.kind) {
+        PAD_RECRUIT -> L["pad.archer"]
+        PAD_FORGE -> L["pad.forge"]
+        PAD_REPAIR -> L["pad.repairkeep"]
+        PAD_TOWER -> L["pad.tower"]
+        PAD_TOWER_ARCHER -> L["pad.towerarcher"]
+        PAD_FARM -> L["pad.farm"]
+        PAD_BARRACKS -> L["pad.barracks"]
+        PAD_MINE -> L["pad.mine"]
+        PAD_BALLISTA -> L["pad.ballista"]
+        PAD_ELITE -> L["pad.elite"]
         PAD_SPOT_A, PAD_SPOT_B -> UNLOCK_NAMES[p.level.coerceIn(0, UNLOCK_NAMES.size - 1)]
-        else -> "Palissade"
+        else -> L["pad.wall"]
     }
 
     private fun DrawScope.drawGround(vl: Float, vt: Float, vr: Float, vb: Float) {
@@ -1024,7 +1025,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         // new models are made at their own size: only knights (soldier/brute) and the wood-age boss use e.scale
         val k = UNIT_SCALE * (if (e.kind == KIND_SOLDIER || e.kind == KIND_BRUTE) e.scale else 1f) * (if (boss && bigBoss) 1.15f else 1f) * (if (e.captain) 1.25f else 1f)
         if (e.captain) circ(CAPTAIN_AURA, e.x, e.y, 46f) // aura ring under the captain
-        if (boss && e.stun > 0f) label(text.str("ÉTOURDI !"), e.x, e.y - 175f, 24f, GOLD) // world space: we are inside the camera transform
+        if (boss && e.stun > 0f) label(text.str(L["stunned"]), e.x, e.y - 175f, 24f, GOLD) // world space: we are inside the camera transform
         enemySprite(sp, e.kind, e.bossType, e.walk, e.swing, e.dir, e.x, e.y, k, filter)
         if (boss || e.hp < e.maxHp) {
             val bw = if (boss) 110f else 34f * e.scale
@@ -1189,7 +1190,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         }
     }
 
-    private val ABILITY_TITLES = arrayOf("TOURBILLON !", "PLUIE DE FLÈCHES !", "RÉPARATION !")
+    private val ABILITY_TITLES = LArr("abilitytitle.0", "abilitytitle.1", "abilitytitle.2")
     private val healLabels = HashMap<Int, String>()
     private fun healLabel(v: Int) = healLabels.getOrPut(v) { "+$v %" }
 
@@ -1273,10 +1274,10 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 rr(HUD_BG, bx - 3f * u, hy - 3f * u, bw + 6f * u, 13f * u, 6.5f * u)
                 rr(if (frac > 0.35f) HP_GREEN else HP_RED, bx, hy, bw * frac, 7f * u, 3.5f * u)
             }
-            label(text.str("Donjon"), w / 2f, hy + 17f * u, 11f * u, WHITE)
+            label(text.str(L["keep"]), w / 2f, hy + 17f * u, 11f * u, WHITE)
             // wave countdown
             if (g.toSpawn == 0 && !g.bossPending && g.waveBreak < 7f && g.waveBreak > 0f && g.enemies.none { it.active }) {
-                label(text.str("Prochaine vague dans"), w / 2f, hy + 38f * u, 14f * u, WHITE)
+                label(text.str(L["nextwave"]), w / 2f, hy + 38f * u, 14f * u, WHITE)
                 label(text.num(g.waveBreak.toInt() + 1), w / 2f, hy + 62f * u, 24f * u, GOLD)
             }
             // --- bottom-right: class ability with cooldown
@@ -1286,7 +1287,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             drawEdgeArrows(g, w, h, u, top + 110f * u)
             if (g.castleAlarm > 0f) {
                 val pulse = 0.55f + 0.45f * sin(g.time * 12f)
-                label(text.str("Le donjon est attaqué !"), w / 2f, top + 128f * u, 20f * u * (1f + pulse * 0.06f), ALERT_RED, min(1f, g.castleAlarm) * pulse)
+                label(text.str(L["alarm"]), w / 2f, top + 128f * u, 20f * u * (1f + pulse * 0.06f), ALERT_RED, min(1f, g.castleAlarm) * pulse)
             }
         }
         // banners
@@ -1313,14 +1314,14 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 label(text.str(newLabel(g.newUnlocks)), w / 2f, h * 0.27f + 111f * u, 13f * u, GOLD, a)
             }
 
-            if (newChapter) label(text.str(if (g.isEndless) "MODE INFINI !" else "CHAPITRE ${World.chapter(g.level) + 1} : " + World.CHAPTER_NAMES[World.chapter(g.level)].uppercase()),
+            if (newChapter) label(text.str(if (g.isEndless) L["endless.bang"] else L.f("chapter.title", World.chapter(g.level) + 1, World.CHAPTER_NAMES[World.chapter(g.level)].uppercase())),
                 w / 2f, h * 0.27f - 40f * u, 20f * u, WHITE, a)
             if (g.ageChanged) {
-                label(text.str(if (g.age >= 3) "ÂGE ROYAL !" else "ÂGE DE PIERRE !"), w / 2f, h * 0.27f + 44f * u, 30f * u * pop, WHITE, a)
-                label(text.str(if (g.age >= 3) "Tours royales · dégâts ×1,5 · château royal" else "Remparts de pierre avec portes · tours de pierre"), w / 2f, h * 0.27f + 76f * u, 14f * u, WHITE, a)
+                label(text.str(if (g.age >= 3) L["age.royal"] else L["age.stone"]), w / 2f, h * 0.27f + 44f * u, 30f * u * pop, WHITE, a)
+                label(text.str(if (g.age >= 3) L["age.royal.desc"] else L["age.stone.desc"]), w / 2f, h * 0.27f + 76f * u, 14f * u, WHITE, a)
             } else {
                 label(text.str(World.levelName(g.level)), w / 2f, h * 0.27f + 44f * u, 30f * u * pop, WHITE, a)
-                label(text.str(if (g.roadAdded) "Nouvelle route à défendre !" else "Les monstres se renforcent !"), w / 2f, h * 0.27f + 76f * u, 15f * u, WHITE, a)
+                label(text.str(if (g.roadAdded) L["newroad"] else L["stronger"]), w / 2f, h * 0.27f + 76f * u, 15f * u, WHITE, a)
             }
         }
         if (g.waveBanner > 0f && g.levelBanner <= 0f) {
@@ -1331,28 +1332,28 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         if (g.waveRewardBanner > 0f && g.levelBanner <= 0f) {
             val k = g.waveRewardBanner / 2f
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
-            label(text.str("VAGUE REPOUSSÉE !"), w / 2f, h * 0.3f, 34f * u * pop, GOLD, min(1f, k * 3f))
-            label(text.str("Butin du donjon"), w / 2f, h * 0.3f + 34f * u, 16f * u, WHITE, min(1f, k * 3f))
+            label(text.str(L["wave.done"]), w / 2f, h * 0.3f, 34f * u * pop, GOLD, min(1f, k * 3f))
+            label(text.str(L["wave.loot"]), w / 2f, h * 0.3f + 34f * u, 16f * u, WHITE, min(1f, k * 3f))
         }
         if (g.chestBanner > 0f) {
             val k = g.chestBanner / 2.5f
-            label(text.str("COFFRE OUVERT !"), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
+            label(text.str(L["chest.open"]), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
         }
         if (g.caravanBanner > 0f) {
             val k = g.caravanBanner / 2.5f
-            label(text.str("CARAVANE DE BUTIN !"), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
+            label(text.str(L["caravan"]), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
         }
         if (g.bossBanner > 0f) {
             val k = g.bossBanner / 2.2f
             val pop = 1f + sin(k * 20f) * 0.05f
-            label(text.str("BOSS !"), w / 2f, h * 0.38f, 56f * u * pop, Color(0xFFFF4A3A), min(1f, k * 3f))
+            label(text.str(L["boss"]), w / 2f, h * 0.38f, 56f * u * pop, Color(0xFFFF4A3A), min(1f, k * 3f))
         }
         if (g.state == STATE_PLAY && g.kDead) {
-            label(text.str("Le roi est tombé..."), w / 2f, h * 0.45f, 26f * u, WHITE)
+            label(text.str(L["king.down"]), w / 2f, h * 0.45f, 26f * u, WHITE)
         }
         val obj = g.objective
         if (g.state == STATE_PLAY && obj != null && g.transition <= 0f) {
-            val msg = when (obj.kind) { PAD_TOWER -> "Objectif : construis une tour"; PAD_TOWER_ARCHER -> "Objectif : poste un archer sur la tour"; else -> "Objectif : ferme la route avec une palissade" }
+            val msg = when (obj.kind) { PAD_TOWER -> L["obj.tower"]; PAD_TOWER_ARCHER -> L["obj.archer"]; else -> L["obj.wall"] }
             val by = h - 150f * u
             rr(HUD_BG, 24f * u, by - 18f * u, w - 48f * u, 36f * u, 18f * u)
             label(text.str(msg), w / 2f, by, 13.5f * u, GOLD)
@@ -1362,10 +1363,10 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         }
         if (g.state == STATE_PLAY && g.tutorial < 4 && g.transition <= 0f) {
             val msg = when (g.tutorial) {
-                0 -> "Glisse le doigt pour bouger le roi"
-                1 -> "Tue les chevaliers et ramasse leur or"
-                2 -> "Marche sur le chantier Archer pour recruter"
-                else -> "Construis une tour : reste sur son chantier"
+                0 -> L["tuto.0"]
+                1 -> L["tuto.1"]
+                2 -> L["tuto.2"]
+                else -> L["tuto.3"]
             }
             val by = h - 150f * u
             rr(HUD_BG, 24f * u, by - 18f * u, w - 48f * u, 36f * u, 18f * u)
@@ -1469,24 +1470,25 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     private fun DrawScope.drawClassIcon(cls: Int, x: Float, y: Float, s: Float, u: Float) = classIcon(cls, x, y, s, 4.5f * u)
     private fun DrawScope.drawAbilityIcon(cls: Int, x: Float, y: Float, s: Float, u: Float) = classIcon(cls, x, y, s, 4.5f * u)
 
-    private val ageLabels = arrayOf("Âge du Bois", "Âge de Pierre", "Âge Royal")
+    private val ageLabels = LArr("age.0", "age.1", "age.2")
     private fun ageLabel(age: Int) = ageLabels[(age - 1).coerceIn(0, 2)]
     /** Unit ray (tip at the origin, widening to x = 1) for the level-up sunburst. */
     private val sunRay = Path().apply { moveTo(0f, 0f); lineTo(1f, -1f); lineTo(1f, 1f); close() }
 
+    private var labelLang = -1 // the label caches below hold text in this language
     private val waveLabels = HashMap<Int, String>()
-    private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { "Vague ${max(n, 1)}" }
+    private fun waveLabel(n: Int) = waveLabels.getOrPut(n) { L.f("wave.n", max(n, 1)) }
     private val STAR_LABELS = arrayOf("☆☆☆", "★☆☆", "★★☆", "★★★")
     private val lockLabels = HashMap<Int, String>()
-    private fun lockLabel(lv: Int) = lockLabels.getOrPut(lv) { "Niveau $lv" }
+    private fun lockLabel(lv: Int) = lockLabels.getOrPut(lv) { L.f("level.n", lv) }
     private val nextLabels = HashMap<Int, String>()
-    private fun nextLabel(u: Int) = nextLabels.getOrPut(u) { "Prochain : " + UNLOCK_NAMES[u] + " (niv. " + UNLOCK_LEVEL[u] + ")" }
+    private fun nextLabel(u: Int) = nextLabels.getOrPut(u) { L.f("next.unlock", UNLOCK_NAMES[u], UNLOCK_LEVEL[u]) }
     private val newLabels = HashMap<String, String>()
-    private fun newLabel(s: String) = newLabels.getOrPut(s) { "NOUVEAU : $s" }
+    private fun newLabel(s: String) = newLabels.getOrPut(s) { L.f("new.upper", s) }
     private val levelLabels = HashMap<Int, String>()
-    private fun levelLabel(n: Int) = levelLabels.getOrPut(n) { "Niveau $n · " + (if (n >= 5) "Royal" else if (n >= 3) "Pierre" else "Bois") }
+    private fun levelLabel(n: Int) = levelLabels.getOrPut(n) { L.f("level.age", n, if (n >= 5) L["age.r"] else if (n >= 3) L["age.s"] else L["age.w"]) }
     private val levelDoneLabels = HashMap<Int, String>()
-    private fun levelDoneLabel(n: Int) = levelDoneLabels.getOrPut(n) { "NIVEAU $n TERMINÉ !" }
+    private fun levelDoneLabel(n: Int) = levelDoneLabels.getOrPut(n) { L.f("level.done", n) }
     private val fpsLabels = HashMap<Int, String>()
     private fun fpsLabel(n: Int) = fpsLabels.getOrPut(n) { "$n fps" }
 }

@@ -64,9 +64,9 @@ import kotlin.math.sin
 
 // Shop screen (art/ui/DA-v2.md « Boutique »): header, four categories, showcase, 3-column grid, coin rain on purchase.
 
-private val CAT_NAMES = arrayOf("Rois", "Étendards", "Montures", "Traînées")
+private val CAT_NAMES = LArr("shopcat.0", "shopcat.1", "shopcat.2", "shopcat.3")
 private val CAT_ICONS = arrayOf(Res.drawable.ui_icon_crown, Res.drawable.ui_icon_flag, Res.drawable.ui_icon_heart, Res.drawable.ui_icon_coins)
-private val CAT_KIND = arrayOf("skin", "étendard", "monture", "traînée")
+private val CAT_KIND = LArr("shopkind.0", "shopkind.1", "shopkind.2", "shopkind.3")
 private val BANNER_COLORS = arrayOf(Color(0xFF2F5BD6), Color(0xFF8A3FC8), Color(0xFF2FA65A), Color(0xFF1C1C22), Color(0xFFF2F4F8))
 private val MOUNT_COLORS = arrayOf(Color(0xFFF2EFE8), Color(0xFF8A4B26), Color(0xFF2A221F), Color(0xFF9AA0A6), Color(0xFFE0B66A))
 private val GREY = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
@@ -106,7 +106,7 @@ fun ShopScreen(hero: Int, onClose: () -> Unit) {
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(Res.drawable.ui_icon_close, size = 46.dp, onClick = onClose)
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { GText("Boutique", 26, Color.White, title = true) }
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) { GText(L["tab.shop"], 26, Color.White, title = true) }
                 Box(Modifier.onGloballyPositioned { pill = it.boundsInRoot().center }) {
                     TreasurePill(shown)
                 }
@@ -133,7 +133,7 @@ fun ShopScreen(hero: Int, onClose: () -> Unit) {
                 }
             }
             Spacer(Modifier.weight(1f))
-            GText("Les skins ne changent pas la difficulté. Tout s'achète avec le trésor gagné en jeu.", 13, Color(0xFFAAB4D2), weight = FontWeight.Bold, shadow = false)
+            GText(L["shop.footer"], 13, Color(0xFFAAB4D2), weight = FontWeight.Bold, shadow = false)
             Spacer(Modifier.height(6.dp))
         }
         // purchase: 12 coins fly from the treasure pill to the card (500 ms), drawn in one Canvas
@@ -186,24 +186,24 @@ private fun Showcase(item: ShopItem, hero: Int, onBuy: (String) -> Unit) {
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             GText(item.name, 19, Color.White, title = true)
-            GText(if (item.kind == SHOP_SKIN) "${CLASS_NAMES[item.cls]} · skin" else CAT_KIND[item.kind].replaceFirstChar { it.uppercase() }, 13, Color(0xFFAAB4D2), shadow = false)
+            GText(if (item.kind == SHOP_SKIN) L.f("shop.skinof", CLASS_NAMES[item.cls]) else CAT_KIND[item.kind], 13, Color(0xFFAAB4D2), shadow = false)
             Spacer(Modifier.height(4.dp))
             GText(item.desc, 13, Color.White, weight = FontWeight.Bold)
             Spacer(Modifier.height(10.dp))
             // a purchase always asks once: « Acheter pour 1 500 ? » Oui / Non
             var ask by remember(item.id) { mutableStateOf(false) }
             if (ask) {
-                GText("Acheter pour ${price(item.price)} ?", 15, Color.White)
+                GText(L.f("shop.confirm", price(item.price)), 15, Color.White)
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    KitButton(Res.drawable.ui_button_gold, "Oui", width = 80.dp, height = 44.dp, titleSize = 16, textColor = Pal.ink) { ask = false; onBuy(item.id) }
-                    KitButton(Res.drawable.ui_button_grey, "Non", width = 80.dp, height = 44.dp, titleSize = 16) { ask = false }
+                    KitButton(Res.drawable.ui_button_gold, L["yes"], width = 80.dp, height = 44.dp, titleSize = 16, textColor = Pal.ink) { ask = false; onBuy(item.id) }
+                    KitButton(Res.drawable.ui_button_grey, L["no"], width = 80.dp, height = 44.dp, titleSize = 16) { ask = false }
                 }
             } else ShopAction(item, big = true) { ask = true }
             if (Shop.canRefund(item.id)) Box(
                 Modifier.height(36.dp).clickable { Audio.play(Sfx.CLICK); Shop.refund(item.id) },
                 contentAlignment = Alignment.Center,
-            ) { GText("Annuler l'achat (rembourse ${price(item.price)})", 13, Color(0xFFC8BEA0), shadow = false) }
+            ) { GText(L.f("shop.refund", price(item.price)), 13, Color(0xFFC8BEA0), shadow = false) }
         }
     }
 }
@@ -217,11 +217,11 @@ private fun ShopAction(item: ShopItem, big: Boolean, onBuy: () -> Unit) {
     val ts = if (big) 17 else 13
     val eq = Shop.equipped(item.kind, item.cls)?.id == item.id || (Shop.equipped(item.kind, item.cls) == null && item.price == 0)
     when {
-        eq -> KitButton(Res.drawable.ui_button_green, "Équipé", width = w, height = h, titleSize = ts, enabled = false) {}
+        eq -> KitButton(Res.drawable.ui_button_green, L["shop.equipped"], width = w, height = h, titleSize = ts, enabled = false) {}
         Shop.comingSoon(item) -> Box(Modifier.height(h), contentAlignment = Alignment.Center) {
-            GText(if (big) "Bientôt : les robes arrivent avec le prochain cheval" else "Bientôt", 13, Color(0xFFC8C8DC), shadow = false)
+            GText(if (big) L["shop.soon.long"] else L["shop.soon"], 13, Color(0xFFC8C8DC), shadow = false)
         }
-        Shop.owned(item.id) -> KitButton(Res.drawable.ui_button_blue, "Équiper", width = w, height = h, titleSize = ts) { Shop.equip(item.id) }
+        Shop.owned(item.id) -> KitButton(Res.drawable.ui_button_blue, L["shop.equip"], width = w, height = h, titleSize = ts) { Shop.equip(item.id) }
         !Shop.unlocked(item.id) -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.height(h)) {
             Image(painterResource(Res.drawable.ui_icon_lock), null, Modifier.size(18.dp))
             Spacer(Modifier.width(4.dp))
@@ -231,7 +231,7 @@ private fun ShopAction(item: ShopItem, big: Boolean, onBuy: () -> Unit) {
             val afford = Meta.treasure >= item.price
             KitButton(
                 if (afford) Res.drawable.ui_button_gold else Res.drawable.ui_button_grey, price(item.price),
-                if (big && !afford) "Pas assez de pièces" else null, Res.drawable.ui_icon_coins,
+                if (big && !afford) L["shop.poor"] else null, Res.drawable.ui_icon_coins,
                 width = w, height = h, titleSize = ts, textColor = if (afford) Pal.ink else Color.White, enabled = afford, onClick = onBuy,
             )
         }

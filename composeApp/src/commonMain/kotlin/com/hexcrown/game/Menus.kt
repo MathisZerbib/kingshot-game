@@ -83,9 +83,6 @@ import org.jetbrains.compose.resources.painterResource
 
 // Menu screens built from the interface kit (art/ui/DA.md, mock-ups in art/ui/mockup.py).
 
-private val CLASS_ROLE = arrayOf("Corps à corps · très solide", "Tir rapide à longue portée", "Constructions -30 % · aimant")
-private val CLASS_ABILITY_SHORT = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
-private val CLASS_HP = intArrayOf(3, 1, 2)
 val PORTRAITS = arrayOf(Res.drawable.portrait_warrior, Res.drawable.portrait_ranger, Res.drawable.portrait_builder)
 val CLASS_ICONS = arrayOf(Res.drawable.ui_icon_sword, Res.drawable.ui_icon_bow, Res.drawable.ui_icon_hammer)
 private val TALENT_ICONS = arrayOf(
@@ -97,8 +94,8 @@ private val UP_ICONS = arrayOf(Res.drawable.ui_icon_heart, Res.drawable.ui_icon_
 private val MENU_BGS = arrayOf(Res.drawable.menu_bg_warrior, Res.drawable.menu_bg_ranger, Res.drawable.menu_bg_builder)
 // v2 plate: Vie / Attaque / Vitesse on 3 pips, and the role line (art/ui/DA-v2.md)
 private val CLASS_STATS = arrayOf(intArrayOf(3, 2, 1), intArrayOf(1, 3, 3), intArrayOf(2, 1, 2))
-private val CLASS_ROLE_V2 = arrayOf("Tient la ligne au corps à corps", "Tir rapide à longue portée", "Bâtit vite, répare les murs")
-private val STAT_NAMES = arrayOf("Vie", "Attaque", "Vitesse")
+private val CLASS_ROLE_V2 = LArr("role.0", "role.1", "role.2")
+private val STAT_NAMES = LArr("stat.0", "stat.1", "stat.2")
 private val STAT_BARS = arrayOf(Res.drawable.ui_bar_red, Res.drawable.ui_bar_gold, Res.drawable.ui_bar_blue)
 private var menuIntroPlayed = false // the opening scene runs once per launch
 
@@ -162,10 +159,10 @@ fun MainMenu(
             Spacer(Modifier.height(12.dp))
             Column(Modifier.fillMaxWidth().enter(280, 420, 16f), horizontalAlignment = Alignment.CenterHorizontally) {
                 if (hasSave) KitButton(
-                    Res.drawable.ui_button_gold, "Continuer", "Niveau $savedLevel · ${World.levelName(savedLevel)}", Res.drawable.ui_icon_play,
+                    Res.drawable.ui_button_gold, L["play.continue"], L.f("play.continue.sub", savedLevel, World.levelName(savedLevel)), Res.drawable.ui_icon_play,
                     width = 253.dp, height = 56.dp, textColor = Pal.ink, titleSize = 24, shine = true, onClick = onContinue,
                 ) else KitButton(
-                    Res.drawable.ui_button_gold, "Jouer", "${CLASS_NAMES[picked]} · nouvelle partie", Res.drawable.ui_icon_play,
+                    Res.drawable.ui_button_gold, L["play.new"], L.f("play.new.sub", CLASS_NAMES[picked]), Res.drawable.ui_icon_play,
                     width = 253.dp, height = 56.dp, textColor = Pal.ink, titleSize = 24, shine = true, onClick = onNew,
                 )
                 if (hasSave) NewGameLink(onNew) else Spacer(Modifier.height(10.dp))
@@ -263,7 +260,7 @@ private fun HeroPlate(picked: Int) {
         }
         Spacer(Modifier.height(8.dp))
         Bar(Hero.progress(), Res.drawable.ui_bar_blue, Modifier.width(100.dp), 9.dp)
-        GText("Héros niv. ${Hero.level}", 13, Color(0xFFAAC8FF), weight = FontWeight.Black, shadow = false)
+        GText(L.f("hero.level", Hero.level), 13, Color(0xFFAAC8FF), weight = FontWeight.Black, shadow = false)
         Spacer(Modifier.height(10.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -273,7 +270,7 @@ private fun HeroPlate(picked: Int) {
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GText("Capacité", 13, Color(0xFFAAB4D2), shadow = false)
+                GText(L["ability"], 13, Color(0xFFAAB4D2), shadow = false)
                 Spacer(Modifier.height(4.dp))
                 Row(
                     Modifier.width(146.dp).height(34.dp).nine(Res.drawable.ui_pill, IN_PILL, 34f / 90f).padding(horizontal = 10.dp),
@@ -329,7 +326,7 @@ private fun NewGameLink(onNew: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         BasicText(
-            if (confirm) "Touche encore pour effacer ta partie" else "Nouvelle partie",
+            if (confirm) L["newgame.confirm"] else L["newgame"],
             style = TextStyle(
                 color = if (confirm) Color(0xFFFF8A80) else Color(0xFFC8BEA0), fontSize = 13.sp, fontFamily = nunito(),
                 fontWeight = FontWeight.ExtraBold, textDecoration = TextDecoration.Underline,
@@ -347,10 +344,10 @@ private fun TabBar(ready: Int, onShop: () -> Unit, onMeta: (Int) -> Unit) {
             .padding(horizontal = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically,
     ) {
-        MenuTab("Boutique", Res.drawable.ui_icon_chest, 0, Modifier.weight(1f), onShop)
-        MenuTab("Talents", Res.drawable.ui_icon_star, 0, Modifier.weight(1f)) { onMeta(0) }
-        MenuTab("Missions", Res.drawable.ui_icon_scroll, ready, Modifier.weight(1f)) { onMeta(1) }
-        MenuTab("Stats", Res.drawable.ui_icon_trophy, 0, Modifier.weight(1f)) { onMeta(2) }
+        MenuTab(L["tab.shop"], Res.drawable.ui_icon_chest, 0, Modifier.weight(1f), onShop)
+        MenuTab(L["tab.talents"], Res.drawable.ui_icon_star, 0, Modifier.weight(1f)) { onMeta(0) }
+        MenuTab(L["tab.missions"], Res.drawable.ui_icon_scroll, ready, Modifier.weight(1f)) { onMeta(1) }
+        MenuTab(L["tab.stats"], Res.drawable.ui_icon_trophy, 0, Modifier.weight(1f)) { onMeta(2) }
     }
 }
 
@@ -379,16 +376,16 @@ private fun MenuTab(text: String, icon: DrawableResource, badge: Int, modifier: 
 fun PausePanel(game: Game, onResume: () -> Unit, onSettings: () -> Unit, onMenu: () -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     tick
-    KitPanel("Pause", dark = true) {
-        GText("${CLASS_NAMES[game.heroClass]} · Niveau ${game.level} · Vague ${game.wave}", 14)
-        GText("Partie sauvegardée à chaque vague", 11, Color(0xFFB8C4E0))
-        KitButton(Res.drawable.ui_button_green, "Reprendre", icon = Res.drawable.ui_icon_play, onClick = onResume)
-        KitButton(Res.drawable.ui_button_blue, "Réglages", icon = Res.drawable.ui_icon_gear, width = 220.dp, height = 52.dp, onClick = onSettings)
-        KitButton(Res.drawable.ui_button_wood, "Menu principal", icon = Res.drawable.ui_icon_flag, width = 220.dp, height = 52.dp, onClick = onMenu)
-        KitToggle("Sons", !Prefs.sfxOff, dark = true) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
-        KitToggle("Sons complets", Prefs.sfxFull, dark = true) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
-        KitToggle("Musique", !Prefs.musicOff, dark = true) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
-        KitToggle("Vibrations", !Prefs.vibrationOff, dark = true) { Prefs.vibrationOff = !it; tick++ }
+    KitPanel(L["pause"], dark = true) {
+        GText(L.f("pause.sub", CLASS_NAMES[game.heroClass], game.level, game.wave), 14)
+        GText(L["pause.saved"], 11, Color(0xFFB8C4E0))
+        KitButton(Res.drawable.ui_button_green, L["resume"], icon = Res.drawable.ui_icon_play, onClick = onResume)
+        KitButton(Res.drawable.ui_button_blue, L["settings"], icon = Res.drawable.ui_icon_gear, width = 220.dp, height = 52.dp, onClick = onSettings)
+        KitButton(Res.drawable.ui_button_wood, L["mainmenu"], icon = Res.drawable.ui_icon_flag, width = 220.dp, height = 52.dp, onClick = onMenu)
+        KitToggle(L["sfx"], !Prefs.sfxOff, dark = true) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
+        KitToggle(L["sfx.full"], Prefs.sfxFull, dark = true) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
+        KitToggle(L["music"], !Prefs.musicOff, dark = true) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
+        KitToggle(L["vibration"], !Prefs.vibrationOff, dark = true) { Prefs.vibrationOff = !it; tick++ }
     }
 }
 
@@ -397,13 +394,21 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     var confirmReset by remember { mutableStateOf(false) }
     tick
-    KitPanel("Réglages", onDismiss = onClose) {
-        KitToggle("Sons", !Prefs.sfxOff) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
-        KitToggle("Sons complets", Prefs.sfxFull) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
-        KitToggle("Musique", !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
-        KitToggle("Vibrations", !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
-        KitToggle("Fluidité max (sinon 60 Hz)", !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
-        GText("Difficulté", 15, Pal.ink, title = true, shadow = false)
+    KitPanel(L["settings"], onDismiss = onClose) {
+        KitToggle(L["sfx"], !Prefs.sfxOff) { Prefs.sfxOff = !it; Audio.applySettings(); tick++ }
+        KitToggle(L["sfx.full"], Prefs.sfxFull) { Prefs.sfxFull = it; Audio.applySettings(); tick++ }
+        KitToggle(L["music"], !Prefs.musicOff) { Prefs.musicOff = !it; Audio.applySettings(); tick++ }
+        KitToggle(L["vibration"], !Prefs.vibrationOff) { Prefs.vibrationOff = !it; tick++ }
+        KitToggle(L["fluid"], !Prefs.cap60) { Prefs.cap60 = !it; tick++ }
+        GText(L["language"], 15, Pal.ink, title = true, shadow = false)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            for (l in 0..1) Box(
+                Modifier.weight(1f).height(40.dp).nine(if (L.lang == l) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
+                    .clickable { Audio.play(Sfx.CLICK); L.setLang(l) },
+                contentAlignment = Alignment.Center,
+            ) { GText(L["lang.$l"], 13, if (L.lang == l) Color.White else Pal.ink, title = true, caps = false, shadow = L.lang == l) }
+        }
+        GText(L["difficulty"], 15, Pal.ink, title = true, shadow = false)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             for (d in 0..2) Box(
                 Modifier.weight(1f).height(40.dp).nine(if (Prefs.difficulty == d) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.28f)
@@ -411,12 +416,12 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { GText(DIFF_NAMES[d], 13, if (Prefs.difficulty == d) Color.White else Pal.ink, title = true, caps = false, shadow = Prefs.difficulty == d) }
         }
-        GText("S'applique à la prochaine partie", 10, Pal.ink, shadow = false)
+        GText(L["difficulty.note"], 10, Pal.ink, shadow = false)
         KitButton(
-            Res.drawable.ui_button_red, if (confirmReset) "Confirmer ?" else "Remettre à zéro",
-            if (confirmReset) "trésor, talents, record, partie" else "toute la progression", width = 230.dp, height = 52.dp,
+            Res.drawable.ui_button_red, if (confirmReset) L["reset.confirm"] else L["reset"],
+            if (confirmReset) L["reset.what"] else L["reset.all"], width = 230.dp, height = 52.dp,
         ) { if (confirmReset) { Prefs.resetProgress(); confirmReset = false; onReset() } else confirmReset = true }
-        KitButton(Res.drawable.ui_button_green, "Fermer", icon = Res.drawable.ui_icon_close, width = 200.dp, height = 52.dp, onClick = onClose)
+        KitButton(Res.drawable.ui_button_green, L["close"], icon = Res.drawable.ui_icon_close, width = 200.dp, height = 52.dp, onClick = onClose)
     }
 }
 
@@ -433,26 +438,26 @@ private fun StatPill(value: String, name: String, modifier: Modifier) {
 
 @Composable
 fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, onMenu: () -> Unit) {
-    KitPanel(if (game.kDead) "Le roi est tombé" else "Le donjon est tombé", red = true, widthFrac = 0.9f) {
+    KitPanel(if (game.kDead) L["over.king"] else L["over.keep"], red = true, widthFrac = 0.9f) {
         KitIcon(Res.drawable.ui_icon_skull, 52.dp)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            StatPill("${game.level}", "Niveau", Modifier.weight(1f))
-            StatPill("${game.wave}", "Vague", Modifier.weight(1f))
-            StatPill("${game.kills}", "Ennemis", Modifier.weight(1f))
-            StatPill("${game.coinsCollected}", "Or ramassé", Modifier.weight(1f))
+            StatPill("${game.level}", L["word.level"], Modifier.weight(1f))
+            StatPill("${game.wave}", L["word.wave"], Modifier.weight(1f))
+            StatPill("${game.kills}", L["word.enemies"], Modifier.weight(1f))
+            StatPill("${game.coinsCollected}", L["word.gold"], Modifier.weight(1f))
         }
-        if (game.newRecord) GText("Nouveau record !", 15, Color(0xFF2E8B34), title = true, shadow = false)
+        if (game.newRecord) GText(L["record"], 15, Color(0xFF2E8B34), title = true, shadow = false)
         Row(verticalAlignment = Alignment.CenterVertically) {
             KitIcon(Res.drawable.ui_icon_coins, 20.dp)
             Spacer(Modifier.width(4.dp))
-            GText("+${game.treasureWon} pièces au trésor", 12, Pal.ink, shadow = false)
+            GText(L.f("over.treasure", game.treasureWon), 12, Pal.ink, shadow = false)
         }
         if (game.canRevive) KitButton(
-            Res.drawable.ui_button_gold, "Revivre", "Coûte ${game.reviveCost} pièces · une seule fois", Res.drawable.ui_icon_heart,
+            Res.drawable.ui_button_gold, L["revive"], L.f("revive.sub", game.reviveCost), Res.drawable.ui_icon_heart,
             textColor = Pal.ink, onClick = onRevive,
         )
-        KitButton(Res.drawable.ui_button_green, "Réessayer", icon = Res.drawable.ui_icon_arrow, width = 230.dp, height = 52.dp, onClick = onRetry)
-        KitButton(Res.drawable.ui_button_wood, "Menu", icon = Res.drawable.ui_icon_flag, width = 200.dp, height = 48.dp, onClick = onMenu)
+        KitButton(Res.drawable.ui_button_green, L["retry"], icon = Res.drawable.ui_icon_arrow, width = 230.dp, height = 52.dp, onClick = onRetry)
+        KitButton(Res.drawable.ui_button_wood, L["menu"], icon = Res.drawable.ui_icon_flag, width = 200.dp, height = 48.dp, onClick = onMenu)
     }
 }
 
@@ -460,17 +465,17 @@ fun DefeatPanel(game: Game, onRevive: () -> Unit, onRetry: () -> Unit, onMenu: (
 @Composable
 fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClose: () -> Unit) {
     metaTick
-    KitPanel(arrayOf("Talents", "Missions", "Statistiques")[which], dark = true, widthFrac = 0.94f, onDismiss = onClose) {
+    KitPanel(arrayOf(L["tab.talents"], L["tab.missions"], L["stats.title"])[which], dark = true, widthFrac = 0.94f, onDismiss = onClose) {
         Pill(Res.drawable.ui_icon_coins, "${Meta.treasure}", width = 140.dp)
         when (which) {
             0 -> {
-                GText("${CLASS_NAMES[hero]} : améliorations", 12, Color.White, title = true)
+                GText(L.f("meta.upgrades", CLASS_NAMES[hero]), 12, Color.White, title = true)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (up in 0..2) TalentCard(UP_NAMES[up], UP_ICONS[up], Meta.level(hero, up), UP_MAX, Meta.cost(hero, up), Modifier.weight(1f).stagger(up)) {
                         if (Meta.buy(hero, up)) { Audio.play(Sfx.FORGE); onChange() }
                     }
                 }
-                GText("Talents du royaume", 12, Color.White, title = true)
+                GText(L["meta.talents"], 12, Color.White, title = true)
                 for (row in 0 until 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     for (col in 0 until 3) {
                         val t = row * 3 + col
@@ -491,17 +496,17 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                         Spacer(Modifier.width(8.dp))
                         GText("${minOf(Missions.progress(sl), Missions.target(sl))}/${Missions.target(sl)}", 11, Pal.ink, shadow = false)
                     }
-                    if (done) KitButton(Res.drawable.ui_button_gold, "Réclamer", "+${Missions.reward(sl)} pièces", width = 180.dp, height = 46.dp, textColor = Pal.ink) {
+                    if (done) KitButton(Res.drawable.ui_button_gold, L["claim"], L.f("claim.sub", Missions.reward(sl)), width = 180.dp, height = 46.dp, textColor = Pal.ink) {
                         Missions.claim(sl); Audio.play(Sfx.COIN_STACK); onChange()
-                    } else GText("Récompense : ${Missions.reward(sl)} pièces", 10, Pal.ink, shadow = false)
+                    } else GText(L.f("reward", Missions.reward(sl)), 10, Pal.ink, shadow = false)
                 }
             }
             else -> {
                 val secs = Stats.playSeconds
                 listOf(
-                    "Niveau de héros" to "${Hero.level}", "Meilleur niveau" to "${Stats.bestLevel}", "Meilleure vague" to "${Storage.loadBest()}",
-                    "Étoiles" to "${Stats.stars} / 60", "Ennemis vaincus" to "${Stats.kills}", "Parties" to "${Stats.games}",
-                    "Temps de jeu" to "${secs / 3600} h ${secs / 60 % 60} min",
+                    L["st.hero"] to "${Hero.level}", L["st.level"] to "${Stats.bestLevel}", L["st.wave"] to "${Storage.loadBest()}",
+                    L["st.stars"] to "${Stats.stars} / 60", L["st.kills"] to "${Stats.kills}", L["st.games"] to "${Stats.games}",
+                    L["st.time"] to "${secs / 3600} h ${secs / 60 % 60} min",
                 ).forEachIndexed { i, (k, v) ->
                     Row(Modifier.fillMaxWidth().stagger(i).padding(vertical = 2.dp)) {
                         Box(Modifier.weight(1f)) { GText(k, 14, Color(0xFFCCD6F0), align = TextAlign.Start) }
@@ -510,7 +515,7 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                 }
             }
         }
-        KitButton(Res.drawable.ui_button_green, "Fermer", icon = Res.drawable.ui_icon_close, width = 200.dp, height = 50.dp, onClick = onClose)
+        KitButton(Res.drawable.ui_button_green, L["close"], icon = Res.drawable.ui_icon_close, width = 200.dp, height = 50.dp, onClick = onClose)
     }
 }
 
@@ -529,7 +534,7 @@ private fun TalentCard(name: String, icon: DrawableResource, lv: Int, max: Int, 
             Modifier.fillMaxWidth().height(24.dp)
                 .nine(if (lv >= max) Res.drawable.ui_button_grey else if (can) Res.drawable.ui_button_gold else Res.drawable.ui_button_grey, IN_BUTTON, 24f / 150f),
             contentAlignment = Alignment.Center,
-        ) { GText(if (lv >= max) "MAX" else "● $cost", 10, if (can) Pal.ink else Color.White, weight = FontWeight.Black, shadow = false) }
+        ) { GText(if (lv >= max) L["max"] else "● $cost", 10, if (can) Pal.ink else Color.White, weight = FontWeight.Black, shadow = false) }
     }
 }
 
@@ -539,32 +544,32 @@ fun VictoryPanel(game: Game, onNext: () -> Unit) {
     var chestOpen by remember { mutableStateOf(false) }
     val shake = rememberInfiniteTransition()
     val wob by shake.animateFloat(-6f, 6f, infiniteRepeatable(tween(120), RepeatMode.Reverse))
-    KitPanel("Niveau ${game.level - 1} terminé", widthFrac = 0.9f) {
+    KitPanel(L.f("victory.title", game.level - 1), widthFrac = 0.9f) {
         Row(verticalAlignment = Alignment.Bottom) {
             for (k in 0 until 3) KitIcon(Res.drawable.ui_icon_star, if (k == 1) 64.dp else 48.dp, grey = k >= game.lastStars)
         }
-        GText("Donjon > 80 % · aucun mur perdu · rapide", 11, Color(0xFF2E7D32), shadow = false)
+        GText(L["victory.stars"], 11, Color(0xFF2E7D32), shadow = false)
         Box(
             Modifier.size(110.dp).rotate(if (chestOpen) 0f else wob).clickable(enabled = !chestOpen) { chestOpen = true; game.openChest() },
             contentAlignment = Alignment.Center,
         ) { KitIcon(Res.drawable.ui_icon_chest, 100.dp) }
-        GText(if (chestOpen) "+${game.chestCoins} pièces · +${game.chestTreasure} au trésor" else "Touche le coffre !", 13, Pal.ink, title = !chestOpen, shadow = false)
+        GText(if (chestOpen) L.f("chest.got", game.chestCoins, game.chestTreasure) else L["chest.tap"], 13, Pal.ink, title = !chestOpen, shadow = false)
         val id = game.newUnlockId
         if (id >= 0) {
             Column(
                 Modifier.fillMaxWidth().nine(Res.drawable.ui_card, IN_CARD, 0.25f).padding(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                GText("Nouveau : " + (if (id == UNLOCK_MINE_CARD) "Mine et Caserne" else UNLOCK_NAMES[id]), 12, Color.White, title = true)
+                GText(L.f("new.named", if (id == UNLOCK_MINE_CARD) L["mine.barracks"] else UNLOCK_NAMES[id]), 12, Color.White, title = true)
                 Spacer(Modifier.height(10.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Image(painterResource(unlockArt(id)), null, Modifier.size(80.dp))
                     Spacer(Modifier.width(8.dp))
-                    GText(if (id == UNLOCK_MINE_CARD) "Mine : butin x1,5 · Caserne : 3 lanciers" else UNLOCK_DESC[id], 12, Pal.ink, shadow = false)
+                    GText(if (id == UNLOCK_MINE_CARD) L["mine.desc"] else UNLOCK_DESC[id], 12, Pal.ink, shadow = false)
                 }
             }
         }
-        KitButton(Res.drawable.ui_button_green, "Niveau suivant", icon = Res.drawable.ui_icon_arrow) { if (!chestOpen) game.openChest(); onNext() }
+        KitButton(Res.drawable.ui_button_green, L["next"], icon = Res.drawable.ui_icon_arrow) { if (!chestOpen) game.openChest(); onNext() }
     }
 }
 

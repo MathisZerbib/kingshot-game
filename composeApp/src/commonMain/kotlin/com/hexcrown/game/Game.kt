@@ -28,7 +28,7 @@ const val TRANSITION_TIME = 4.2f
 val DIFF_HP = floatArrayOf(0.7f, 1f, 1.4f)
 val DIFF_DMG = floatArrayOf(0.75f, 1f, 1.4f)
 val DIFF_COUNT = floatArrayOf(0.75f, 1f, 1.2f)
-val DIFF_NAMES = arrayOf("Normal", "Difficile", "Cauchemar")
+val DIFF_NAMES = LArr("diff.0", "diff.1", "diff.2")
 const val OGRE_SLAM_R = 160f
 const val PAD_WALL = 5
 const val PAD_FARM = 6 // +1 coin every 2 s, dropped next to the farm
@@ -55,8 +55,8 @@ const val UNLOCK_MINE_CARD = 100 // level-2 card: mine and barracks
 val UNLOCK_SPOT = intArrayOf(0, 0, 0, 0, 0, 1, 1, 1, 1, 1)
 val UNLOCK_LEVEL = intArrayOf(3, 5, 7, 9, 11, 4, 6, 8, 10, 12)
 val UNLOCK_COST = intArrayOf(120, 160, 200, 260, 300, 180, 220, 320, 300, 280)
-val UNLOCK_NAMES = arrayOf("Écurie", "Autel de soin", "Moulin", "Statue d'or", "Marché", "Donjon II", "Bannière", "Donjon III", "Trésorerie", "Forge des portes")
-val UNLOCK_DESC = arrayOf("roi +20 % vitesse", "donjon se soigne", "+1 pièce / 2 s", "butin +25 %", "trésor +25 %", "donjon +50 %, 2 archers", "tirs +20 %", "donjon +50 %, 4 archers", "+5 % des pièces / vague", "murs +50 %")
+val UNLOCK_NAMES = LArr("unlock.0", "unlock.1", "unlock.2", "unlock.3", "unlock.4", "unlock.5", "unlock.6", "unlock.7", "unlock.8", "unlock.9")
+val UNLOCK_DESC = LArr("unlockdesc.0", "unlockdesc.1", "unlockdesc.2", "unlockdesc.3", "unlockdesc.4", "unlockdesc.5", "unlockdesc.6", "unlockdesc.7", "unlockdesc.8", "unlockdesc.9")
 
 const val MAX_SQUAD = 30
 
@@ -64,8 +64,8 @@ const val MAX_SQUAD = 30
 const val CLASS_WARRIOR = 0 // melee cleave, tough; ability: whirlwind (damage + knockback around the king)
 const val CLASS_RANGER = 1 // fast long-range shots, fragile; ability: arrow rain on every enemy in range
 const val CLASS_BUILDER = 2 // weak shots, builds 30 % cheaper, bigger magnet; ability: repair all walls and the keep
-val CLASS_NAMES = arrayOf("Guerrier", "Rôdeur", "Bâtisseur")
-val ABILITY_NAMES = arrayOf("Tourbillon", "Pluie de flèches", "Réparation")
+val CLASS_NAMES = LArr("class.0", "class.1", "class.2")
+val ABILITY_NAMES = LArr("ability.0", "ability.1", "ability.2")
 val ABILITY_COOLDOWN = floatArrayOf(10f, 12f, 20f)
 
 // Permanent hero upgrades bought from the treasure (coins kept between games): the meta loop
@@ -73,7 +73,7 @@ const val UP_HP = 0 // +10 % health per level
 const val UP_POWER = 1 // +8 % king damage per level
 const val UP_ABILITY = 2 // -6 % ability cooldown per level
 const val UP_MAX = 10
-val UP_NAMES = arrayOf("Vie", "Force", "Capacité")
+val UP_NAMES = LArr("up.0", "up.1", "up.2")
 
 /** Treasure (coins kept from past games) and hero upgrades, kept across games. */
 object Meta {
@@ -858,7 +858,7 @@ class Game {
         refreshSpots()
         val sb = StringBuilder()
         for (u in UNLOCK_NAMES.indices) if (UNLOCK_LEVEL[u] == level) { if (sb.isNotEmpty()) sb.append(" · "); sb.append(UNLOCK_NAMES[u]) }
-        if (level == 2) { if (sb.isNotEmpty()) sb.append(" · "); sb.append("Mine · Caserne") }
+        if (level == 2) { if (sb.isNotEmpty()) sb.append(" · "); sb.append(L["mine.barracks.short"]) }
         newUnlocks = sb.toString()
         newUnlockId = -1
         for (u in UNLOCK_NAMES.indices) if (UNLOCK_LEVEL[u] == level) { newUnlockId = u; break }

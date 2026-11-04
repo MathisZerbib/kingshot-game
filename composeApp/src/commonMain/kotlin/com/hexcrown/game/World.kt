@@ -142,17 +142,8 @@ object World {
      * 2 = northern forest (road through a cliff pass and a dense wood), 3 = eastern gorge (road squeezed between
      * two cliffs), 4 = southern river (crossed by both southern roads on bridges). Level 5+ keeps the level-4 map.
      */
-    val LEVEL_NAMES = arrayOf(
-        // chapter 1, the plain: the map grows road by road
-        "La Vallée", "La Forêt du Nord", "Le Col de l'Est", "La Rivière du Sud", "Le Seigneur de la Plaine",
-        // chapter 2, the forest
-        "L'Orée", "Les Loups des Bois", "La Clairière", "Les Archers Verts", "Le Cœur de la Forêt",
-        // chapter 3, the snow
-        "Le Premier Gel", "La Tempête", "Les Remparts Gelés", "La Nuit Blanche", "L'Ogre des Neiges",
-        // chapter 4, the kingdom
-        "Les Bannières", "Le Siège", "Les Béliers", "La Dernière Muraille", "Le Seigneur Noir",
-    )
-    val CHAPTER_NAMES = arrayOf("La Plaine", "La Forêt", "Les Neiges", "Le Royaume")
+    val LEVEL_NAMES = LArr("level.0", "level.1", "level.2", "level.3", "level.4", "level.5", "level.6", "level.7", "level.8", "level.9", "level.10", "level.11", "level.12", "level.13", "level.14", "level.15", "level.16", "level.17", "level.18", "level.19")
+    val CHAPTER_NAMES = LArr("chapter.0", "chapter.1", "chapter.2", "chapter.3")
     const val LAST_LEVEL = 20
 
     // Level themes: each named level plays differently (wave mix, weather, light)
@@ -166,14 +157,9 @@ object World {
     const val TH_RAMS = 7 // rams galore
     const val TH_LAST_WALL = 8 // every road at once
     private val LEVEL_THEMES = intArrayOf(0, 0, 0, 0, 0, 0, TH_PACK, 0, TH_VOLLEY, 0, 0, TH_STORM, TH_FROST, TH_NIGHT, 0, 0, TH_SIEGE, TH_RAMS, TH_LAST_WALL, 0)
-    val THEME_TEXT = arrayOf(
-        "", "Meute : les loups chassent en nombre", "Volées : les archers ennemis tirent de partout",
-        "Tempête : tout le monde avance plus lentement", "Gel : murs fragiles, ennemis ralentis",
-        "Nuit : on ne voit que près des lumières", "Siège : boucliers et béliers", "Béliers : protège tes portes",
-        "Dernière muraille : toutes les routes à la fois",
-    )
+    val THEME_TEXT = LArr("theme.0", "theme.1", "theme.2", "theme.3", "theme.4", "theme.5", "theme.6", "theme.7", "theme.8")
     fun theme(level: Int) = if (level in 1..LAST_LEVEL) LEVEL_THEMES[level - 1] else TH_NONE
-    fun levelName(level: Int) = if (level > LAST_LEVEL) "Mode infini" else LEVEL_NAMES[(level - 1).coerceIn(0, LEVEL_NAMES.size - 1)]
+    fun levelName(level: Int) = if (level > LAST_LEVEL) L["endless"] else LEVEL_NAMES[(level - 1).coerceIn(0, LEVEL_NAMES.size - 1)]
     /** 0 plain (1-5), 1 forest (6-10), 2 snow (11-15), 3 kingdom (16-20 and the endless mode). */
     fun chapter(level: Int) = ((level - 1) / 5).coerceIn(0, 3)
     /** Extra woods for the forest chapter. */
