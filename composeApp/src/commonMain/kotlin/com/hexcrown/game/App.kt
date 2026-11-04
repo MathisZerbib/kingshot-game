@@ -38,6 +38,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -130,6 +131,10 @@ fun App() {
     var metaPanel by remember { mutableIntStateOf(-1) } // 0 talents, 1 missions, 2 stats
     LaunchedEffect(Unit) { Missions.ensure() }
 
+    var lastTapUp by remember { mutableLongStateOf(0L) }
+    var lastTapX by remember { mutableFloatStateOf(0f) }
+    var lastTapY by remember { mutableFloatStateOf(0f) }
+
     Box(
         Modifier
             .fillMaxSize()
@@ -161,12 +166,21 @@ fun App() {
                         val p = first.position
                         if (hit(p, renderer.abilityX, renderer.abilityY, renderer.abilityRadius)) { game.useAbility(); first.consume(); return@awaitEachGesture }
                         if (hit(p, renderer.pauseX, renderer.pauseY, renderer.pauseRadius)) { game.paused = true; first.consume(); return@awaitEachGesture }
+                        if (hit(p, renderer.chargeX, renderer.chargeY, renderer.chargeRadius)) { game.charge(); first.consume(); return@awaitEachGesture }
+                        if (game.canPlant && hit(p, renderer.bannerX, renderer.bannerY, renderer.bannerRadius)) { game.plantBanner(); first.consume(); return@awaitEachGesture }
+                        // double-tap anywhere: the king charges (the joystick still starts, so moving right after feels natural)
+                        val now = first.uptimeMillis
+                        if (now - lastTapUp < 280L && hit(p, lastTapX, lastTapY, 120f * density.density)) game.charge()
                     }
+                    val downAt = first.uptimeMillis
                     game.input.touchStart(first.position.x, first.position.y, first.position.y < size.height * 0.6f)
                     while (true) {
                         val ev = awaitPointerEvent()
                         val ch = ev.changes.firstOrNull { it.id == id } ?: break
-                        if (!ch.pressed) break
+                        if (!ch.pressed) {
+                            if (ch.uptimeMillis - downAt < 220L) { lastTapUp = ch.uptimeMillis; lastTapX = ch.position.x; lastTapY = ch.position.y } else lastTapUp = 0L
+                            break
+                        }
                         game.input.touchMove(ch.position.x, ch.position.y)
                         ch.consume()
                     }

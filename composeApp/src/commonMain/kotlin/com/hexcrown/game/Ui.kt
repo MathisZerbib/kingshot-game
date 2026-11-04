@@ -341,7 +341,7 @@ fun KitIcon(res: DrawableResource, size: Dp, grey: Boolean = false) {
 class HudImages(
     val circle: ImageBitmap, val circleRed: ImageBitmap, val ribbonBlue: ImageBitmap, val pill: ImageBitmap,
     val panelDark: ImageBitmap, val barTrack: ImageBitmap, val barRed: ImageBitmap, val barGreen: ImageBitmap, val barGold: ImageBitmap,
-    val coins: ImageBitmap, val pause: ImageBitmap, val classIcons: Array<ImageBitmap>,
+    val coins: ImageBitmap, val pause: ImageBitmap, val classIcons: Array<ImageBitmap>, val hex: ImageBitmap, val charge: ImageBitmap,
 )
 
 @Composable
@@ -360,8 +360,10 @@ fun rememberHud(): HudImages {
     val sword = imageResource(Res.drawable.ui_icon_sword)
     val bow = imageResource(Res.drawable.ui_icon_bow)
     val hammer = imageResource(Res.drawable.ui_icon_hammer)
-    return remember(circle, circleRed, ribbon, pill, panel, track, red, green, gold, coins, pause, sword, bow, hammer) {
-        HudImages(circle, circleRed, ribbon, pill, panel, track, red, green, gold, coins, pause, arrayOf(sword, bow, hammer))
+    val hex = imageResource(Res.drawable.ui_icon_hex)
+    val charge = imageResource(Res.drawable.ui_icon_charge)
+    return remember(circle, circleRed, ribbon, pill, panel, track, red, green, gold, coins, pause, sword, bow, hammer, hex, charge) {
+        HudImages(circle, circleRed, ribbon, pill, panel, track, red, green, gold, coins, pause, arrayOf(sword, bow, hammer), hex, charge)
     }
 }
 
