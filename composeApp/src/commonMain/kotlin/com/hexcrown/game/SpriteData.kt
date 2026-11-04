@@ -6,8 +6,6 @@ package com.hexcrown.game
 class SpriteInfo(val w: Int, val h: Int, val ax: Float, val ay: Float, val ppu: Float, val cols: Int, val rows: Int)
 
 object SpriteData {
-    val banner = SpriteInfo(179, 237, 42f, 226f, 3f, 1, 1)
-    val bannerBurning = SpriteInfo(95, 225, 42f, 214f, 3f, 1, 1)
     val archer = SpriteInfo(133, 153, 66.5f, 136.3f, 2.993f, 10, 8)
     val knight = SpriteInfo(147, 160, 73.5f, 143.7f, 3.007f, 9, 8)
     val boss = SpriteInfo(280, 290, 140f, 262f, 3.0f, 7, 8)
