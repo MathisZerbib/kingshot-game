@@ -173,7 +173,7 @@ fun GText(
 fun KitButton(
     res: DrawableResource, text: String, sub: String? = null, icon: DrawableResource? = null,
     width: Dp = 260.dp, height: Dp = 64.dp, textColor: Color = Color.White, enabled: Boolean = true,
-    titleSize: Int = if (height >= 64.dp) 22 else 17, shine: Boolean = false, onClick: () -> Unit,
+    titleSize: Int = if (height >= 64.dp) 22 else 17, shine: Boolean = false, iconSize: Dp? = null, caps: Boolean = true, onClick: () -> Unit,
 ) {
     val src = remember { MutableInteractionSource() }
     val pressed by src.collectIsPressedAsState()
@@ -200,11 +200,11 @@ fun KitButton(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (icon != null) {
-                Image(painterResource(icon), null, Modifier.size(height * 0.55f))
+                Image(painterResource(icon), null, Modifier.size(iconSize ?: (height * 0.55f)))
                 Spacer(Modifier.width(8.dp))
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                GText(text, titleSize, textColor, title = true)
+                GText(text, titleSize, textColor, title = true, caps = caps)
                 if (sub != null) AnimatedContent(sub, transitionSpec = {
                     (slideInVertically { it } + fadeIn()) togetherWith (slideOutVertically { -it } + fadeOut())
                 }) { GText(it, 13, textColor.copy(alpha = 0.92f), shadow = textColor == Color.White) }

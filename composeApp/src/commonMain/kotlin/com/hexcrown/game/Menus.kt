@@ -186,21 +186,14 @@ fun MainMenu(
 @Composable
 private fun RealmEntry(onRealm: () -> Unit) {
     val open = Stats.bestLevel >= 6
-    val src = remember { MutableInteractionSource() }
-    Box(Modifier.padding(top = 8.dp)) {
-        Row(
-            Modifier.width(253.dp).height(48.dp).nine(Res.drawable.ui_card, IN_CARD, 0.2f)
-                .clickable(src, indication = null, enabled = open) { Audio.play(Sfx.CLICK); Storage.saveInt("realm_seen", 1); onRealm() }.padding(horizontal = 12.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center,
-        ) {
-            KitIcon(Res.drawable.ui_icon_hex, 30.dp, grey = !open)
-            Spacer(Modifier.width(8.dp))
-            GText(if (open) L["realm"] else L["realm.locked"], if (open) 18 else 14, if (open) Color.White else Color(0xFFAAB4D2), title = open, caps = false)
-            if (!open) { Spacer(Modifier.width(6.dp)); KitIcon(Res.drawable.ui_icon_lock, 20.dp) }
-        }
+    Box(Modifier.padding(top = 8.dp).width(253.dp)) {
+        KitButton(
+            if (open) Res.drawable.ui_button_blue else Res.drawable.ui_button_grey, if (open) L["realm"] else L["realm.locked"], null, Res.drawable.ui_icon_hex,
+            width = 253.dp, height = 64.dp, titleSize = 20, enabled = open, iconSize = 24.dp, caps = false,
+        ) { Storage.saveInt("realm_seen", 1); onRealm() }
         if (open && Storage.loadInt("realm_seen") == 0) Box(
-            Modifier.align(Alignment.TopEnd).offset(x = 6.dp, y = (-6).dp).background(Pal.red, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp),
-        ) { GText(L["realm.new"], 11, weight = FontWeight.Black, shadow = false) }
+            Modifier.align(Alignment.TopEnd).offset(x = (-8).dp, y = 6.dp).background(Pal.red, RoundedCornerShape(9.dp)).padding(horizontal = 7.dp, vertical = 1.dp),
+        ) { GText(L["realm.new"], 13, weight = FontWeight.Black, shadow = false) }
     }
 }
 

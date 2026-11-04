@@ -54,6 +54,8 @@ class HexGrid : Terrain {
     var count = 0; private set
     /** Bumped when a hex changes state or finishes unfolding: the renderer rebuilds its cached paths. */
     var version = 0; private set
+    /** Bumped when the set of standing banners changes: the flow field only depends on that. */
+    var bannerVersion = 0; private set
     private var incomeAcc = 0f
     // what the last update did, read by Game for sounds and effects
     var burned = 0; private set
@@ -91,7 +93,7 @@ class HexGrid : Terrain {
 
     fun clear() {
         for (i in 0 until count) store(Hex(list[i]), 0)
-        count = 0; incomeAcc = 0f; version++
+        count = 0; incomeAcc = 0f; version++; bannerVersion++
     }
 
     private fun claim(h: Hex, banner: Boolean, deployMs: Int) {
@@ -105,7 +107,7 @@ class HexGrid : Terrain {
     fun plant(h: Hex, animated: Boolean = true) {
         claim(h, true, if (animated) DEPLOY_MS else 0)
         for (i in 0..5) claim(Hex.of(h.q + DQ[i], h.r + DR[i]), false, if (animated) DEPLOY_MS * (i + 2) else 0)
-        version++
+        version++; bannerVersion++
     }
 
     /** Call for each active enemy, before [update]. */
@@ -133,18 +135,18 @@ class HexGrid : Terrain {
                 a = if (seen) min(0x7FFF, a + ms) else 0
                 if (a >= (burnDelay * 1000f).toInt()) {
                     store(h, HEX_BURNT or banner)
-                    burned++; version++
+                    burned++; version++; if (banner != 0) bannerVersion++
                 } else store(h, HEX_OURS or banner or (a shl 4) or (b shl 19))
             } else {
                 b = if (kingAlive && h.key == king) min(0xFFF, b + ms) else 0
                 a = min(0x7FFF, a + ms)
                 if (b >= (EXTINGUISH_IN * 1000f).toInt()) {
                     store(h, HEX_OURS or banner)
-                    extinguished++; version++
+                    extinguished++; version++; if (banner != 0) bannerVersion++
                 } else if (a >= (BURNT_LOST_AFTER * 1000f).toInt()) {
                     store(h, 0)
                     list[i] = list[--count]
-                    lost++; version++
+                    lost++; version++; if (banner != 0) bannerVersion++
                     continue
                 } else store(h, HEX_BURNT or banner or (a shl 4) or (b shl 19))
             }
@@ -199,7 +201,7 @@ class HexGrid : Terrain {
                 }
             }
         }
-        version++
+        version++; bannerVersion++
     }
 
     fun load(s: String) {
@@ -212,7 +214,7 @@ class HexGrid : Terrain {
             list[count++] = h.key
             store(h, f[2].toInt().coerceIn(HEX_OURS, HEX_BURNT) or (if (f[3] == "1") 4 else 0))
         }
-        version++
+        version++; bannerVersion++
     }
 }
 

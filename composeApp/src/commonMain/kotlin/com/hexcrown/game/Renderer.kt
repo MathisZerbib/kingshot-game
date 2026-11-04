@@ -59,6 +59,7 @@ private const val K_RPROP = 33
 private const val K_RMOUNT = 34
 private const val K_RCAMP = 35
 private const val K_RVILLAGE = 36
+private const val K_RHOME = 37
 private const val K_COIN = 9
 private const val K_PROP = 10
 private const val K_RING = 11
@@ -133,6 +134,8 @@ private val GOLD_DARK = Color(0xFFD9901A)
 private val HEAL_GREEN = Color(0xFF7CFF8A)
 private val REALM_FOG = Color(0xFF101A30)
 private val REALM_WATER = Color(0xFF3F86C9)
+// prairie, dark prairie, ochre moor, forest, grey-green marsh, pale snow, ashes
+private val REGION_GROUND = arrayOf(Color(0xFF8FC45A), Color(0xFF5E9A4A), Color(0xFFB99A55), Color(0xFF3E7A46), Color(0xFF7C8F6A), Color(0xFFDDE6EA), Color(0xFF7A7470))
 private val HEX_LINE = Color(0x0FFFFFFF)
 private val BAG_BROWN = Color(0xFF7A4E24)
 private val NIGHT_VEIL = Color(0xFF0A1030)
@@ -369,6 +372,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             scale(scale, scale, Offset.Zero)
         }) {
             drawGround(vl, vt, vr, vb)
+            drawRealmGround(g, vl, vt, vr, vb)
             drawHexes(g, vl, vt, vr, vb)
             for (p in g.pads) if (p.visible) drawPad(p, (p.kind == PAD_TOWER_ARCHER && g.squad == 0) || !g.padOpen(p))
             drawFx(g, ground = true)
@@ -398,7 +402,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             label(text.str(padName(p, g)), sx, sy + (Pad.HALF + 16f) * scale, 17f * scale, WHITE)
         }
         for (t in g.texts) {
-            if (!t.active) continue
+            if (!t.active || t.x < vl || t.x > vr || t.y < vt || t.y > vb) continue
             val k = t.life / 0.8f
             val pop = if (k > 0.8f) 1f + (k - 0.8f) * 3f else 1f
             val px = (if (t.big) 34f else 24f) * scale * pop
@@ -761,7 +765,9 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 a = 0
                 while (a < c.props.size) { if (vis(c.props[a], c.props[a + 1])) n = push(n, c.props[a + 1], K_RPROP, ci * 4096 + a / 3); a += 3 }
                 a = 0
-                while (a < c.mountains.size) { if (vis(c.mountains[a], c.mountains[a + 1])) n = push(n, c.mountains[a + 1], K_RMOUNT, ci * 4096 + a / 2); a += 2 }
+                while (a < c.mountains.size) { if (vis(c.mountains[a], c.mountains[a + 1])) n = push(n, c.mountains[a + 1], K_RMOUNT, ci * 4096 + a / 3); a += 3 }
+                a = 0
+                while (a < c.homes.size) { if (vis(c.homes[a], c.homes[a + 1])) n = push(n, c.homes[a + 1], K_RHOME, ci * 4096 + a / 2); a += 2 }
             }
             for (k in m.camps.indices) if (vis(m.camps[k].x, m.camps[k].y)) n = push(n, m.camps[k].y, K_RCAMP, k)
             for (k in m.villages.indices) if (vis(m.villages[k].x, m.villages[k].y)) n = push(n, m.villages[k].y, K_RVILLAGE, k)
@@ -803,7 +809,14 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 K_RTREE -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; drawTree(c.trees[a], c.trees[a + 1], c.trees[a + 2], a / 3) }
                 K_RROCK -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; drawRock(c.rocks[a], c.rocks[a + 1], c.rocks[a + 2], a / 3) }
                 K_RPROP -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; drawProp(c.props[a], c.props[a + 1], c.props[a + 2]) }
-                K_RMOUNT -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 2; val sp = sprites; if (sp != null) sprite(sp.mountain, SpriteData.mountain, 0, 0, c.mountains[a], c.mountains[a + 1] + 40f, 0.9f) }
+                K_RMOUNT -> {
+                    val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 3; val sp = sprites
+                    if (sp != null) {
+                        if (c.mountains[a + 2] < 0.5f) sprite(sp.mountain, SpriteData.mountain, 0, 0, c.mountains[a], c.mountains[a + 1] + 40f, 0.9f)
+                        else sprite(sp.hills, SpriteData.hills, 0, 0, c.mountains[a], c.mountains[a + 1] + 40f, 1.1f)
+                    }
+                }
+                K_RHOME -> { val c = m!!.chunks[idx / 4096]; val a = (idx % 4096) * 2; val sp = sprites; if (sp != null) sprite(sp.homeRed, SpriteData.homeRed, 0, 0, c.homes[a], c.homes[a + 1], 1.1f) }
                 K_RCAMP -> drawCamp(g, m!!.camps[idx])
                 K_RVILLAGE -> { val v = m!!.villages[idx]; val sp = sprites; if (sp != null) { if (v.rebuilt) sprite(sp.village, SpriteData.village, 0, 0, v.x, v.y - 60f, 1.2f) else sprite(sp.villageRuined, SpriteData.villageRuined, 0, 0, v.x, v.y - 60f, 1f) } }
                 K_BANNER -> {
@@ -1216,6 +1229,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 FX_PUFF -> if (!ground) fxDraw(fi.puff, (k * 7.99f).toInt(), f.x, f.y - 10f, 100f * f.r1, 100f * f.r1, 0f, 0.85f, tn, false)
                 FX_SPARKLE -> if (!ground) fxDraw(fi.sparkle, (k * 5.99f).toInt(), f.x, f.y - f.z, 34f, 34f, 0f, 1f, tn, true)
                 FX_SPIRAL -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - 30f, 28f, 28f, 0f, 1f - k, tn, true)
+                FX_SMOKE -> if (!ground) fxDraw(fi.puff, (k * 7.99f).toInt(), f.x, f.y - 40f * k - 30f, 70f, 70f, 0f, 0.5f * (1f - k), tn, false)
                 FX_FIREHIT -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y, 90f, 90f, 0f, 1f - k, tn, true)
                 FX_COINUP -> if (!ground) { val sp = sprites; if (sp != null) sprite(sp.coinFlat, SpriteData.coinFlat, 0, 0, f.x, f.y - f.z, 0.8f, null, 1f - k) }
                 FX_RISE -> if (!ground) fxDraw(fi.glow, 0, f.x, f.y - f.z, 20f, 20f, 0f, if (k > 0.66f) (1f - k) * 3f else 1f, tn, true)
@@ -1653,36 +1667,129 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         if (c.main) sprite(sp.campMainRed, SpriteData.campMainRed, 0, 0, c.x, c.y, 0.8f)
         else sprite(sp.campRed, SpriteData.campRed, 0, 0, c.x, c.y, 1.2f)
         val fi = fxi ?: return
-        val flick = 0.95f + 0.15f * sin(g.time * 37.7f) // the campfire flickers at 6 Hz
+        val flick = 0.95f + 0.15f * sin(g.time * 37.7f) // the campfire flickers at 6 Hz, scale 0.8 to 1.1
         fxDraw(fi.glow, 0, c.x, c.y + 10f, 150f * flick, 100f * flick, 0f, 0.6f, tint(0xFFFFB347L), true)
     }
 
     private val fogPath = Path()
+    private val fogPathThin = Path() // a touch more see-through: the mist is not one flat colour
     private val waterPath = Path()
+    private val tintPaths = Array(REGIONS * 3) { Path() }
+    private val fogBorder = IntArray(600) // unknown hexes next to known ones: drawn as soft blobs, no hard edge
+    private var fogBorderCount = 0
     private var fogKey = Long.MIN_VALUE
+    private var groundKey = Long.MIN_VALUE
+    private var realmRoads: Array<Path>? = null
+    private var realmRoadBox = FloatArray(0)
+    private var realmOf: Realm? = null
 
-    /** Unexplored hexes in view under one cached path, rebuilt only when the view moves to other hexes or the fog lifts. */
-    private fun DrawScope.drawRealmFog(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
+    /** Soft per-hex noise from the position: stable, no state. */
+    private fun hexNoise(q: Int, r: Int): Int = ((q * 73856093) xor (r * 19349663)).let { (it ushr 3) % 3 }
+
+    private fun syncRealmRoads(m: Realm) {
+        if (realmOf === m) return
+        realmOf = m
+        realmRoadBox = FloatArray(m.roads.size * 4)
+        realmRoads = Array(m.roads.size) { k ->
+            val p = m.roads[k]
+            var l = Float.MAX_VALUE; var t = Float.MAX_VALUE; var r = -Float.MAX_VALUE; var b = -Float.MAX_VALUE
+            Path().apply { // under the road brush's 0.5 scale; rounded through the midpoints of the hex centres
+                moveTo(p[0] * 2f, p[1] * 2f)
+                var i = 0
+                while (i + 3 < p.size) {
+                    val x0 = p[i]; val y0 = p[i + 1]; val x1 = p[i + 2]; val y1 = p[i + 3]
+                    l = min(l, x0); t = min(t, y0); r = max(r, x0); b = max(b, y0)
+                    quadraticTo(x0 * 2f, y0 * 2f, x0 + x1, y0 + y1)
+                    i += 2
+                }
+                lineTo(p[p.size - 2] * 2f, p[p.size - 1] * 2f)
+                l = min(l, p[p.size - 2]); t = min(t, p[p.size - 1]); r = max(r, p[p.size - 2]); b = max(b, p[p.size - 1])
+                realmRoadBox[k * 4] = l; realmRoadBox[k * 4 + 1] = t; realmRoadBox[k * 4 + 2] = r; realmRoadBox[k * 4 + 3] = b
+            }
+        }
+    }
+
+    /** The ground of the regions: a palette per region with soft noise between hexes, water, roads, then the flat decor. */
+    private fun DrawScope.drawRealmGround(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
         val m = g.realm ?: return
         val grid = g.grid
-        val r0 = grid.hexAt(vl, vt).r - 1; val r1 = grid.hexAt(vr, vb).r + 1
-        val xl = (vl / (HEX_R * 1.732f)).toInt(); val yt = (vt / (HEX_R * 1.5f)).toInt()
-        val key = (xl.toLong() shl 40) xor (yt.toLong() shl 20) xor m.fogVersion.toLong()
-        if (key != fogKey) {
-            fogKey = key
-            fogPath.reset(); waterPath.reset()
+        syncRealmRoads(m)
+        val key = ((vl / (HEX_R * 1.732f)).toInt().toLong() shl 32) xor (vt / (HEX_R * 1.5f)).toInt().toLong()
+        if (key != groundKey) {
+            groundKey = key
+            for (p in tintPaths) p.reset()
+            waterPath.reset()
+            val r0 = grid.hexAt(vl, vt).r - 1; val r1 = grid.hexAt(vr, vb).r + 1
             for (r in r0..r1) {
                 val y = r * HEX_R * 1.5f
                 val q0 = grid.hexAt(vl, y).q - 1; val q1 = grid.hexAt(vr, y).q + 1
                 for (q in q0..q1) {
                     val h = Hex.of(q, r)
-                    if (!m.explored[h.index]) addHex(fogPath, h.x, h.y)
-                    else if (m.blocked[h.index] == BLOCK_WATER) addHex(waterPath, h.x, h.y)
+                    if (m.blocked[h.index] == BLOCK_WATER) addHex(waterPath, h.x, h.y)
+                    val region = m.regionAt(h.x, h.y)
+                    if (region >= 0) addHex(tintPaths[region * 3 + hexNoise(q, r)], h.x, h.y)
                 }
             }
         }
-        drawPath(waterPath, REALM_WATER, alpha = 0.85f)
-        drawPath(fogPath, REALM_FOG)
+        for (i in tintPaths.indices) {
+            if (!tintPaths[i].isEmpty) drawPath(tintPaths[i], REGION_GROUND[i / 3], alpha = 0.34f + 0.06f * (i % 3))
+        }
+        drawPath(waterPath, REALM_WATER, alpha = 0.9f)
+        val rb = roadBrush
+        val roads = realmRoads
+        if (rb != null && roads != null) withTransform({ scale(0.5f, 0.5f, Offset.Zero) }) {
+            for (k in roads.indices) {
+                if (realmRoadBox[k * 4] > vr || realmRoadBox[k * 4 + 2] < vl || realmRoadBox[k * 4 + 1] > vb || realmRoadBox[k * 4 + 3] < vt) continue
+                drawPath(roads[k], DIRT_EDGE, alpha = 0.55f, style = roadEdge2)
+                drawPath(roads[k], rb, style = road2)
+            }
+        }
+        val sp = sprites ?: return
+        for (c in m.chunks) {
+            if (!c.active) continue
+            val f = c.flats
+            var i = 0
+            while (i < f.size) {
+                val x = f[i]; val y = f[i + 1]
+                if (x > vl && x < vr && y > vt && y < vb) when (f[i + 2].toInt()) {
+                    0 -> sprite(sp.tuft0, SpriteData.tuft0, 0, 0, x, y, 1f)
+                    1 -> sprite(sp.tuft1, SpriteData.tuft1, 0, 0, x, y, 1f)
+                    2 -> sprite(sp.flower0, SpriteData.flower0, 0, 0, x, y, 1f)
+                    else -> sprite(sp.flower1, SpriteData.flower1, 0, 0, x, y, 1f)
+                }
+                i += 3
+            }
+        }
+    }
+
+    /** Mist, not a hole: unknown hexes in night blue at 85 %, softened over one hex towards what is known. Same render in reduced motion: nothing moves. */
+    private fun DrawScope.drawRealmFog(g: Game, vl: Float, vt: Float, vr: Float, vb: Float) {
+        val m = g.realm ?: return
+        val grid = g.grid
+        val key = ((vl / (HEX_R * 1.732f)).toInt().toLong() shl 40) xor ((vt / (HEX_R * 1.5f)).toInt().toLong() shl 20) xor m.fogVersion.toLong()
+        if (key != fogKey) {
+            fogKey = key
+            fogPath.reset(); fogPathThin.reset(); fogBorderCount = 0
+            val r0 = grid.hexAt(vl, vt).r - 1; val r1 = grid.hexAt(vr, vb).r + 1
+            for (r in r0..r1) {
+                val y = r * HEX_R * 1.5f
+                val q0 = grid.hexAt(vl, y).q - 1; val q1 = grid.hexAt(vr, y).q + 1
+                for (q in q0..q1) {
+                    val h = Hex.of(q, r)
+                    if (m.explored[h.index]) continue
+                    var border = false
+                    for (d in 0..5) if (m.explored[Hex.of(q + DQ[d], r + DR[d]).index]) border = true
+                    if (border) { if (fogBorderCount < fogBorder.size) fogBorder[fogBorderCount++] = h.key }
+                    else addHex(if (hexNoise(q, r) == 0) fogPathThin else fogPath, h.x, h.y)
+                }
+            }
+        }
+        drawPath(fogPath, REALM_FOG, alpha = 0.85f)
+        drawPath(fogPathThin, REALM_FOG, alpha = 0.8f)
+        val fi = fxi ?: return
+        val tn = tint(0xFF101A30L)
+        val size = HEX_R * 3.6f
+        for (i in 0 until fogBorderCount) { val h = Hex(fogBorder[i]); fxDraw(fi.glow, 0, h.x, h.y, size, size, 0f, 0.85f, tn, false) }
     }
 
     // ------------------------------------------------------------ territory

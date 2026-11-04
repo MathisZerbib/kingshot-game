@@ -53,6 +53,22 @@ class RealmTest {
         assertEquals(grid.hexAt(World.CASTLE_X, World.CASTLE_Y).key, grid.hexAt(x, y).key)
     }
 
+    @Test fun roadsAndDecorKeepClear() {
+        for (seed in 0..10) {
+            val m = Realm(seed)
+            assertTrue(m.roads.size >= 20, "seed $seed roads ${m.roads.size}")
+            val grid = HexGrid()
+            for (r in m.roads) { var i = 0; while (i < r.size) { assertEquals(BLOCK_NONE, m.blocked[grid.hexAt(r[i], r[i + 1]).index], "road on an obstacle"); i += 2 } }
+            for (c in m.chunks) {
+                assertEquals(6, c.homes.size)
+                assertEquals(0, c.mountains.size % 3, "mountain records are x, y, kind")
+                var i = 0
+                while (i < c.trees.size) { assertEquals(BLOCK_NONE, m.blocked[grid.hexAt(c.trees[i], c.trees[i + 1]).index]); i += 3 }
+            }
+            assertTrue(m.chunks.sumOf { it.mountains.size } > 0, "seams")
+        }
+    }
+
     @Test fun saveRoundTrip() {
         val m = Realm(9)
         m.crowned[2] = true; m.camps[3].garrison = 4; m.camps[3].alive = 2; m.camps[1].cleared = true; m.villages[0].rebuilt = true; m.bosses[1].dead = true
@@ -61,7 +77,7 @@ class RealmTest {
         val w = VarWriter(); m.packTo(w); grid.packTo(w)
         val r = VarReader(w.bytes())
         val n = assertNotNull(Realm.unpack(r))
-        assertEquals(9, n.seed); assertTrue(n.crowned[2]); assertEquals(6, n.camps[3].garrison); assertTrue(n.camps[1].cleared)
+        assertEquals(9, n.seed); assertTrue(n.crowned[2]); assertEquals(4, n.camps[3].garrison); assertTrue(n.camps[1].cleared)
         assertTrue(n.villages[0].rebuilt); assertTrue(n.bosses[1].dead); assertContentEquals(m.explored, n.explored)
         val g2 = HexGrid(); g2.unpackFrom(r)
         assertEquals(grid.count, g2.count)

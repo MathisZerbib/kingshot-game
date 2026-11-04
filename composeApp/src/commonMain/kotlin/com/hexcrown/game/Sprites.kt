@@ -27,6 +27,8 @@ import com.hexcrown.game.resources.gate_closed_v
 import com.hexcrown.game.resources.gate_open_v
 import com.hexcrown.game.resources.tower_stone
 import com.hexcrown.game.resources.banner
+import com.hexcrown.game.resources.hills
+import com.hexcrown.game.resources.home_red
 import com.hexcrown.game.resources.camp_red
 import com.hexcrown.game.resources.camp_main_red
 import com.hexcrown.game.resources.ruin
@@ -113,6 +115,8 @@ data class Sprites(
     val banner: ImageBitmap,
     val bannerBurning: ImageBitmap,
     val torch: ImageBitmap,
+    val hills: ImageBitmap,
+    val homeRed: ImageBitmap,
     val campRed: ImageBitmap,
     val campMainRed: ImageBitmap,
     val ruin: ImageBitmap,
@@ -197,6 +201,8 @@ fun rememberSprites(): Sprites {
     val banner = imageResource(Res.drawable.banner)
     val bannerBurning = imageResource(Res.drawable.banner_burning)
     val torch = imageResource(Res.drawable.torch)
+    val hills = imageResource(Res.drawable.hills)
+    val homeRed = imageResource(Res.drawable.home_red)
     val campRed = imageResource(Res.drawable.camp_red)
     val campMainRed = imageResource(Res.drawable.camp_main_red)
     val ruin = imageResource(Res.drawable.ruin)
@@ -252,7 +258,7 @@ fun rememberSprites(): Sprites {
     val watermill = imageResource(Res.drawable.watermill)
     val well = imageResource(Res.drawable.well)
     val lumbermill = imageResource(Res.drawable.lumbermill)
-    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, banner, bannerBurning, torch, campRed, campMainRed, ruin, villageRuined, village, mountain, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV, wolf, enemyArcher, shieldman, ram, ogre, darkLord, lancer, archerElite, farm, barracks, ballistaTop, mine, boulder, market, blacksmith, church, stable, watermill, well, lumbermill) {
-        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, banner, bannerBurning, torch, campRed, campMainRed, ruin, villageRuined, village, mountain, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV, wolf, enemyArcher, shieldman, ram, ogre, darkLord, lancer, archerElite, farm, barracks, ballistaTop, mine, boulder, market, blacksmith, church, stable, watermill, well, lumbermill)
+    return remember(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, banner, bannerBurning, torch, hills, homeRed, campRed, campMainRed, ruin, villageRuined, village, mountain, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV, wolf, enemyArcher, shieldman, ram, ogre, darkLord, lancer, archerElite, farm, barracks, ballistaTop, mine, boulder, market, blacksmith, church, stable, watermill, well, lumbermill) {
+        Sprites(archer, knight, boss, king, castle, house, tower, stake, pine0, pine1, roundtree, rock0, rock1, coinSpin, coinFlat, wallStone, wallStoneV, gateClosed, gateOpen, gateClosedV, gateOpenV, towerStone, banner, bannerBurning, torch, hills, homeRed, campRed, campMainRed, ruin, villageRuined, village, mountain, towerRoyal, castleRoyal, grassTile, roadTile, cliffTile, tuft0, tuft1, flower0, flower1, bush, stump, barrel, crate, tent, wheelbarrow, lumber, weaponrack, kingWarrior, kingRanger, kingBuilder, portraitWarrior, portraitRanger, portraitBuilder, wallWood, wallWoodV, gateWoodClosed, gateWoodOpen, gateWoodClosedV, gateWoodOpenV, wolf, enemyArcher, shieldman, ram, ogre, darkLord, lancer, archerElite, farm, barracks, ballistaTop, mine, boulder, market, blacksmith, church, stable, watermill, well, lumbermill)
     }
 }

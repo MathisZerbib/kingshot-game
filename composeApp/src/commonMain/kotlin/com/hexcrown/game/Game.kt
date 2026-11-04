@@ -205,6 +205,7 @@ class FlyCoin {
 
 // ---------------------------------------------------------------- ability effects (art/fx/FX.md)
 const val TUTO_DONE = 6
+private val OBJECTIVE_ORDER = intArrayOf(PAD_TOWER, PAD_TOWER_ARCHER, PAD_WALL)
 const val PAD_VILLAGE = 40
 const val REALM_REACH = 1900f // 1.5 screens around the king, in world px
 const val REALM_MAX_ENEMIES = 60
@@ -223,6 +224,7 @@ const val FX_ARROW = 9 // ballistic arrow of the rain: up off-screen, down on it
 const val FX_STUCK = 10
 const val FX_RUNE = 11
 const val FX_RISE = 12 // light motes rising around the keep (Réparation)
+const val FX_SMOKE = 15 // slow smoke over a camp fire
 const val FX_FIREHIT = 14 // orange flash where a burning arrow lands
 const val FX_COINUP = 13 // a small coin rising from a hex: passive income
 
@@ -419,6 +421,7 @@ class Game {
     private var flowTimer = 0f
     private var cycleT = 0f
     private var autosaveT = 0f
+    private var smokeT = 0f
     private var lastKingHex = -1
     var crownBanner = 0f // seconds left on the « region crowned » title
     var crownRegion = 0
@@ -568,7 +571,8 @@ class Game {
 
     var towers = emptyArray<Tower>(); private set
     var walls = emptyArray<Wall>(); private set
-    val pads = ArrayList<Pad>()
+    var pads = emptyArray<Pad>(); private set // an array: walked every frame, an iterator per loop would allocate
+    private fun addPad(p: Pad) { pads += p }
     lateinit var recruitPad: Pad
     lateinit var forgePad: Pad
     lateinit var repairPad: Pad
@@ -700,15 +704,15 @@ class Game {
     private fun addMapPads(fromTower: Int, fromWall: Int) {
         for (i in fromTower until towers.size) {
             val t = towers[i]
-            pads.add(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = price(levelPrice(25)); it.visible = !t.built })
-            pads.add(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = t.built && t.archers < TOWER_SLOTS })
+            addPad(Pad(PAD_TOWER, t.x, t.y, i).also { it.cost = price(levelPrice(25)); it.visible = !t.built })
+            addPad(Pad(PAD_TOWER_ARCHER, t.x, t.y + 125f, i).also { it.cost = 1; it.visible = t.built && t.archers < TOWER_SLOTS })
             // once full, the same spot offers the ballista, then the elite fusion
-            pads.add(Pad(PAD_BALLISTA, t.x, t.y + 125f, i).also { it.cost = price(70); it.visible = t.built && t.archers >= TOWER_SLOTS && !t.ballista })
-            pads.add(Pad(PAD_ELITE, t.x, t.y + 125f, i).also { it.cost = price(90); it.visible = t.built && t.archers >= TOWER_SLOTS && t.ballista && !t.elite })
+            addPad(Pad(PAD_BALLISTA, t.x, t.y + 125f, i).also { it.cost = price(70); it.visible = t.built && t.archers >= TOWER_SLOTS && !t.ballista })
+            addPad(Pad(PAD_ELITE, t.x, t.y + 125f, i).also { it.cost = price(90); it.visible = t.built && t.archers >= TOWER_SLOTS && t.ballista && !t.elite })
         }
         for (i in fromWall until walls.size) {
             val w = walls[i]
-            pads.add(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = price(levelPrice(15)); it.visible = !w.built })
+            addPad(Pad(PAD_WALL, w.x, w.y, i).also { it.cost = price(levelPrice(15)); it.visible = !w.built })
         }
     }
 
@@ -808,9 +812,9 @@ class Game {
         for (k in unlocked.indices) unlocked[k] = false
         spotPadA = Pad(PAD_SPOT_A, World.SPOT_A_X, World.SPOT_A_Y)
         spotPadB = Pad(PAD_SPOT_B, World.SPOT_B_X, World.SPOT_B_Y)
-        pads.clear()
-        pads.add(recruitPad); pads.add(forgePad); pads.add(repairPad); pads.add(farmPad); pads.add(barracksPad); pads.add(minePad)
-        pads.add(spotPadA); pads.add(spotPadB)
+        pads = emptyArray()
+        addPad(recruitPad); addPad(forgePad); addPad(repairPad); addPad(farmPad); addPad(barracksPad); addPad(minePad)
+        addPad(spotPadA); addPad(spotPadB)
         refreshSpots()
         addMapPads(0, 0)
     }
@@ -1240,6 +1244,15 @@ class Game {
             val loaded = m
             if (loaded != null && restore(parts[2])) {
                 grid.unpackFrom(r)
+                repeat(r.int()) { // the enemies on the march, exactly where they were
+                    val kind = r.int(); val bt = r.int(); val camp = r.int(); val x = r.int().toFloat(); val y = r.int().toFloat()
+                    val hp = r.int() / 10f; val mhp = r.int() / 10f; val sp = r.int() / 10f; val dm = r.int() / 10f
+                    spawnEnemy(kind, 0, 0f, x, y)?.let { e ->
+                        e.bossType = bt; e.camp = camp; e.hp = hp; e.maxHp = mhp; e.speed = sp; e.dmg = dm
+                        if (camp >= 0) loaded.camps[camp].alive++
+                        else if (camp <= -2) { val b = loaded.bosses[-2 - camp]; b.enemy = enemies.indexOf(e); b.gen = e.gen }
+                    }
+                }
                 val pos = parts[1].split(',')
                 kx = pos[0].toFloat(); ky = pos[1].toFloat(); cycleT = pos[2].toFloat(); wave = pos[3].toInt()
             } else m = null
@@ -1257,11 +1270,10 @@ class Game {
         tutorial = TUTO_DONE
         World.boundMinX = m.minX; World.boundMinY = m.minY; World.boundMaxX = m.maxX; World.boundMaxY = m.maxY
         fogR = 0f
-        for (i in m.villages.indices) { val v = m.villages[i]; if (!v.rebuilt) pads.add(Pad(PAD_VILLAGE, v.x, v.y, i).also { it.cost = price(v.cost) }) }
+        for (i in m.villages.indices) { val v = m.villages[i]; if (!v.rebuilt) addPad(Pad(PAD_VILLAGE, v.x, v.y, i).also { it.cost = price(v.cost) }) }
         val home = grid.hexAt(World.CASTLE_X, World.CASTLE_Y)
         m.reveal(home, 9)
         for (i in 0 until grid.count) { val h = grid.at(i); if (grid.hasBanner(h)) m.reveal(h, 3) }
-        for (b in m.bosses) b.enemy = -1
         camX = kx; camY = ky
         state = STATE_PLAY
         checkpoint = null
@@ -1274,6 +1286,13 @@ class Game {
         val w = VarWriter()
         m.packTo(w)
         grid.packTo(w)
+        var n = 0
+        for (e in enemies) if (e.active) n++
+        w.int(n)
+        for (e in enemies) if (e.active) {
+            w.int(e.kind); w.int(e.bossType); w.int(e.camp); w.int(e.x.toInt()); w.int(e.y.toInt())
+            w.int((e.hp * 10f).toInt()); w.int((e.maxHp * 10f).toInt()); w.int((e.speed * 10f).toInt()); w.int((e.dmg * 10f).toInt())
+        }
         Storage.saveText("realm", kotlin.io.encoding.Base64.encode(w.bytes()) + "#" + kx + "," + ky + "," + cycleT + "," + wave + "#" + saveString())
     }
 
@@ -1285,7 +1304,7 @@ class Game {
         if (kh.key != lastKingHex) { lastKingHex = kh.key; m.reveal(kh, 2) }
         // the field only needs recomputing when the territory changed
         flowTimer -= dt
-        if (grid.version != flowVersion && flowTimer <= 0f) { flowVersion = grid.version; flowTimer = 0.5f; Flow.compute(grid, m.blocked) }
+        if (grid.bannerVersion != flowVersion && flowTimer <= 0f) { flowVersion = grid.bannerVersion; flowTimer = 0.5f; Flow.compute(grid, m.blocked) }
         // time of day: the cycle goes on by the minute instead of by the wave
         cycleT += dt
         if (cycleT >= 60f) {
@@ -1306,8 +1325,8 @@ class Game {
                 if (kind >= 0) {
                     val a = rnd.nextFloat() * 6.28f
                     spawnEnemy(kind, 0, 0f, c.x + cos(a) * 120f, c.y + sin(a) * 80f)?.let { e ->
-                        val k = 1f + 0.35f * c.region
-                        e.maxHp *= k; e.hp = e.maxHp; e.dmg *= 1f + 0.15f * c.region; e.camp = ci
+                        val t = c.region / (REGIONS - 1f) // region 1: x0.8 HP; region 7: x2.5 HP, x1.3 speed
+                        e.maxHp *= 0.8f + 1.7f * t; e.hp = e.maxHp; e.speed *= 1f + 0.3f * t; e.dmg *= 1f + 0.5f * t; e.camp = ci
                     }
                     c.garrison--; c.alive++; onField++
                 }
@@ -1329,7 +1348,8 @@ class Game {
                 if (hypot(home.x - kx, home.y - ky) > REALM_REACH + CHUNK_RADIUS) continue
                 val e = spawnEnemy(KIND_BOSS, 0, 0f, home.x, home.y) ?: continue
                 e.bossType = b.bossType; e.camp = -2 - bi
-                e.maxHp *= 1f + 0.5f * bi; e.hp = e.maxHp
+                // as tough as the boss of level 5 x region
+                e.maxHp = 1000f * 1.2f * (1f + 4 * 0.22f) * (1f + 0.2f * (5 * (home.region + 1) - 1)) * DIFF_HP[diff]; e.hp = e.maxHp
                 b.enemy = enemies.indexOf(e); b.gen = e.gen
             }
             if (hypot(enemies[b.enemy].x - kx, enemies[b.enemy].y - ky) < 900f) bossInSight = b.enemy
@@ -1339,6 +1359,11 @@ class Game {
             if (v.timer >= 8f && hypot(v.x - kx, v.y - ky) < 1600f) { v.timer = 0f; repeat(3) { dropCoin(v.x, v.y + 40f) } }
         }
         if (crownBanner > 0f) crownBanner -= dt
+        smokeT += dt
+        if (smokeT >= 1.2f) { // chimneys of the camps in reach
+            smokeT -= 1.2f
+            for (c in m.camps) if (!c.cleared && m.isActive(c.x, c.y, kx, ky, REALM_REACH)) spawnFx(FX_SMOKE, c.x, c.y - 10f, 2f, 0xFFB8B8B8L)
+        }
         autosaveT += dt
         if (autosaveT >= 30f) { autosaveT = 0f; saveRealm() }
     }
@@ -1350,7 +1375,7 @@ class Game {
         crownRegion = region; crownBanner = 3f
         Audio.play(Sfx.VICTORY)
         Audio.haptic(Haptic.HEAVY)
-        Meta.treasure += 300 + 100 * region
+        Meta.treasure += 200 * (region + 1)
         Ach.unlock("crown_$region")
         relicDelay = 0.6f
         spawnFx(FX_GLOW, kx, ky, 0.8f, 0xFFFFD65AL)?.r1 = 6f
@@ -2022,7 +2047,7 @@ class Game {
     val objective: Pad? get() {
         if (realm != null) return null
         if (level > 3 || tutorial < TUTO_DONE) return null
-        for (k in intArrayOf(PAD_TOWER, PAD_TOWER_ARCHER, PAD_WALL)) for (p in pads) if (p.visible && p.kind == k) return p
+        for (k in OBJECTIVE_ORDER) for (p in pads) if (p.visible && p.kind == k) return p
         return null
     }
 
@@ -2193,6 +2218,7 @@ class Game {
         val speed = 1000f
         for (a in arrows) {
             if (!a.active) continue
+            if (realm != null && hypot(a.x - kx, a.y - ky) > REALM_REACH + 400f) { a.active = false; continue }
             a.life -= dt
             if (a.life <= 0f) { a.active = false; continue }
             val e = enemies[a.target]
@@ -2314,8 +2340,10 @@ class Game {
 
     private fun updateCoins(dt: Float) {
         val magnet = (if (heroClass == CLASS_BUILDER) 540f else 360f) * (1f + 0.1f * tal[TAL_MAGNET]) * (if (relics[R_GRAPPLE]) 2f else 1f)
+        val rm = realm
         for (c in coinsOnGround) {
             if (!c.active) continue
+            if (rm != null && c.state == 1 && !rm.isActive(c.x, c.y, kx, ky, REALM_REACH)) continue // out of reach: asleep on the ground
             c.t += dt
             c.spin += dt * 6f
             when (c.state) {
@@ -2772,7 +2800,7 @@ class Game {
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
         e.special = 0f; e.mdx = 0f; e.mdy = 0f; e.stun = 0f; e.slam = 0f; e.camp = -1
         e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
-        val hpScale = (if (level == 1) 0.7f else if (level == 2) 0.85f else 1.2f) * (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
+        val hpScale = if (realm != null) DIFF_HP[diff] else (if (level == 1) 0.7f else if (level == 2) 0.85f else 1.2f) * (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.2f) 2 else 1 }
             KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
