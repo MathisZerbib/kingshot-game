@@ -5,7 +5,7 @@ from PIL import Image
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '../..')
 DRAW = os.path.join(ROOT, 'composeApp/src/commonMain/composeResources/drawable')
-DATA = os.path.join(ROOT, 'composeApp/src/commonMain/kotlin/fr/kingshot/game/SpriteData.kt')
+DATA = os.path.join(ROOT, 'composeApp/src/commonMain/kotlin/com/hexcrown/game/SpriteData.kt')
 TARGET_PPU = 3.0
 
 def snake(n): return re.sub(r'([A-Z])', r'_\1', n).lower()

@@ -5,7 +5,7 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 
 root, out = sys.argv[1], sys.argv[2]
-src = open(f"{root}/composeApp/src/commonMain/kotlin/fr/kingshot/game/SpriteData.kt").read()
+src = open(f"{root}/composeApp/src/commonMain/kotlin/com/hexcrown/game/SpriteData.kt").read()
 info = {}
 for m in re.finditer(r"val (\w+) = SpriteInfo\((\d+), (\d+), ([\d.]+)f, ([\d.]+)f, ([\d.]+)f, (\d+), (\d+)\)", src):
     info[m.group(1)] = dict(w=int(m.group(2)), h=int(m.group(3)), ppu=float(m.group(6)), cols=int(m.group(7)), rows=int(m.group(8)))

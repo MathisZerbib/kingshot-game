@@ -1,6 +1,6 @@
-# Kingshot — direction artistique des menus et du HUD
+# Hexcrown — direction artistique des menus et du HUD
 
-Référence visuelle : `/mnt/project-files/kingshot/maquettes-menu.png` (générée par `art/ui/mockup.py`, écrans menu,
+Référence visuelle : `/mnt/project-files/hexcrown/maquettes-menu.png` (générée par `art/ui/mockup.py`, écrans menu,
 pause, défaite, talents, victoire). Style : « jeu mobile premium médiéval » : fond illustré 3D au couchant, cadres bois +
 liseré or, parchemin pour l'information, bleu nuit pour les panneaux système, boutons épais brillants, titres Cinzel,
 textes Nunito. Tout est en français.
@@ -40,7 +40,7 @@ Tailles (dp) : ruban 26-30, titre de carte 15-17, bouton principal 22, sous-titr
 | ui_tab_on / off | 320×110 | 34, 34, 34, 10 | onglets du bas de menu |
 | ui_pill | 300×90 | 47, 43, 47, 43 | compteurs (pièces, stats) |
 | ui_circle / ui_circle_red | 200×200 | — (étirer uniformément) | boutons ronds à icône (réglages, cadeau, pause, capacité) |
-| ui_logotype | 1200×360 | — | titre KINGSHOT (largeur ~82 % de l'écran) |
+| ui_logotype | 1200×360 | — | titre HEXCROWN (largeur ~82 % de l'écran) |
 | menu_bg | 1080×1920 | — | fond du menu, `ContentScale.Crop` centré, + dégradé sombre haut (22 %) et bas (50 %) |
 | ui_icon_* (25) | 160×160 | — | gear star crown shield sword bow hammer lock chest trophy book scroll heart speaker vibrate play pause close arrow flag hourglass skull gift medal coins |
 

@@ -1,4 +1,4 @@
-"""Procedural fallback sounds and music for Kingshot (used where no CC0 file was found).
+"""Procedural fallback sounds and music for Hexcrown (used where no CC0 file was found).
 
 python gen_sfx.py <repo_root> [--only name,name]
 Writes composeResources/files/sfx/<name>.wav (22050 Hz mono 16-bit) and files/music/<name>.m4a (via ffmpeg).

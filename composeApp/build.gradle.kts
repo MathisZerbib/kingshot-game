@@ -1,5 +1,8 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -43,23 +46,33 @@ kotlin {
 }
 
 android {
-    namespace = "fr.kingshot.game"
+    namespace = "com.hexcrown.game"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "fr.kingshot.game"
+        applicationId = "com.hexcrown.game"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = Integer.parseInt(SimpleDateFormat("yyMMddHH").format(Date()))
+        versionName = "0.9.0"
+    }
+    // the release key lives outside git (docs/HEXCROWN.md §5); without it, release falls back to the debug key for local installs
+    val keystoreFile = File(System.getProperty("user.home"), ".hexcrown/keystore.properties")
+    if (keystoreFile.exists()) {
+        val ks = Properties().apply { keystoreFile.inputStream().use { load(it) } }
+        signingConfigs.create("release") {
+            storeFile = File(ks.getProperty("storeFile"))
+            storePassword = ks.getProperty("storePassword")
+            keyAlias = ks.getProperty("keyAlias")
+            keyPassword = ks.getProperty("keyPassword")
+        }
     }
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
-            // Signed with the debug key so the release APK installs directly; use your own key for the store.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {
@@ -69,16 +82,16 @@ android {
 }
 
 compose.resources {
-    packageOfResClass = "fr.kingshot.game.resources"
+    packageOfResClass = "com.hexcrown.game.resources"
     publicResClass = false
 }
 
 compose.desktop {
     application {
-        mainClass = "fr.kingshot.game.MainKt"
+        mainClass = "com.hexcrown.game.MainKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "Kingshot"
+            packageName = "Hexcrown"
             packageVersion = "1.0.0"
         }
     }

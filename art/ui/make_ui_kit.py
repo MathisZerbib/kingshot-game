@@ -1,5 +1,5 @@
 """
-Draws the Kingshot UI kit (frames, buttons, ribbons, bars, logotype) with Pillow, supersampled 4x.
+Draws the Hexcrown UI kit (frames, buttons, ribbons, bars, logotype) with Pillow, supersampled 4x.
 
     python make_ui_kit.py <repo_root>
 
@@ -278,7 +278,7 @@ def pill(name, color, w=300, h=90):
 # ----------------------------------------------------------------------------- logotype
 
 
-def logotype(name, text="KINGSHOT", w=1200, h=360):
+def logotype(name, text="HEXCROWN", w=1200, h=360):
     W, H = w * SS, h * SS
     im = canvas(w, h)
     font = ImageFont.truetype(os.path.join(FONTS, "cinzel_decorative_black.ttf"), int(H * 0.56))

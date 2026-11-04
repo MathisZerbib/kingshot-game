@@ -19,7 +19,7 @@ jobs:
         run: ./gradlew :composeApp:assembleRelease :composeApp:desktopJar --stacktrace
       - uses: actions/upload-artifact@v4
         with:
-          name: kingshot-apk
+          name: hexcrown-apk
           path: composeApp/build/outputs/apk/release/*.apk
 
   ios:

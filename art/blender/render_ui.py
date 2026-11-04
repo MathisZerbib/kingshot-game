@@ -1,9 +1,9 @@
 """
-Menu key art and gold UI icons for Kingshot, rendered with the same Blender/KayKit setup as render_sprites.py.
+Menu key art and gold UI icons for Hexcrown, rendered with the same Blender/KayKit setup as render_sprites.py.
 
-    KINGSHOT_LIB=1 python render_ui.py <repo_root> [--only splash,icons] [--quick]
+    HEXCROWN_LIB=1 python render_ui.py <repo_root> [--only splash,icons] [--quick]
 
-Outputs (scratch in $KINGSHOT_TMP, finals in composeApp/src/commonMain/composeResources/drawable/):
+Outputs (scratch in $HEXCROWN_TMP, finals in composeApp/src/commonMain/composeResources/drawable/):
     menu_bg.png      1080x1920 key art: the king and his archers before the castle at golden hour
     ui_icon_*.png    160x160 gold icons (gear, star, crown, shield, sword, bow, hammer, lock, chest, trophy, book,
                      scroll, heart, speaker, vibrate, play, pause, close, arrow, flag, hourglass, skull, gift, medal)
@@ -14,7 +14,7 @@ import random
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-os.environ["KINGSHOT_LIB"] = "1"
+os.environ["HEXCROWN_LIB"] = "1"
 import bpy  # noqa: E402
 from mathutils import Vector  # noqa: E402
 from PIL import Image, ImageFilter  # noqa: E402

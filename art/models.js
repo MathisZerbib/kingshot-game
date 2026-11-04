@@ -1,4 +1,4 @@
-// Low-poly, cel-shaded 3D models for Kingshot, rendered offline into isometric sprite atlases.
+// Low-poly, cel-shaded 3D models for Hexcrown, rendered offline into isometric sprite atlases.
 // Units are game world units; every model stands on y = 0 and faces +Z (toward the camera).
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';

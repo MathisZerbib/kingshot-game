@@ -1,4 +1,4 @@
-rootProject.name = "Kingshot"
+rootProject.name = "Hexcrown"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {

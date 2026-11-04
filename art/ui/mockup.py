@@ -1,4 +1,4 @@
-"""Static mock-ups of the Kingshot menu screens built from the UI kit (reference for the Compose implementation).
+"""Static mock-ups of the Hexcrown menu screens built from the UI kit (reference for the Compose implementation).
 
     python mockup.py <repo_root> <out_dir>
 """
