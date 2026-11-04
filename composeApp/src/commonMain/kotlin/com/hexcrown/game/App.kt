@@ -170,7 +170,6 @@ fun App() {
                         if (hit(p, renderer.pauseX, renderer.pauseY, renderer.pauseRadius)) { game.paused = true; first.consume(); return@awaitEachGesture }
                         if (renderer.tutoOkRadius > 0f && hit(p, renderer.tutoOkX, renderer.tutoOkY, renderer.tutoOkRadius)) { game.tutorialOk(); first.consume(); return@awaitEachGesture }
                         if (hit(p, renderer.chargeX, renderer.chargeY, renderer.chargeRadius)) { game.charge(); first.consume(); return@awaitEachGesture }
-                        if (game.canPlant && hit(p, renderer.bannerX, renderer.bannerY, renderer.bannerRadius)) { game.plantBanner(); first.consume(); return@awaitEachGesture }
                         // double-tap anywhere: the king charges (the joystick still starts, so moving right after feels natural)
                         val now = first.uptimeMillis
                         if (now - lastTapUp < 280L && hit(p, lastTapX, lastTapY, 120f * density.density)) game.charge()

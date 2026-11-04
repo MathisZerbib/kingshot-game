@@ -204,7 +204,12 @@ class FlyCoin {
 }
 
 // ---------------------------------------------------------------- ability effects (art/fx/FX.md)
-const val TUTO_DONE = 6
+const val TUTO_DONE = 5
+const val REALM_AGGRO = 700f
+const val CLAIM_TIME = 0.6f // seconds on a neutral hex to take it
+const val CAMP_HOLD = 2f // seconds on an emptied camp to take it
+const val CAMP_TAKE_RADIUS = 130f
+const val STACK_MAX = 30 // coins drawn on the head; beyond, a glow pulses on top
 private val OBJECTIVE_ORDER = intArrayOf(PAD_TOWER, PAD_TOWER_ARCHER, PAD_WALL)
 const val PAD_VILLAGE = 40
 const val REALM_REACH = 1900f // 1.5 screens around the king, in world px
@@ -422,6 +427,7 @@ class Game {
     private var cycleT = 0f
     private var autosaveT = 0f
     private var smokeT = 0f
+    private var revealVersion = -1
     private var lastKingHex = -1
     var crownBanner = 0f // seconds left on the « region crowned » title
     var crownRegion = 0
@@ -469,14 +475,18 @@ class Game {
     private var chargeHits = 0
     var chargesDone = 0
     private var buildsDone = 0
-    var pillWorldX = 0f // where the HUD treasure pill sits in the world, written by the renderer each frame
-    var pillWorldY = 0f
 
     // territory and charge (docs/HEXCROWN.md §2.1, §2.3)
     val grid = HexGrid()
-    var bannersPlanted = 0
-    val bannerCost get() = 30 + 10 * bannersPlanted
-    val canPlant get() = state == STATE_PLAY && !kDead && transition <= 0f && grid.stateAt(kx, ky) == HEX_NEUTRAL
+    var hexesTaken = 0
+    private var claimHex = -1
+    var claimT = 0f // seconds held on the neutral hex under the king
+    /** The coin stack leans in the turns with a little delay: a spring on 2 segments. */
+    var stackLeanA = 0f
+    var stackLeanB = 0f
+    private var leanVA = 0f
+    private var leanVB = 0f
+    var campHold = 0f // seconds spent on an emptied camp (Realm)
     var kChargeT = 0f // seconds left of the charge in progress
     var kChargeCd = 0f
     private var kChargeX = 0f
@@ -533,6 +543,8 @@ class Game {
     var kWalk = 0f
     var coins = 0
     var stackBump = 0f
+    /** Height of the top of the stack: past 30 coins the counter goes on but the stack stops growing. */
+    val stackTopZ get() = 95f + min(coins, STACK_MAX) * 4.5f
 
     // Squad
     var squad = 0
@@ -773,7 +785,7 @@ class Game {
         realm = null
         World.boundMinX = 0f; World.boundMinY = 0f; World.boundMaxX = World.W; World.boundMaxY = World.H
         bossInSight = -1; crownBanner = 0f; flowVersion = -1; lastKingHex = -1; cycleT = 0f; autosaveT = 0f
-        grid.clear(); bannersPlanted = 0; kChargeT = 0f; kChargeCd = 0f
+        grid.clear(); hexesTaken = 0; claimT = 0f; claimHex = -1; campHold = 0f; kChargeT = 0f; kChargeCd = 0f; stackLeanA = 0f; stackLeanB = 0f; leanVA = 0f; leanVB = 0f
         grid.plant(grid.hexAt(World.CASTLE_X, World.CASTLE_Y), animated = false) // starting lands: a flower around the keep
         relics.fill(false); aWolf.fill(false); relicOpen = false; relicDelay = 0f; draftsNoRare = 0; nextRare = false; freeRevive = false; wolvesTamedRun = 0
         combo = 0; comboPulse = 0f; comboBreak = 0f; lastDefence = -1f; raining = false; nightAmt = 0f; rainAmt = 0f; wallLostThisWave = false; rainSeen = false; burntSeen = false
@@ -1316,6 +1328,7 @@ class Game {
         }
         var onField = 0
         for (e in enemies) if (e.active) onField++
+        var holding = false
         for (ci in m.camps.indices) {
             val c = m.camps[ci]
             if (c.cleared) continue
@@ -1331,13 +1344,23 @@ class Game {
                     c.garrison--; c.alive++; onField++
                 }
             }
-            if (c.garrison <= 0 && c.alive <= 0 && grid.stateAt(c.x, c.y) == HEX_OURS) {
+            // emptied: the king takes it by standing on it for 2 s
+            val onIt = c.garrison <= 0 && !kDead && hypot(c.x - kx, c.y - ky) < CAMP_TAKE_RADIUS && !campGuarded(ci, c)
+            if (onIt) { holding = true; campHold += dt }
+            if (onIt && campHold >= CAMP_HOLD) {
+                campHold = 0f
+                grid.plant(grid.hexAt(c.x, c.y))
                 c.cleared = true // a friendly ruin now
                 Audio.play(Sfx.BUILD)
                 if (c.main && !m.crowned[c.region]) crown(c.region) else rainLeft += 30 + 10 * c.region
                 if (rainLeft > 0) { rainX = c.x; rainY = c.y; rainRate = 40f }
                 saveRealm()
             }
+        }
+        if (!holding) campHold = 0f
+        if (grid.bannerVersion != revealVersion) { // every standing banner lifts the fog around it
+            revealVersion = grid.bannerVersion
+            for (i in 0 until grid.count) { val h = grid.at(i); if (grid.hasBanner(h) && grid.state(h) == HEX_OURS) m.reveal(h, 3) }
         }
         bossInSight = -1
         for (bi in m.bosses.indices) {
@@ -1366,6 +1389,12 @@ class Game {
         }
         autosaveT += dt
         if (autosaveT >= 30f) { autosaveT = 0f; saveRealm() }
+    }
+
+    /** One of its own still near the camp? Those marching far away do not hold it. */
+    private fun campGuarded(ci: Int, c: RealmCamp): Boolean {
+        for (e in enemies) if (e.active && e.camp == ci && hypot(e.x - c.x, e.y - c.y) < 900f) return true
+        return false
     }
 
     /** A region's main camp fell under our banner: fanfare, relic draft, treasure. */
@@ -1521,31 +1550,30 @@ class Game {
 
     // ---------------------------------------------------------------- first-game tutorial
 
-    /** 0 move, 1 gold, 2 banner, 3 build, 4 charge, 5 last words (OK button), 6 done (persisted). Never a forced pause. */
+    /** 0 move, 1 gold, 2 lands and building, 3 charge, 4 last words (OK button), 5 done (persisted). Never a forced pause. */
     var tutorial = TUTO_DONE
     private val tutoSlow get() = if (tutorial < TUTO_DONE && wave <= 1) 0.7f else 1f
     private fun updateTutorial() {
-        if (tutorial >= 5 || state != STATE_PLAY) return
+        if (tutorial >= 4 || state != STATE_PLAY) return
         val next = when (tutorial) {
             0 -> hypot(kx - World.KING_START_X, ky - World.KING_START_Y) > 140f
             1 -> coinsCollected >= 5
-            2 -> bannersPlanted > 0
-            3 -> buildsDone > 0
+            2 -> buildsDone > 0
             else -> chargesDone > 0
         }
         if (next) tutorial++
     }
     fun tutorialOk() {
-        if (tutorial != 5) return
+        if (tutorial != 4) return
         tutorial = TUTO_DONE
         Storage.saveInt("tuto_done", 1)
     }
 
     /** Pad the tutorial points at, or null: the nearest site open on our lands. */
-    val tutorialTarget: Pad? get() = if (tutorial != 3) null else {
+    val tutorialTarget: Pad? get() = if (tutorial != 2) null else {
         var best: Pad? = null
         var bd = Float.MAX_VALUE
-        for (p in pads) if (p.visible && !p.locked && padOpen(p)) { val d = hypot(p.x - kx, p.y - ky); if (d < bd) { bd = d; best = p } }
+        for (p in pads) if (p.visible && !p.locked) { val d = hypot(p.x - kx, p.y - ky); if (d < bd) { bd = d; best = p } }
         best
     }
 
@@ -1585,7 +1613,7 @@ class Game {
         for (t in towers) sb.append(if (t.elite) 2 else if (t.ballista) 1 else 0)
         sb.append(";")
         for (u in unlocked) sb.append(if (u) 1 else 0)
-        sb.append(";H").append(bannersPlanted).append(':') // tagged last fields: the positional fields above do not move
+        sb.append(";H").append(hexesTaken).append(':') // tagged last fields: the positional fields above do not move
         grid.save(sb)
         sb.append(";R")
         for (r in relics) sb.append(if (r) 1 else 0)
@@ -1651,7 +1679,7 @@ class Game {
             ringDirty = true
             f.lastOrNull { it.startsWith("H") }?.let { // saves without it keep the starting lands
                 val colon = it.indexOf(':')
-                bannersPlanted = it.substring(1, colon).toInt()
+                hexesTaken = it.substring(1, colon).toInt()
                 grid.load(it.substring(colon + 1))
             }
             f.lastOrNull { it.startsWith("R") }?.let {
@@ -1725,6 +1753,7 @@ class Game {
             updateTowers(dt)
             updateBuildings(dt)
             updatePads(dt)
+            updateClaim(dt)
             updateHexes(dt)
             updateRun(dt)
             if (kChargeCd > 0f) kChargeCd -= dt
@@ -1757,6 +1786,11 @@ class Game {
         if (waveBanner > 0f) waveBanner -= dt
         if (bossBanner > 0f) bossBanner -= dt
         if (stackBump > 0f) stackBump = max(0f, stackBump - dt * 6f)
+        // stack spring: the base follows the king's sideways speed, the top follows the base with a delay
+        leanVA += ((-kvx * 0.05f - stackLeanA) * 60f - leanVA * 11f) * dt
+        stackLeanA += leanVA * dt
+        leanVB += ((stackLeanA - stackLeanB) * 40f - leanVB * 8f) * dt
+        stackLeanB += leanVB * dt
         for (w in walls) {
             val open = w.built && !kDead && hypot(kx - w.x, ky - w.y) < 110f
             if (open && w.gate == 0f) Audio.play(Sfx.GATE, 0.7f)
@@ -2372,10 +2406,10 @@ class Game {
                 2 -> {
                     if (kDead) { c.state = 1; c.z = 0f; continue }
                     c.vx += dt * 4500f // used as speed
-                    // picked-up coins fly to the treasure pill of the HUD
-                    val dx = pillWorldX - c.x
-                    val dy = pillWorldY - c.y
-                    val dz = -c.z
+                    // picked-up coins land on top of the stack on the king's head
+                    val dx = kx - c.x
+                    val dy = ky - c.y
+                    val dz = stackTopZ - c.z
                     val d = sqrt(dx * dx + dy * dy + dz * dz)
                     val step = (500f + c.vx) * dt
                     if (d <= step) {
@@ -2401,22 +2435,24 @@ class Game {
     /** Sites only stand on our hexes; repairs (keep, built walls) stay open everywhere. */
     fun padOpen(p: Pad) = p.kind == PAD_REPAIR || p.kind == PAD_VILLAGE || (p.kind == PAD_WALL && walls[p.ref].built) || grid.stateAt(p.x, p.y) == HEX_OURS
 
-    /** Plants a banner on the neutral hex under the king: pays, claims the flower of 7, plays the signature moment. */
-    fun plantBanner(): Boolean {
-        if (!canPlant || coins < bannerCost) return false
-        coins -= bannerCost
-        bannersPlanted++
+    private fun isBlocked(h: Hex): Boolean { val m = realm ?: return false; return m.blocked[h.index] != BLOCK_NONE }
+
+    /** The land grows where the king goes: hold a neutral hex for 0.6 s and it is ours. */
+    private fun updateClaim(dt: Float) {
         val h = grid.hexAt(kx, ky)
-        grid.plant(h)
-        realm?.reveal(h, 3)
+        if (kDead || grid.state(h) != HEX_NEUTRAL || isBlocked(h)) { claimT = 0f; claimHex = -1; return }
+        if (h.key != claimHex) { claimHex = h.key; claimT = 0f }
+        claimT += dt
+        if (claimT < CLAIM_TIME) return
+        claimT = 0f; claimHex = -1
+        grid.claimOne(h)
+        hexesTaken++
         Ach.unlock("first_banner")
         val held = grid.owned
         if (held >= 7) Ach.unlock("seven_hex")
         if (held >= 40) Ach.unlock("forty_hex")
-        Audio.play(Sfx.BANNER)
-        Audio.haptic(Haptic.MEDIUM)
-        spawnFx(FX_GLOW, h.x, h.y, 0.5f, ABILITY_COLORS[heroClass])?.r1 = 4f
-        return true
+        Audio.play(Sfx.BANNER, 0.6f)
+        spawnFx(FX_GLOW, h.x, h.y, 0.4f, ABILITY_COLORS[heroClass])?.r1 = 2.5f
     }
 
     private fun updateHexes(dt: Float) {
@@ -2531,7 +2567,7 @@ class Game {
         if (f == null) { onPad.paid += n; if (onPad.paid >= onPad.cost) complete(onPad); return }
         onPad.pending += n
         f.active = true
-        f.sx = pillWorldX; f.sy = pillWorldY; f.sz = 25f // spending: the coins leave the HUD for the site
+        f.sx = kx; f.sy = ky; f.sz = stackTopZ // spending: the coins fly from the top of the stack to the site
         f.pad = pads.indexOf(onPad)
         f.t = 0f
         f.value = n
@@ -2555,7 +2591,10 @@ class Game {
 
     internal fun complete(p: Pad) {
         shake = max(shake, 4f) // short punch on every purchase
-        if (p.kind != PAD_TOWER_ARCHER) { pendBuilds++; buildsDone++ }
+        if (p.kind != PAD_TOWER_ARCHER) { // a finished site takes its flower of 7 hexes at once
+            pendBuilds++; buildsDone++
+            if (p.kind != PAD_REPAIR && p.kind != PAD_FORGE && p.kind != PAD_RECRUIT) grid.plant(grid.hexAt(p.x, p.y))
+        }
         p.paid = 0
         p.pending = 0
         p.bump = 1f
@@ -2879,7 +2918,7 @@ class Game {
                     burst(e.x, e.y, 40f, 30, 0xFF8E4AE0L, 300f)
                 }
             }
-            if (!kDead && dk < aggro) {
+            if (!kDead && dk < (if (rm != null) max(aggro, REALM_AGGRO) else aggro)) { // in the Realm they hunt the king when he is near, instead of all leaving for home
                 tx = kx; ty = ky; target = 1
             } else if (rm != null) {
                 if (e.camp <= -2) { // roaming boss: back and forth between its two camps
@@ -2891,6 +2930,8 @@ class Game {
                     target = 3
                     tx = World.CASTLE_X + e.offX * 1.5f
                     ty = World.CASTLE_Y + 40f + e.offY
+                } else if (Flow.sources == 0) { // no banner left: straight for the keep
+                    tx = World.CASTLE_X; ty = World.CASTLE_Y
                 } else if (Flow.dir(grid, e.x, e.y, flowOut)) {
                     tx = e.x + flowOut[0] * 80f; ty = e.y + flowOut[1] * 80f
                 } else { // standing on a banner hex: it stays and the hex burns
@@ -2975,7 +3016,7 @@ class Game {
                         if (wall.hp <= 0f) breakWall(wall)
                     }
                     target == 3 && distToGoal < stopDist + 20f -> {
-                        castleHp -= e.dmg
+                        castleHp -= if (rm != null) e.dmg * 0.5f else e.dmg // far from home, the keep holds longer
                         castleFlash = 0.12f
                         castleAlarm = 2.5f
                         shake = max(shake, 4f)

@@ -11,8 +11,8 @@ FONT = os.path.join(ROOT, "composeApp/src/commonMain/composeResources/font/lilit
 W, H = 1080, 1920
 NAVY, GOLD = (12, 19, 38), (255, 197, 49)
 CAPTIONS = {
-    "fr": ["Plante ta bannière", "Tiens la ligne", "Lâche le Tourbillon", "Choisis ta relique", "Bats le boss", "Habille ton roi"],
-    "en": ["Plant your banner", "Hold the line", "Unleash the Whirlwind", "Pick your relic", "Beat the boss", "Dress your king"],
+    "fr": ["Étends tes terres", "Tiens la ligne", "Lâche le Tourbillon", "Choisis ta relique", "Bats le boss", "Habille ton roi"],
+    "en": ["Grow your lands", "Hold the line", "Unleash the Whirlwind", "Pick your relic", "Beat the boss", "Dress your king"],
 }
 
 

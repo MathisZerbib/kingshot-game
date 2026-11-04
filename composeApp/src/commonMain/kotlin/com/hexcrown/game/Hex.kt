@@ -103,6 +103,25 @@ class HexGrid : Terrain {
         store(h, HEX_OURS or (if (banner) 4 else keepBanner) or (deployMs shl 19))
     }
 
+    /** The king has held this neutral hex: it is ours, and a banner stands in the middle of any full group of 7 around it. */
+    fun claimOne(h: Hex) {
+        claim(h, false, DEPLOY_MS)
+        autoBanner(h)
+        for (i in 0..5) autoBanner(Hex.of(h.q + DQ[i], h.r + DR[i]))
+        version++
+    }
+
+    private fun autoBanner(c: Hex) {
+        if (cell(c) and 3 != HEX_OURS || hasBanner(c)) return
+        for (i in 0..5) {
+            val n = Hex.of(c.q + DQ[i], c.r + DR[i])
+            if (cell(n) and 3 != HEX_OURS || hasBanner(n)) return // not a full flower yet, or one of its hexes already holds a banner
+            for (k in 0..5) if (hasBanner(Hex.of(n.q + DQ[k], n.r + DR[k]))) return // groups do not share hexes
+        }
+        store(c, cell(c) or 4)
+        bannerVersion++
+    }
+
     /** Claims the hex and its 6 neighbours; [animated] unfolds them one by one. */
     fun plant(h: Hex, animated: Boolean = true) {
         claim(h, true, if (animated) DEPLOY_MS else 0)
@@ -224,6 +243,8 @@ object Flow {
     private val field = ByteArray(HEX_SPAN * HEX_SPAN) { NONE }
     private val queue = IntArray(HEX_SPAN * HEX_SPAN)
     private val dist = ShortArray(HEX_SPAN * HEX_SPAN)
+    /** How many banners the last search started from. */
+    var sources = 0; private set
 
     /** Multi-source search from our banners over the walkable hexes. Preallocated; only run when the territory changes. */
     fun compute(grid: HexGrid, blocked: ByteArray) {
@@ -236,6 +257,7 @@ object Flow {
             queue[tail++] = h.index
             dist[h.index] = 0
         }
+        sources = tail
         while (head < tail) {
             val at = queue[head++]
             val q = at / HEX_SPAN; val r = at % HEX_SPAN

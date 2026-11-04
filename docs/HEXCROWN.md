@@ -7,7 +7,7 @@ l'architecture, **zéro plagiat** de Kingshot (Century Games), publication Play 
 
 ## 1. Identité
 - **Nom** : **Hexcrown** (FR/EN, prononçable, aucune app ni marque trouvée sous ce nom le 04-11-2026).
-  Accroche : « Plante ta bannière. Tiens la ligne. » / « Plant your banner. Hold the line. »
+  Accroche : « Étends tes terres. Tiens la ligne. » / « Grow your lands. Hold the line. »
 - **Ids** : Android `applicationId` + `namespace` **`com.hexcrown.game`**, package Kotlin
   `com.hexcrown.game`, `rootProject.name = "Hexcrown"`, desktop `packageName = "Hexcrown"`, iOS bundle
   `com.hexcrown.game`. Libellé d'app « Hexcrown ». Ces ids ne changeront plus après la publication.
@@ -30,6 +30,7 @@ l'architecture, **zéro plagiat** de Kingshot (Century Games), publication Play 
   les **chantiers ne se posent que sur nos hex**, les archers y tirent 10 % plus vite (lueur douce).
 - **Ennemis sur nos hex** pendant 3 s → l'hex **brûle** (plus de revenu, bannière en feu). Le roi qui
   revient dessus l'éteint en 1,5 s. Un hex brûlé 20 s redevient neutre (la bannière tombe).
+- (Remplacé par le territoire automatique, voir « Retours de Mathis ».)
 - Boucle : s'étendre = plus de revenu et plus de chantiers, mais plus de front à tenir. C'est la
   décision stratégique à chaque vague, et c'est ce qui rend le monde ouvert naturel.
 
@@ -107,6 +108,12 @@ au camp à la reprise.
   (émulateurs Mac), `proguard` conservant les classes Compose Resources, AAB `bundleRelease`.
 - **Onboarding** : 1er lancement = tutoriel de 60 s dans le niveau 1 (bouger, ramasser, planter une
   bannière, construire, charge) avec bulles, jamais de mur de texte.
+
+## Retours de Mathis sur la v1.1 (priment sur ce qui précède)
+Pile de pièces sur la tête du roi remise (notre version : plafonnée à 30, ressort sur 2 segments, lueur au sommet ; la
+dépense part du haut de la pile). Territoire automatique, sans bouton ni coût : 0,6 s sur un hex neutre le prend, un
+chantier construit prend sa fleur, une bannière apparaît au centre de chaque groupe complet de 7. Royaume : un camp vidé
+se prend en restant 2 s dessus. Tutoriel en 5 bulles.
 
 ## Équilibrage (v1.0, réglé au bot sur l'ordinateur)
 Départ : 1 fleur autour du donjon. Revenu de territoire plafonné à 2 pièces/s (+0,5 par rang du talent Bourse).
