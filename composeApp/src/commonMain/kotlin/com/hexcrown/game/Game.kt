@@ -128,6 +128,8 @@ class Enemy {
     var atkCd = 0f
     var swing = 0f
     var hitFlash = 0f
+    var lastText: FloatText? = null // hits within 300 ms stack on one number
+    var lastTextT = 0f
     var chargedBy = 0 // last king charge that hit this enemy
     var camp = -1 // Realm: index of its camp; -2 - i for roaming boss i; -1 otherwise
     var knockT = -1f // animated knockback (Tourbillon, charge): seconds elapsed, -1 when none
@@ -205,6 +207,7 @@ class FlyCoin {
 
 // ---------------------------------------------------------------- ability effects (art/fx/FX.md)
 const val TUTO_DONE = 5
+private val BOSS_KEYS = arrayOf("boss.0", "boss.1", "boss.3")
 const val REALM_AGGRO = 700f
 const val CLAIM_TIME = 0.6f // seconds on a neutral hex to take it
 const val CAMP_HOLD = 2f // seconds on an emptied camp to take it
@@ -275,6 +278,7 @@ class Particle {
 }
 
 class FloatText {
+    var stack = 0 // hits merged into this number: it grows
     var active = false
     var x = 0f
     var y = 0f
@@ -296,11 +300,12 @@ class Corpse {
     var scale = 1f
     var t = 0f // 0 .. CORPSE_TIME
 }
-const val CORPSE_TIME = 0.6f
+const val CORPSE_TIME = 0.4f
 
 class Pad(val kind: Int, val x: Float, val y: Float, val ref: Int = -1) {
     var cost = 0
     var paid = 0
+    var shownPaid = 0f // the gauge fills in about 250 ms
     var pending = 0
     var visible = true
     var level = 0
@@ -418,6 +423,41 @@ class Game {
     var abilityT = -1f // seconds since the cast, -1 when no ability is playing
     var abilityCls = 0
     var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
+    // feel (docs/POLISH.md, pass A)
+    var shakeDirX = 0f // when set, the shake follows the impact instead of being random
+    var shakeDirY = 0f
+    var bossZoom = 1f // the camera steps back 8 % while a boss is on the field
+    var bossBandEntry = 0f // the gauge fills in 600 ms
+    var bossGauge = 0f
+    var bossGaugeFlash = 0f // white blink at 50 % and 25 %
+    var bossDownT = 0f // « BOSS VAINCU ! » title
+    var whiteFlash = 0f
+    var shownCoins = 0f // the HUD counter never jumps
+    var abilityReadyT = 0f // glow when the ability is back
+    var lastEnemy = -1 // pool index of the very last enemy of a wave, or -1
+    var waveSummary = 0f
+    var waveSummaryText = ""
+    private var waveCoins0 = 0
+    private var waveKills0 = 0
+    private var comboMaxWave = 0
+    private var stopCd = 0f
+    private var slowFactor = 0.4f
+    private var keepPulse = 0f
+    private var dustT = 0f
+    val keepInDanger get() = state == STATE_PLAY && castleHp < castleMaxHp * 0.3f
+
+    /** Hit-stop by kind of impact; never more than one every 150 ms, none in reduced motion. */
+    private fun stopFor(s: Float) {
+        if (Prefs.cap60 || stopCd > 0f) return
+        hitStop = max(hitStop, s); stopCd = 0.15f
+    }
+
+    private fun shakeFrom(amount: Float, dx: Float, dy: Float) {
+        if (Prefs.cap60) return
+        val l = max(0.001f, hypot(dx, dy))
+        shake = max(shake, amount); shakeDirX = dx / l; shakeDirY = dy / l
+    }
+
     // the open world, null in the levels
     var realm: Realm? = null; private set
     val isRealm get() = realm != null
@@ -987,7 +1027,7 @@ class Game {
         shake = 8f
         // ad-style sequence, see updateTransition
         transition = TRANSITION_TIME
-        slowMo = 0.3f
+        slowMo = 0.3f; slowFactor = 0.4f
         Audio.play(Sfx.VICTORY)
         revealRoad = if (roadAdded) walls.size - 1 else -1
         for (k in CONFETTI.indices) burst(kx, ky, 90f, 22, CONFETTI[k], 520f)
@@ -1362,7 +1402,6 @@ class Game {
             revealVersion = grid.bannerVersion
             for (i in 0 until grid.count) { val h = grid.at(i); if (grid.hasBanner(h) && grid.state(h) == HEX_OURS) m.reveal(h, 3) }
         }
-        bossInSight = -1
         for (bi in m.bosses.indices) {
             val b = m.bosses[bi]
             if (b.dead) continue
@@ -1375,7 +1414,6 @@ class Game {
                 e.maxHp = 1000f * 1.2f * (1f + 4 * 0.22f) * (1f + 0.2f * (5 * (home.region + 1) - 1)) * DIFF_HP[diff]; e.hp = e.maxHp
                 b.enemy = enemies.indexOf(e); b.gen = e.gen
             }
-            if (hypot(enemies[b.enemy].x - kx, enemies[b.enemy].y - ky) < 900f) bossInSight = b.enemy
         }
         for (v in m.villages) if (v.rebuilt) { // rebuilt villages pay their way
             v.timer += dt
@@ -1410,7 +1448,61 @@ class Game {
         spawnFx(FX_GLOW, kx, ky, 0.8f, 0xFFFFD65AL)?.r1 = 6f
     }
 
-    fun bossName(i: Int): String { val m = realm ?: return ""; return L[m.bosses[-2 - enemies[i].camp].nameKey] }
+    fun bossName(i: Int): String {
+        val e = enemies[i]
+        val m = realm
+        return if (m != null && e.camp <= -2) L[m.bosses[-2 - e.camp].nameKey] else L[BOSS_KEYS[e.bossType.coerceIn(0, 2)]]
+    }
+
+    /** Things that run on real time, even during a hit-stop. */
+    private fun updateFeel(dt: Float) {
+        // HUD counter
+        val dc = coins - shownCoins
+        shownCoins = if (abs(dc) < 0.6f) coins.toFloat() else shownCoins + dc * min(1f, dt * 14f)
+        for (p in pads) p.shownPaid += (p.paid - p.shownPaid) * min(1f, dt / 0.08f)
+        if (shake <= 0f) { shakeDirX = 0f; shakeDirY = 0f }
+        if (whiteFlash > 0f) whiteFlash -= dt
+        if (bossDownT > 0f) bossDownT -= dt
+        if (bossGaugeFlash > 0f) bossGaugeFlash -= dt
+        if (waveSummary > 0f) waveSummary -= dt
+        if (abilityReadyT > 0f) abilityReadyT -= dt
+        if (state != STATE_PLAY) return
+        // boss on the field: the band, its gauge, the camera steps back
+        var boss = -1
+        var enemiesUp = 0
+        var one = -1
+        for (i in enemies.indices) {
+            val e = enemies[i]
+            if (!e.active) continue
+            enemiesUp++; one = i
+            if (e.kind == KIND_BOSS && (boss < 0 || hypot(e.x - kx, e.y - ky) < hypot(enemies[boss].x - kx, enemies[boss].y - ky))) boss = i
+        }
+        val near = boss >= 0 && (realm == null || hypot(enemies[boss].x - kx, enemies[boss].y - ky) < 900f)
+        if (near && bossInSight != boss) { bossBandEntry = 0f; bossGauge = 0f } // a new boss: the gauge fills up
+        bossInSight = if (near) boss else -1
+        bossZoom += ((if (near && !Prefs.cap60) 0.92f else 1f) - bossZoom) * min(1f, dt * 4f)
+        if (near) {
+            val e = enemies[boss]
+            val real = (e.hp / e.maxHp).coerceIn(0f, 1f)
+            if (bossBandEntry < 0.6f) { bossBandEntry += dt; bossGauge = real * (bossBandEntry / 0.6f).coerceAtMost(1f) }
+            else {
+                val was = bossGauge
+                bossGauge += (real - bossGauge) * min(1f, dt * 5f)
+                if ((was > 0.5f && bossGauge <= 0.5f) || (was > 0.25f && bossGauge <= 0.25f)) bossGaugeFlash = 0.25f
+            }
+        }
+        lastEnemy = if (realm == null && enemiesUp == 1 && toSpawn == 0 && !bossPending && wave > 0) one else -1
+        // keep in danger: a heartbeat in the hands
+        if (keepInDanger) {
+            keepPulse += dt
+            if (keepPulse >= 1f) { keepPulse -= 1f; Audio.haptic(Haptic.LIGHT) }
+        } else keepPulse = 0f
+        // dust under the mount
+        if (!kDead && abs(kvx) + abs(kvy) > 60f) {
+            dustT -= dt
+            if (dustT <= 0f) { dustT = 0.12f; spawnFx(FX_PUFF, kx, ky + 6f, 0.4f, 0xFFD9C9A0L)?.r1 = 0.5f }
+        }
+    }
 
     // ---------------------------------------------------------------- relics, combo, day cycle
 
@@ -1449,6 +1541,7 @@ class Game {
 
     private fun addCombo() {
         combo++
+        if (combo > comboMaxWave) comboMaxWave = combo
         if (combo % 10 == 0) { comboPulse = 1f; if (combo <= 100) Audio.play(Sfx.COMBO_UP) }
         if (combo >= 20) Ach.unlock("combo_20")
         if (combo >= 50) Ach.unlock("combo_50")
@@ -1717,7 +1810,9 @@ class Game {
         if (hitStop > 0f) hitStop -= dtReal
         if (abilityStop > 0f) abilityStop -= dtReal
         // hitstop freezes the action for a few frames when the king is hit; slow motion after a boss or a level
-        val dt = if (hitStop > 0f) 0f else if (abilityStop > 0f) dtReal * 0.15f else if (slowMo > 0f) dtReal * 0.4f else dtReal
+        if (stopCd > 0f) stopCd -= dtReal
+        val dt = if (hitStop > 0f) 0f else if (abilityStop > 0f) dtReal * 0.15f else if (slowMo > 0f) dtReal * slowFactor else dtReal
+        updateFeel(dtReal)
         if (abilityPress < 1f) abilityPress += dtReal
         if (vignette > 0f) vignette -= dtReal
         if (abilityTitle < 1f) abilityTitle += dtReal
@@ -1757,7 +1852,10 @@ class Game {
             updateHexes(dt)
             updateRun(dt)
             if (kChargeCd > 0f) kChargeCd -= dt
-            if (abilityCd > 0f) abilityCd -= dt
+            if (abilityCd > 0f) {
+                abilityCd -= dt
+                if (abilityCd <= 0f) { abilityReadyT = 1f; Audio.haptic(Haptic.LIGHT) } // back: a buzz and a glow
+            }
             if (abilityFlash > 0f) abilityFlash -= dt
             updateAbility(dt)
         }
@@ -1955,6 +2053,8 @@ class Game {
                     burst((kx + e.x) * 0.5f, (ky + e.y) * 0.5f, 30f, 4, 0xFFFFFFFFL, 160f)
                     Audio.playVaried(Sfx.HIT, 0.8f, 0.1f, rnd)
                     hitEnemy(i, 55f * dmgMult * heroPower)
+                    stopFor(0.04f)
+                    shakeFrom(3f, e.x - kx, e.y - ky)
                 }
                 if (hit >= 0) {
                     kFireCd = 0.5f
@@ -2268,6 +2368,7 @@ class Game {
                 if (alive) {
                     val blocked = e.kind == KIND_SHIELD && a.dx * e.mdx + a.dy * e.mdy < -0.3f
                     hitEnemy(a.target, if (blocked) a.dmg * 0.25f else a.dmg)
+                    stopFor(0.02f)
                     if (fireActive) spawnFx(FX_FIREHIT, a.x, a.y - a.z, 0.2f, 0xFFFF8A2AL)
                     sparks(a.tx, a.ty, a.tz)
                     if (blocked) burst(a.tx, a.ty, a.tz, 4, 0xFFFFFFFFL, 160f)
@@ -2310,7 +2411,16 @@ class Game {
             val d = hypot(dx, dy).coerceAtLeast(1f)
             e.x += dx / d * 3f; e.y += dy / d * 3f
         }
-        text(e.x, e.y, 40f * e.scale + 10f, dmg.toInt(), e.kind == 2 || crit, if (crit) 1 else 0)
+        e.squash = 0.14f
+        val prev = e.lastText
+        if (prev != null && prev.active && time - e.lastTextT < 0.3f) { // the same enemy again: one number that grows
+            prev.value += dmg.toInt(); prev.stack++; prev.life = 0.8f; prev.x = e.x; prev.y = e.y
+            if (crit) { prev.kind = 1; prev.big = true }
+        } else {
+            e.lastText = text(e.x, e.y, 40f * e.scale + 10f, dmg.toInt(), e.kind == 2 || crit, if (crit) 1 else 0)
+        }
+        e.lastTextT = time
+        if (crit) spawnFx(FX_SPARK, e.x, e.y - 30f * e.scale, 0.25f, 0xFFFFD65AL)?.let { it.a = rnd.nextFloat() * 360f; it.r1 = 0.9f }
         if (e.kind == 2) shake = max(shake, 3f)
         if (e.hp <= 0f) killEnemy(e)
     }
@@ -2327,7 +2437,10 @@ class Game {
         corpses.firstOrNull { !it.active }?.let { c ->
             c.active = true; c.x = e.x; c.y = e.y; c.kind = e.kind; c.bossType = e.bossType; c.dir = e.dir; c.scale = e.scale; c.t = 0f
         }
-        if (e.kind == 2) { slowMo = 0.8f; Audio.haptic(Haptic.HEAVY) } // boss down: brief slow motion
+        if (e.kind == 2) { // boss down: slow motion, white flash, title
+            slowMo = 0.5f; slowFactor = 0.3f; whiteFlash = 0.14f; bossDownT = 2f
+            Audio.play(Sfx.BOSS_DOWN); Audio.haptic(Haptic.HEAVY)
+        }
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
         addCombo()
@@ -2341,7 +2454,7 @@ class Game {
             Ach.unlock("boss_1"); if (Stats.bosses + pendBosses >= 10) Ach.unlock("boss_10")
         }
         val lootMul = comboMul * (if (relics[R_CURSE]) 2f else 1f)
-        if (e.kind == 2) { val big = ((if (mine) e.coins * 2 else e.coins) * (if (relics[R_RAIN]) 2f else 1f) * lootMul).toInt(); rainLeft += big; rainX = e.x; rainY = e.y; rainRate = big / 0.8f } // jackpot rain over 0.8 s
+        if (e.kind == 2) { val big = max(30, ((if (mine) e.coins * 2 else e.coins) * (if (relics[R_RAIN]) 2f else 1f) * lootMul).toInt()); rainLeft += big; rainX = e.x; rainY = e.y; rainRate = big / 0.8f } // jackpot rain over 0.8 s
         else {
             var n = (if (mine) (e.coins * 3 + 1) / 2 else e.coins) * (if (e.elite) 2 else 1)
             if (unlocked[U_STATUE] && rnd.nextFloat() < 0.25f * n) n++
@@ -2419,9 +2532,10 @@ class Game {
                         pendCoins++
                         stackBump = 1f
                         if (!c.auto) {
-                            coinCombo = if (time - lastCoinTime < 0.6f) coinCombo + 1 else 0
+                            coinCombo = if (time - lastCoinTime < 0.4f) coinCombo + 1 else 0
+                            if (coinCombo > 0 && coinCombo % 10 == 0 && !Prefs.cap60) shake = max(shake, 2f)
                             lastCoinTime = time
-                            if (!Audio.discreet) Audio.play(Sfx.COIN, 0.5f, 0.9f + min(coinCombo, 15) * 0.025f) // discreet mix: coins are silent
+                            Audio.play(Sfx.COIN, 0.5f, 1f + min(coinCombo, 30) * 0.02f) // the tick climbs 2 % per coin
                             if (coins % 10 == 0) Audio.haptic(Haptic.LIGHT)
                         }
                     } else {
@@ -2583,6 +2697,7 @@ class Game {
                 val p = pads[f.pad]
                 p.pending -= f.value
                 p.paid += f.value
+                p.bump = max(p.bump, 0.4f) // the site breathes as the coins land
                 p.bump = 0.35f
                 if (p.paid >= p.cost) complete(p)
             }
@@ -2750,11 +2865,14 @@ class Game {
                 // wave reward: a shower of coins from the keep, growing with the wave
                 rainLeft += 4 + wave * 2; rainX = World.CASTLE_X; rainY = World.CASTLE_Y + 60f; rainRate = (4 + wave * 2) / 0.8f
                 waveRewardBanner = 2f
+                waveSummary = 2f
+                waveSummaryText = L.f("wave.stats", coinsCollected - waveCoins0, kills - waveKills0, comboMaxWave, grid.owned)
             }
         }
         waveBreak -= dt
         if (waveBreak <= 0f) {
             wave++
+            waveCoins0 = coinsCollected; waveKills0 = kills; comboMaxWave = combo
             Audio.play(Sfx.WAVE_HORN)
             wallLostThisWave = false
             raining = wave > 1 && rnd.nextInt(6) == 0
@@ -2772,7 +2890,7 @@ class Game {
             // boss on every 5th wave, and on the last wave of a level from level 5
             bossPending = wave % 5 == 0 || (goalWaves in 1..999 && levelWaves == goalWaves - 1)
             spawnTimer = 0.5f
-            waveBanner = 2.2f
+            waveBanner = 1.2f
             waveBreak = max(4f, 7.5f - level * 0.25f)
             if (wave > best) {
                 best = wave
@@ -2998,7 +3116,7 @@ class Game {
                 when {
                     target == 1 && dk < reach + 16f -> {
                         damageKing(e.dmg)
-                        if (e.kind == KIND_BOSS) shake = max(shake, 9f)
+                        if (e.kind == KIND_BOSS) { shakeFrom(9f, -dkx, -dky); stopFor(0.09f) }
                         if (e.kind == KIND_BOSS && e.bossType == 1 && dk > 1f) { // ogre: hurls the king and scatters the squad
                             kx = (kx + dkx / dk * 150f).coerceIn(World.boundMinX + 40f, World.boundMaxX - 40f); ky = (ky + dky / dk * 150f).coerceIn(World.boundMinY + 60f, World.boundMaxY - 40f)
                             for (q in 0 until squad) { ax[q] += (rnd.nextFloat() - 0.5f) * 160f; ay[q] += (rnd.nextFloat() - 0.5f) * 120f }
@@ -3161,9 +3279,10 @@ class Game {
         }
     }
 
-    private fun text(x: Float, y: Float, z: Float, v: Int, big: Boolean, kind: Int = 0) {
-        val t = texts.firstOrNull { !it.active } ?: return
+    private fun text(x: Float, y: Float, z: Float, v: Int, big: Boolean, kind: Int = 0): FloatText? {
+        val t = texts.firstOrNull { !it.active } ?: return null
         t.active = true
+        t.stack = 0
         t.x = x + (rnd.nextFloat() - 0.5f) * 20f
         t.y = y
         t.z = z
@@ -3171,6 +3290,7 @@ class Game {
         t.life = 0.8f
         t.big = big
         t.kind = kind
+        return t
     }
 
     private fun updateTexts(dt: Float) {

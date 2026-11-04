@@ -33,6 +33,9 @@ class LArr(private vararg val keys: String) {
 expect fun systemLanguage(): String
 
 private val TEXTS: Map<String, Array<String>> = mapOf(
+    "last.enemy" to arrayOf("Dernier ennemi !", "Last enemy!"),
+    "wave.stats" to arrayOf("+{0} or · {1} ennemis · combo {2} · {3} hex", "+{0} gold · {1} enemies · combo {2} · {3} hexes"),
+    "boss.down" to arrayOf("BOSS VAINCU !", "BOSS DEFEATED!"),
     "tuto.0" to arrayOf("Glisse pour déplacer le roi.", "Slide to move the king."),
     "tuto.1" to arrayOf("Ramasse l'or des ennemis.", "Pick up the enemies' gold."),
     "tuto.2" to arrayOf("Tes terres grandissent là où tu passes.", "Your lands grow where you go."),

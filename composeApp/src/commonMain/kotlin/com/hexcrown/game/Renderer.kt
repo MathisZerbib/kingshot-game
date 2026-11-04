@@ -229,6 +229,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
 
     private val keys = LongArray(2048)
     private val flashFilter = ColorFilter.tint(Color(0xD0FFFFFF), BlendMode.SrcAtop)
+    private val abilityGrey = ColorFilter.colorMatrix(androidx.compose.ui.graphics.ColorMatrix().apply { setToSaturation(0f) })
     private val allyTint = ColorFilter.tint(Color(0x556FB7FF), BlendMode.SrcAtop)
     private val dimFilter = ColorFilter.tint(Color(0xB0808080), BlendMode.SrcAtop)
 
@@ -337,13 +338,14 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         val w = size.width
         val h = size.height
         val portrait = h >= w
-        scale = (if (portrait) w / 560f else min(w / 1000f, h / 620f)) * g.camZoom * g.worldZoom
+        scale = (if (portrait) w / 560f else min(w / 1000f, h / 620f)) * g.camZoom * g.worldZoom * g.bossZoom
         val halfW = w / 2f / scale
         val halfH = h / 2f / scale
         val cx = if (halfW * 2 >= World.boundMaxX - World.boundMinX) (World.boundMinX + World.boundMaxX) / 2 else g.camX.coerceIn(World.boundMinX + halfW, World.boundMaxX - halfW)
         val cy = if (halfH * 2 >= World.boundMaxY - World.boundMinY) (World.boundMinY + World.boundMaxY) / 2 else g.camY.coerceIn(World.boundMinY + halfH - 200f, World.boundMaxY - halfH)
-        val shx = if (g.shake > 0f) sin(g.time * 93f) * g.shake else 0f
-        val shy = if (g.shake > 0f) cos(g.time * 71f) * g.shake else 0f
+        val dirShake = g.shakeDirX != 0f || g.shakeDirY != 0f
+        val shx = if (g.shake <= 0f) 0f else if (dirShake) g.shakeDirX * sin(g.time * 70f) * g.shake else sin(g.time * 93f) * g.shake
+        val shy = if (g.shake <= 0f) 0f else if (dirShake) g.shakeDirY * sin(g.time * 70f) * g.shake else cos(g.time * 71f) * g.shake
         val ox = w / 2f - cx * scale + shx
         val oy = h / 2f - cy * scale + shy
         viewOx = ox; viewOy = oy
@@ -403,7 +405,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             if (!t.active || t.x < vl || t.x > vr || t.y < vt || t.y > vb) continue
             val k = t.life / 0.8f
             val pop = if (k > 0.8f) 1f + (k - 0.8f) * 3f else 1f
-            val px = (if (t.big) 34f else 24f) * scale * pop
+            val px = (if (t.kind == 1) 34f else if (t.big) 34f else 24f) * (if (t.kind == 1) 1.4f else 1f) * (1f + 0.12f * min(t.stack, 4)) * scale * pop
             val col = when (t.kind) { 1 -> Color(0xFFFFD84A); 2 -> ALERT_RED; 3 -> HEAL_GREEN; else -> if (t.big) Color(0xFFFFD84A) else WHITE }
             label(if (t.kind == 3) text.str(healLabel(t.value)) else text.neg(t.value), ox + t.x * scale, oy + (t.y - t.z) * scale, px, col, min(1f, k * 2.5f))
         }
@@ -682,7 +684,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         rr(PAD_BG, x0, y0, size, size, 14f)
         val frac = ((p.paid + p.pending).toFloat() / p.cost).coerceIn(0f, 1f)
         if (frac > 0f) {
-            rr(PAD_FILL, x0, y0, size * (p.paid.toFloat() / p.cost).coerceIn(0f, 1f), size, 14f)
+            rr(PAD_FILL, x0, y0, size * (p.shownPaid / p.cost).coerceIn(0f, 1f), size, 14f)
             // fast-filling ring around the site while paying
             drawArc(GOLD, -90f, 360f * frac, false, Offset(p.x - hs - 14f, p.y - hs - 14f), Size(hs * 2f + 28f, hs * 2f + 28f), style = payRing)
         }
@@ -789,9 +791,13 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 K_WALL -> drawWall(g.walls[idx], g.age, g)
                 K_ENEMY -> {
                     val e = g.enemies[idx]
+                    if (idx == g.lastEnemy) { // the last one: a pulsing gold ring
+                        val rr = 46f * e.scale * (1f + 0.12f * sin(g.time * 8f))
+                        drawOval(GOLD, Offset(e.x - rr, e.y - rr * 0.55f), Size(rr * 2f, rr * 1.1f), style = Stroke(4f))
+                    }
                     if (e.squash > 0f) { // hit squash 1.25 / 0.8 → 1 in 150 ms
-                        val k = e.squash / 0.15f
-                        withTransform({ scale(1f + 0.25f * k, 1f - 0.2f * k, Offset(e.x, e.y)) }) { drawEnemy(e, g.level % 5 == 0) }
+                        val k = (e.squash / 0.14f).coerceAtMost(1f) // squash 1.2 / 0.85 back to 1
+                        withTransform({ scale(1f + 0.2f * k, 1f - 0.15f * k, Offset(e.x, e.y)) }) { drawEnemy(e, g.level % 5 == 0) }
                     } else drawEnemy(e, g.level % 5 == 0)
                 }
                 K_CORPSE -> drawCorpse(g.corpses[idx])
@@ -854,9 +860,9 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
     private fun DrawScope.drawCorpse(c: Corpse) {
         val sp = sprites ?: return
         val f = c.t / CORPSE_TIME
-        val tip = min(1f, f * 3f)
-        val a = 1f - f * f
-        withTransform({ rotate((if (c.dir % 8 < 4) -1f else 1f) * 75f * tip, Offset(c.x, c.y)) }) {
+        val tip = min(1f, f * 2.5f) // falls over 15° while fading in 400 ms
+        val a = 1f - f
+        withTransform({ rotate((if (c.dir % 8 < 4) -1f else 1f) * 15f * tip, Offset(c.x, c.y)) }) {
             val k = UNIT_SCALE * (if (c.kind == KIND_SOLDIER || c.kind == KIND_BRUTE) c.scale else 1f)
             enemySprite(sp, c.kind, c.bossType, 0f, 0f, c.dir, c.x, c.y + f * 12f, k, hitTint, a)
         }
@@ -1043,7 +1049,8 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         val y = g.ky
         val moving = abs(g.kvx) + abs(g.kvy) > 30f
         val col = if (moving) 1 + walkFrame(g.kWalk, 6) else 0
-        oval(KING_RING, x - 44f, y - 20f, 88f, 40f) // keeps the king findable under the thumb
+        // keeps the king findable under the thumb; stretched while he charges
+        if (g.kChargeT > 0f) oval(KING_RING, x - 90f, y - 18f, 180f, 36f) else oval(KING_RING, x - 44f, y - 20f, 88f, 40f)
         val skin = kingSkin
         val kingImg = skin ?: when (g.heroClass) { CLASS_WARRIOR -> sp.kingWarrior; CLASS_RANGER -> sp.kingRanger; else -> sp.kingBuilder }
         val fi = fxi
@@ -1051,7 +1058,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             val ang = atan2(g.kvy, g.kvx)
             fxDraw(fi.trail, 0, x - cos(ang) * 80f, y - 30f - sin(ang) * 80f, 170f, 46f, ang * 180f / PI.toFloat(), 0.9f, tint(ABILITY_COLORS[g.heroClass]), true)
         }
-        val lean = (g.kvx * 0.02f).coerceIn(-6f, 6f) // degrees, around the hooves
+        val lean = (g.kvx * 0.015f).coerceIn(-4f, 4f) // degrees, around the hooves
         withTransform({ rotate(lean, Offset(x, y)) }) {
             // Tourbillon: the king turns through the 8 directions of his atlas, one step every 75 ms
             val dir = if (g.kSpin > 0f) (g.kDir + ((0.6f - g.kSpin) / 0.075f).toInt()) % 8 else g.kDir
@@ -1305,6 +1312,15 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             }
         }
         if (g.comboBreak > 0f) drawRect(COMBO_RED, alpha = 0.18f * g.comboBreak / 0.15f)
+        if (fi != null && g.nightAmt > 0.2f && !g.kDead) { // a carried torch: class-coloured halo under the king
+            val d = 320f * scale
+            fxDraw(fi.glow, 0, ox + g.kx * scale, oy + (g.ky - 20f) * scale, d, d * 0.7f, 0f, 0.5f * g.nightAmt, tint(ABILITY_COLORS[g.heroClass]), true)
+        }
+        if (g.keepInDanger) { // 1 Hz red edge
+            val b = dangerBrush ?: Brush.radialGradient(0.4f to Color.Transparent, 1f to COMBO_RED, center = Offset(w / 2f, h / 2f), radius = max(w, h) * 0.6f).also { dangerBrush = it }
+            drawRect(b, alpha = 0.3f + 0.25f * sin(g.time * 6.283f))
+        }
+        if (g.whiteFlash > 0f) drawRect(WHITE, alpha = (g.whiteFlash / 0.14f).coerceAtMost(1f) * 0.8f)
     }
 
     /** Screen-space part of an ability: edge vignette (220 ms) and the title (180 in, 400 hold, 200 out). */
@@ -1390,7 +1406,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
                 rr(HUD_BG, px, top + 1f * u, pw, ph, ph / 2f)
                 drawCoinIcon(px + ph / 2f, top + 1f * u + ph / 2f, ph * 0.46f)
             }
-            label(text.num(g.coins), px + pw * 0.6f, top + 1f * u + ph / 2f, 22f * u * (1f + g.stackBump * 0.18f), WHITE)
+            label(text.num((g.shownCoins + 0.5f).toInt()), px + pw * 0.6f, top + 1f * u + ph / 2f, 22f * u * (1f + g.stackBump * 0.06f), WHITE)
             if (g.combo > 0) { // combo under the pill: ×1.3 · 27
                 val k = 1f + 0.06f * g.comboPulse
                 label((titleText ?: text).str(comboLabel(g.comboMul, g.combo)), px + pw / 2f, top + ph + 14f * u, 18f * u * k, if (g.comboBreak > 0f) COMBO_RED else WHITE)
@@ -1466,15 +1482,16 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             }
         }
         if (g.waveBanner > 0f && g.levelBanner <= 0f) {
-            val k = g.waveBanner / 2.2f
-            val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
-            label(text.str(waveLabelUp(g.wave, g)), w / 2f, h * 0.3f, 40f * u * pop, WHITE, min(1f, k * 3f))
+            val t = 1.2f - g.waveBanner // slides 12 dp and fades, in then out
+            val inK = expoOut((t / 0.25f).coerceAtMost(1f))
+            val al = inK * min(1f, g.waveBanner / 0.25f)
+            label(text.str(waveLabelUp(g.wave, g)), w / 2f, h * 0.3f - (1f - inK) * 12f * density, 40f * u, WHITE, al)
         }
         if (g.waveRewardBanner > 0f && g.levelBanner <= 0f) {
             val k = g.waveRewardBanner / 2f
             val pop = if (k > 0.85f) 1f + (k - 0.85f) * 4f else 1f
-            label(text.str(L["wave.done"]), w / 2f, h * 0.3f, 26f * u * pop, GOLD, min(1f, k * 3f))
-            label(text.str(L["wave.loot"]), w / 2f, h * 0.3f + 34f * u, 16f * u, WHITE, min(1f, k * 3f))
+            label(text.str(L["wave.done"]), w / 2f, h * 0.3f, 21f * u * pop, GOLD, min(1f, k * 3f))
+            label(text.str(g.waveSummaryText), w / 2f, h * 0.3f + 34f * u, 14f * u, WHITE, min(1f, k * 3f))
         }
         if (g.chestBanner > 0f) {
             val k = g.chestBanner / 2.5f
@@ -1484,7 +1501,12 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
             val k = g.caravanBanner / 2.5f
             label(text.str(L["caravan"]), w / 2f, h * 0.36f, 28f * u * (1f + 0.1f * k), GOLD, min(1f, k * 3f))
         }
-        if (g.bossBanner > 0f) {
+        if (g.bossDownT > 0f) {
+            val k = g.bossDownT / 2f
+            label((titleText ?: text).str(L["boss.down"]), w / 2f, h * 0.34f, 36f * u * (1f + 0.3f * max(0f, k - 0.85f)), GOLD, min(1f, k * 3f))
+        }
+        if (g.lastEnemy >= 0 && g.waveBanner <= 0f) label(text.str(L["last.enemy"]), w / 2f, h * 0.24f, 18f * u, GOLD, 0.7f + 0.3f * sin(g.time * 8f))
+        if (g.bossBanner > 0f && g.bossDownT <= 0f) {
             val k = g.bossBanner / 2.2f
             val pop = 1f + sin(k * 20f) * 0.05f
             label(text.str(L["boss"]), w / 2f, h * 0.38f, 56f * u * pop, Color(0xFFFF4A3A), min(1f, k * 3f))
@@ -1528,10 +1550,11 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         if (g.bossInSight >= 0) { // roaming boss: name and gauge
             val e = g.enemies[g.bossInSight]
             if (e.active && g.state == STATE_PLAY) {
-                val by = top + 120f * u
+                val by = top + 132f * u
                 label((titleText ?: text).str(g.bossName(g.bossInSight)), w / 2f, by, 16f * u, ALERT_RED)
                 val ui = hud
-                if (ui != null) bar(ui, ui.barRed, w / 2f - 110f * u, by + 12f * u, 220f * u, 11f * u, e.hp / e.maxHp)
+                if (ui != null) bar(ui, ui.barRed, w / 2f - 110f * u, by + 12f * u, 220f * u, 11f * u, g.bossGauge)
+                if (g.bossGaugeFlash > 0f) rr(WHITE.copy(alpha = g.bossGaugeFlash * 3f), w / 2f - 110f * u, by + 12f * u, 220f * u, 11f * u, 5f * u)
             }
         }
         // achievement toast: a 56 dp glass band at the top, never during a boss (Ach holds the queue)
@@ -1632,11 +1655,13 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         val r = 34f * u * bounce
         abilityX = w - 18f * u - r; abilityY = h - 46f * u - r; abilityRadius = r + 10f * u
         val ready = g.abilityCd <= 0f
-        if (ready) circ(GOLD, abilityX, abilityY, r + (5f + 3f * sin(g.time * 6f)) * u) // ready glow
+        if (ready) circ(GOLD, abilityX, abilityY, r + (5f + 3f * sin(g.time * 6f) + 6f * g.abilityReadyT) * u) // ready glow, brighter just after it came back
         val ui = hud
         if (ui != null) {
             img(ui.circleRed, abilityX, abilityY, r * 1.12f)
-            img(ui.classIcons[g.heroClass], abilityX, abilityY, r * 0.62f)
+            val ic = ui.classIcons[g.heroClass]
+            val ir = r * 0.62f
+            drawImage(ic, IntOffset.Zero, IntSize(ic.width, ic.height), IntOffset((abilityX - ir).toInt(), (abilityY - ir).toInt()), IntSize((ir * 2).toInt(), (ir * 2).toInt()), colorFilter = if (ready) null else abilityGrey, filterQuality = FilterQuality.High)
         } else {
             circ(HUD_SHADOW, abilityX, abilityY + 4f * u, r)
             circ(GOLD_DARK, abilityX, abilityY, r)
@@ -1679,6 +1704,7 @@ class Renderer(private val measurer: TextMeasurer, private val density: Float) {
         fxDraw(fi.glow, 0, c.x, c.y + 10f, 150f * flick, 100f * flick, 0f, 0.6f, tint(0xFFFFB347L), true)
     }
 
+    private var dangerBrush: Brush? = null
     private val fogPath = Path()
     private val fogPathThin = Path() // a touch more see-through: the mist is not one flat colour
     private val waterPath = Path()
