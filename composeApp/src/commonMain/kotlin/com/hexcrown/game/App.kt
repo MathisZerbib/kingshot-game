@@ -87,6 +87,7 @@ fun App() {
     val frame = remember { mutableLongStateOf(0L) }
     var uiState by remember { mutableIntStateOf(game.state) }
     var shopOpen by remember { mutableStateOf(false) }
+    var relicUi by remember { mutableStateOf(false) }
     // only the equipped skin of the hero in play is decoded; switching releases the previous one from the composition
     val skinRes = remember(shopV, uiState) { Shop.skinAtlas(game.heroClass) }
     renderer.kingSkin = skinRes?.let { imageResource(it) }
@@ -115,6 +116,7 @@ fun App() {
                 if (game.state != uiState) uiState = game.state
                 if (game.paused != pausedUi) { pausedUi = game.paused; if (game.paused) Audio.pause() else Audio.resume() }
                 if (game.victoryOpen != victoryUi) victoryUi = game.victoryOpen
+                if (game.relicOpen != relicUi) relicUi = game.relicOpen
                 Audio.time = game.time
                 val want = game.musicTrack
                 if (want != track[0]) { track[0] = want; Audio.music(want) }
@@ -166,6 +168,7 @@ fun App() {
                         val p = first.position
                         if (hit(p, renderer.abilityX, renderer.abilityY, renderer.abilityRadius)) { game.useAbility(); first.consume(); return@awaitEachGesture }
                         if (hit(p, renderer.pauseX, renderer.pauseY, renderer.pauseRadius)) { game.paused = true; first.consume(); return@awaitEachGesture }
+                        if (renderer.tutoOkRadius > 0f && hit(p, renderer.tutoOkX, renderer.tutoOkY, renderer.tutoOkRadius)) { game.tutorialOk(); first.consume(); return@awaitEachGesture }
                         if (hit(p, renderer.chargeX, renderer.chargeY, renderer.chargeRadius)) { game.charge(); first.consume(); return@awaitEachGesture }
                         if (game.canPlant && hit(p, renderer.bannerX, renderer.bannerY, renderer.bannerRadius)) { game.plantBanner(); first.consume(); return@awaitEachGesture }
                         // double-tap anywhere: the king charges (the joystick still starts, so moving right after feels natural)
@@ -208,6 +211,7 @@ fun App() {
             uiState == STATE_OVER -> DefeatPanel(game, onRevive = { game.revive(); focus.requestFocus() },
                 onRetry = { game.retryLevel(); focus.requestFocus() }, onMenu = { game.quitRun(); metaTick++ })
             pausedUi -> PausePanel(game, onResume = { game.paused = false; focus.requestFocus() }, onSettings = { settingsOpen = true }, onMenu = { game.quitRun() })
+            relicUi -> RelicPanel(game) { slot -> game.takeRelic(slot); focus.requestFocus() }
             victoryUi -> VictoryPanel(game) { game.victoryOpen = false; focus.requestFocus() }
         }
         if (metaPanel >= 0) MetaPanel(metaPanel, metaTick, picked, onChange = { metaTick++ }) { metaPanel = -1 }

@@ -101,6 +101,12 @@ l'architecture, **zéro plagiat** de Kingshot (Century Games), publication Play 
 - **Onboarding** : 1er lancement = tutoriel de 60 s dans le niveau 1 (bouger, ramasser, planter une
   bannière, construire, charge) avec bulles, jamais de mur de texte.
 
+## Équilibrage (v1.0, réglé au bot sur l'ordinateur)
+Départ : 1 fleur autour du donjon. Revenu de territoire plafonné à 2 pièces/s (+0,5 par rang du talent Bourse).
+Bannière 30 + 10 par bannière. Niveau 1 : PV ennemis ×0,7 (0,85 au niveau 2, 1,2 ensuite), boss 520 PV de base
+(1000 ensuite). Résultat bot, Difficile : niveau 1 fini en 2,5 à 3,8 min dans 7 parties sur 10, avec 6-7 bannières
+(les chantiers sont trop éloignés pour moins). À revalider par une vraie partie : le bot ne passe pas le niveau 2.
+
 ## 6. Ordre de livraison
 1. Rebrand (ids, nom, logo, logotype, README, docs, textes) + signature release + L FR/EN. → **v0.9**
 2. Hex + bannières (grille dessinée, revenu, brûlure, chantiers sur hex) + Charge du roi. → **v0.95**

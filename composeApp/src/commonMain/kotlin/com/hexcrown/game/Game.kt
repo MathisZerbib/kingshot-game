@@ -93,7 +93,6 @@ object Meta {
 }
 
 /** Coins drawn on the king's head (tall enough to leave the screen); the HUD counter shows the real total. */
-const val MAX_STACK = 360 // ~1.3 screen heights of coins; more would not be visible
 
 /** Sprite direction (0 = facing the camera/south, 2 = east, 4 = north, 6 = west) for a vector. */
 fun dirIndex(dx: Float, dy: Float): Int {
@@ -204,6 +203,9 @@ class FlyCoin {
 }
 
 // ---------------------------------------------------------------- ability effects (art/fx/FX.md)
+const val TUTO_DONE = 6
+const val INCOME_CAP = 2f // territory income ceiling, coins per second
+const val INCOME_CAP_TALENT = 0.5f // per rank of the Purse talent
 const val FX_RING = 0
 const val FX_SLASH = 1
 const val FX_SPARK = 2
@@ -404,6 +406,50 @@ class Game {
     var abilityT = -1f // seconds since the cast, -1 when no ability is playing
     var abilityCls = 0
     var kSpin = 0f // Tourbillon: the king turns through his 8 directions (seconds left)
+    // run relics
+    val relics = BooleanArray(RELIC_COUNT)
+    val relicChoices = IntArray(3)
+    var relicChoiceCount = 0
+    var relicOpen = false // choice panel on screen; the game waits
+    private var relicDelay = 0f // the draft opens shortly after the boss falls
+    private var draftsNoRare = 0
+    private var nextRare = false
+    private var freeRevive = false
+    var wolvesTamedRun = 0
+    val aWolf = BooleanArray(MAX_SQUAD)
+    private val relicCount get() = relics.count { it }
+    private val fireActive get() = relics[R_FIRE] && !raining
+    val fireArrows get() = fireActive
+    private val rateMul get() = if (fireActive) 0.9f else 1f
+    val revealNext get() = relics[R_EYE]
+    /** What the next wave will throw at us, for Clairvoyance. */
+    val nextWaveSize get() = ((3 + (wave + 1) * 2 + (level - 1) * 2) * 1.1f * DIFF_COUNT[diff]).toInt()
+
+    // combo: kills without the keep or a wall taking damage
+    var combo = 0
+    var comboPulse = 0f
+    var comboBreak = 0f
+    private var lastDefence = -1f
+    val comboMul get() = min(2f, 1f + 0.1f * (combo / 10))
+
+    // day / dusk / night by wave, rain 1 wave in 6
+    /** 0 day, 1 dusk, 2 night. */
+    val dayPhase: Int get() = when (max(wave - 1, 0) % 6) { 3 -> 1; 4, 5 -> 2; else -> 0 }
+    var raining = false
+    var nightAmt = 0f
+    var rainAmt = 0f
+    private val nightFast get() = if (dayPhase == 2) 1.1f else 1f
+    private var wallLostThisWave = false
+    private var rainSeen = false
+    private var burntSeen = false
+
+    // achievements fed by the run
+    private var chargeHits = 0
+    var chargesDone = 0
+    private var buildsDone = 0
+    var pillWorldX = 0f // where the HUD treasure pill sits in the world, written by the renderer each frame
+    var pillWorldY = 0f
+
     // territory and charge (docs/HEXCROWN.md §2.1, §2.3)
     val grid = HexGrid()
     var bannersPlanted = 0
@@ -431,7 +477,7 @@ class Game {
     private var castleHealFrom = 0f
     private var castleHealTo = 0f
     private var castleHealed = false
-    private var healDmg = 0f
+    private var healedThisCast = 0f
     var paused = false
 
     // Enclosure: arcs around the castle linking each built wall to the next one (by angle), as points RING_STEP apart.
@@ -465,7 +511,6 @@ class Game {
     var kWalk = 0f
     var coins = 0
     var stackBump = 0f
-    var sway = 0f
 
     // Squad
     var squad = 0
@@ -486,7 +531,8 @@ class Game {
     var castleFlash = 0f
     var castleAlarm = 0f // seconds left on the HUD "castle under attack" warning
     var dmgLevel = 0
-    val dmgMult get() = 1f + dmgLevel * 0.3f
+    val dmgMult get() = (1f + dmgLevel * 0.3f) * (if (fireActive) 1.25f else 1f)
+    private val archerMult get() = if (relics[R_VETERAN]) 1.3f else 1f // Vétérans: archers +1 level, like one forge rank
 
     // Pools
     val enemies = Array(160) { Enemy() }
@@ -702,8 +748,10 @@ class Game {
         abilityTime = ABILITY_COOLDOWN[heroClass] * (1f - 0.06f * Meta.level(heroClass, UP_ABILITY))
         for (f in fx) f.active = false
         grid.clear(); bannersPlanted = 0; kChargeT = 0f; kChargeCd = 0f
-        grid.plant(grid.hexAt(World.CASTLE_X, World.CASTLE_Y), animated = false) // starting lands: the keep and the king's camp
-        grid.plant(grid.hexAt(World.KING_START_X - 100f, World.KING_START_Y - 100f), animated = false)
+        grid.plant(grid.hexAt(World.CASTLE_X, World.CASTLE_Y), animated = false) // starting lands: a flower around the keep
+        relics.fill(false); aWolf.fill(false); relicOpen = false; relicDelay = 0f; draftsNoRare = 0; nextRare = false; freeRevive = false; wolvesTamedRun = 0
+        combo = 0; comboPulse = 0f; comboBreak = 0f; lastDefence = -1f; raining = false; nightAmt = 0f; rainAmt = 0f; wallLostThisWave = false; rainSeen = false; burntSeen = false
+        chargesDone = 0; buildsDone = 0
         abilityT = -1f; kSpin = 0f; kFlash = 0f; kCast = 0f; vignette = 0f; abilityTitle = 1f; abilityPress = 1f; abilityStop = 0f; castleHealT = -1f
         abilityCd = 0f; abilityFlash = 0f; paused = false; transition = 0f; camZoom = 1f; revealRoad = -1; worldZoom = 1f; fogR = 0f
         kHp = kMaxHp; kDead = false; coins = 10 * tal[TAL_START_COINS]
@@ -714,7 +762,7 @@ class Game {
         wave = 0; waveBreak = 6f; toSpawn = 0; bossPending = false
         kills = 0; time = 0f; newRecord = false
         revived = false; coinsCollected = 0; slowMo = 0f
-        tutorial = if (Storage.loadInt("tuto_done") == 1) 4 else 0
+        tutorial = if (Storage.loadInt("tuto_done") == 1) TUTO_DONE else 0
         for (c in corpses) c.active = false
         for (sh in enemyShots) sh.active = false
         camX = kx; camY = ky
@@ -835,6 +883,14 @@ class Game {
     /** Next level: bank loose coins, clear the field, grow the map (everything built stays), maybe enter a new age. */
     private fun levelUp() {
         levelUpPending = false
+        if (!burntSeen) Ach.unlock("no_burn")
+        if (rainSeen) Ach.unlock("rain_win")
+        burntSeen = false; rainSeen = false
+        Storage.saveInt("won_$heroClass", 1)
+        if ((0..2).all { Storage.loadInt("won_$it") == 1 }) Ach.unlock("all_classes")
+        if (level + 1 >= 5) Ach.unlock("level_5")
+        if (level + 1 >= 10) Ach.unlock("level_10")
+        if (level + 1 >= 20) Ach.unlock("level_20")
         val oldAge = age
         // stars for the level just finished: keep above 80 %, no wall lost, fast enough
         lastStars = (if (castleHp >= castleMaxHp * 0.8f) 1 else 0) + (if (!wallLost) 1 else 0) + (if (time - levelStart < 150f + 60f * level) 1 else 0)
@@ -940,6 +996,7 @@ class Game {
         kCast = when (heroClass) { CLASS_WARRIOR -> 0.6f; CLASS_RANGER -> 0.65f; else -> 0.2f } // ranger holds the bow through the 3 salvos
         val col = ABILITY_COLORS[heroClass]
         spawnFx(FX_GLOW, kx, ky, 0.22f, col)?.r1 = 2.2f
+        chargeHits = 0; healedThisCast = 0f
         when (heroClass) {
             CLASS_WARRIOR -> {
                 for (i in enemies.indices) {
@@ -951,6 +1008,7 @@ class Game {
                         e.knockT = 0f; e.knockTime = 0.18f; e.knockDx = (e.x - kx) / d * 90f; e.knockDy = (e.y - ky) / d * 90f
                     }
                     e.squash = 0.15f
+                    if (++chargeHits >= 8 && abilityCls == CLASS_WARRIOR) Ach.unlock("whirl_8")
                     hitEnemy(i, 110f * dmgMult * heroPower)
                     spawnFx(FX_SPARK, e.x, e.y - 30f * e.scale, 0.3f, col)?.let { it.a = rnd.nextFloat() * 360f; it.r1 = 1.2f }
                 }
@@ -971,6 +1029,7 @@ class Game {
                     }
                     rainCount++
                 }
+                if (rainCount >= 12) Ach.unlock("arrows_rain")
             }
             else -> {
                 if (!calm) shake = max(shake, 5f)
@@ -1026,6 +1085,8 @@ class Game {
                 val r = 700f * (t / 0.6f).coerceAtMost(1f)
                 for (w in walls) if (w.built && w.healT < 0f && w.hp < w.maxHp + 1f && hypot(w.x - kx, w.y - ky) <= r) {
                     w.healT = 0f; w.healFrom = w.hp; w.healTo = min(w.maxHp, w.hp + w.maxHp * 0.6f)
+                    healedThisCast += w.healTo - w.healFrom
+                    if (healedThisCast >= 100f) Ach.unlock("repair_walls")
                     healTouch(w.x, w.y, 60)
                     w.bump = 1f; w.hitFlash = 0.08f
                 }
@@ -1131,8 +1192,93 @@ class Game {
         Storage.saveGame(null)
         heroClass = cls
         reset()
+        if (Storage.loadInt("free_relic") == 1) { // 7-day streak gift: one common relic for this run
+            Storage.saveInt("free_relic", 0)
+            val pick = rnd.nextInt(RELIC_COUNT)
+            var i = pick
+            while (Relics.isRare(i)) i = (i + 1) % RELIC_COUNT
+            applyRelic(i)
+        }
         checkpoint = saveString()
         state = STATE_PLAY
+    }
+
+    // ---------------------------------------------------------------- relics, combo, day cycle
+
+    private fun applyRelic(i: Int) {
+        relics[i] = true
+        Relics.markSeen(i)
+        Ach.unlock("relic_first")
+        if (Relics.codexCount >= RELIC_COUNT) Ach.unlock("relic_codex")
+        when (i) {
+            R_CURSE -> { castleMaxHp *= 0.7f; castleHp = min(castleHp, castleMaxHp) }
+            R_GUARD -> repeat(2) { if (squad < MAX_SQUAD) { ax[squad] = kx; ay[squad] = ky; aDir[squad] = 0; aShoot[squad] = 0f; acd[squad] = 0.3f; aWolf[squad] = false; squad++ } }
+            R_PHOENIX -> freeRevive = true
+            R_EYE -> nextRare = true
+        }
+    }
+
+    /** The player picks one of the 3 cards. */
+    fun takeRelic(slot: Int) {
+        if (!relicOpen || slot !in 0 until relicChoiceCount) return
+        applyRelic(relicChoices[slot])
+        Audio.play(Sfx.RELIC)
+        Audio.haptic(Haptic.LIGHT)
+        relicOpen = false
+        saveGame()
+    }
+
+    private fun addCombo() {
+        combo++
+        if (combo % 10 == 0) { comboPulse = 1f; if (combo <= 100) Audio.play(Sfx.COMBO_UP) }
+        if (combo >= 20) Ach.unlock("combo_20")
+        if (combo >= 50) Ach.unlock("combo_50")
+    }
+
+    /** Torches light 200 px around our banners; at night archers outside them lose 15 % range. */
+    private fun torchRange(x: Float, y: Float): Float {
+        if (dayPhase != 2) return 1f
+        for (i in 0 until grid.count) {
+            val h = grid.at(i)
+            if (grid.hasBanner(h) && grid.state(h) == HEX_OURS && hypot(h.x - x, h.y - y) < 200f) return 1f
+        }
+        return 0.85f
+    }
+
+    private fun updateRun(dt: Float) {
+        if (relics[R_WALL]) for (w in walls) if (w.built && w.hp > 0f && w.hp < w.maxHp) w.hp = min(w.maxHp, w.hp + 2f * dt)
+        // the combo breaks as soon as the keep or a wall loses health
+        var defence = castleHp
+        for (w in walls) if (w.built) defence += w.hp
+        if (lastDefence >= 0f && defence < lastDefence - 0.01f && combo > 0) {
+            combo = 0; comboBreak = 0.15f
+            if (!Prefs.cap60) shake = max(shake, 4f)
+            Audio.play(Sfx.COMBO_BREAK)
+        }
+        lastDefence = defence
+        if (comboPulse > 0f) comboPulse = max(0f, comboPulse - dt * 4f)
+        if (comboBreak > 0f) comboBreak -= dt
+        val nightTo = when (dayPhase) { 2 -> 1f; 1 -> 0.45f; else -> 0f }
+        nightAmt += (nightTo - nightAmt) * min(1f, dt * 1.5f)
+        rainAmt += ((if (raining) 1f else 0f) - rainAmt) * min(1f, dt * 1.5f)
+        if (squad >= 12) Ach.unlock("archers_12")
+        if (towers.count { it.built } >= 6) Ach.unlock("towers_6")
+        if (coinsCollected >= 1000) Ach.unlock("coins_1000")
+        if (relicDelay > 0f) {
+            relicDelay -= dt
+            if (relicDelay <= 0f && relicCount < RELIC_MAX) openDraft()
+        }
+    }
+
+    private fun openDraft() {
+        val force = nextRare || draftsNoRare >= 2
+        relicChoiceCount = Relics.draw(relics, force, rnd, relicChoices)
+        if (relicChoiceCount == 0) return
+        var hasRare = false
+        for (k in 0 until relicChoiceCount) if (Relics.isRare(relicChoices[k])) hasRare = true
+        draftsNoRare = if (hasRare) 0 else draftsNoRare + 1
+        if (hasRare) nextRare = false
+        relicOpen = true
     }
 
     // ---------------------------------------------------------------- defeat: revive, retry, leave
@@ -1142,13 +1288,14 @@ class Game {
     val carryCap get() = 250 + 75 * level + 100 * tal[TAL_START_COINS]
     var coinsCollected = 0
     private var checkpoint: String? = null // state at the start of the current level, for "retry"
-    val reviveCost get() = max(10, coins / 2)
-    val canRevive get() = !revived && coins >= reviveCost
+    val reviveCost get() = if (freeRevive) 0 else max(10, coins / 2)
+    val canRevive get() = freeRevive || (!revived && coins >= reviveCost)
 
     /** Pay half the coins: the keep stands again at 50 % and the enemies at its gates are swept away. */
     fun revive() {
         if (state != STATE_OVER || !canRevive) return
         coins -= reviveCost
+        freeRevive = false
         revived = true
         castleHp = max(castleHp, castleMaxHp * 0.5f)
         if (kDead) { kDead = false; kHp = kMaxHp; kx = World.CASTLE_X - 150f; ky = World.CASTLE_Y + 70f }
@@ -1183,27 +1330,32 @@ class Game {
 
     // ---------------------------------------------------------------- first-game tutorial
 
-    /** 0 move, 1 pick up gold, 2 recruit, 3 build a tower, 4 done (persisted). */
-    var tutorial = 4
+    /** 0 move, 1 gold, 2 banner, 3 build, 4 charge, 5 last words (OK button), 6 done (persisted). Never a forced pause. */
+    var tutorial = TUTO_DONE
+    private val tutoSlow get() = if (tutorial < TUTO_DONE) 0.7f else 1f
     private fun updateTutorial() {
-        if (tutorial >= 4 || state != STATE_PLAY) return
+        if (tutorial >= 5 || state != STATE_PLAY) return
         val next = when (tutorial) {
             0 -> hypot(kx - World.KING_START_X, ky - World.KING_START_Y) > 140f
-            1 -> coinsCollected > 0
-            2 -> squad > START_SQUAD
-            else -> towers.any { it.built }
+            1 -> coinsCollected >= 5
+            2 -> bannersPlanted > 0
+            3 -> buildsDone > 0
+            else -> chargesDone > 0
         }
-        if (next) {
-            tutorial++
-            if (tutorial >= 4) Storage.saveInt("tuto_done", 1)
-        }
+        if (next) tutorial++
+    }
+    fun tutorialOk() {
+        if (tutorial != 5) return
+        tutorial = TUTO_DONE
+        Storage.saveInt("tuto_done", 1)
     }
 
-    /** Pad the tutorial points at, or null. */
-    val tutorialTarget: Pad? get() = when (tutorial) {
-        2 -> recruitPad
-        3 -> pads.firstOrNull { it.visible && it.kind == PAD_TOWER }
-        else -> null
+    /** Pad the tutorial points at, or null: the nearest site open on our lands. */
+    val tutorialTarget: Pad? get() = if (tutorial != 3) null else {
+        var best: Pad? = null
+        var bd = Float.MAX_VALUE
+        for (p in pads) if (p.visible && !p.locked && padOpen(p)) { val d = hypot(p.x - kx, p.y - ky); if (d < bd) { bd = d; best = p } }
+        best
     }
 
     val savedClass: Int get() = Storage.loadGame()?.split(";")?.getOrNull(14)?.toIntOrNull() ?: CLASS_WARRIOR
@@ -1242,8 +1394,12 @@ class Game {
         for (t in towers) sb.append(if (t.elite) 2 else if (t.ballista) 1 else 0)
         sb.append(";")
         for (u in unlocked) sb.append(if (u) 1 else 0)
-        sb.append(";H").append(bannersPlanted).append(':') // tagged last field: the positional fields above do not move
+        sb.append(";H").append(bannersPlanted).append(':') // tagged last fields: the positional fields above do not move
         grid.save(sb)
+        sb.append(";R")
+        for (r in relics) sb.append(if (r) 1 else 0)
+        sb.append(':').append(combo).append(':').append(if (raining) 1 else 0).append(':').append(draftsNoRare).append(':').append(if (nextRare) 1 else 0)
+            .append(':').append(if (freeRevive) 1 else 0).append(':').append(wolvesTamedRun).append(':').append(if (relicOpen || relicDelay > 0f) 1 else 0)
         return sb.toString()
     }
 
@@ -1306,6 +1462,15 @@ class Game {
                 bannersPlanted = it.substring(1, colon).toInt()
                 grid.load(it.substring(colon + 1))
             }
+            f.lastOrNull { it.startsWith("R") }?.let {
+                val r = it.substring(1).split(':')
+                for (i in 0 until RELIC_COUNT) relics[i] = r[0].getOrNull(i) == '1'
+                combo = r[1].toInt(); raining = r[2] == "1"; draftsNoRare = r[3].toInt(); nextRare = r[4] == "1"; freeRevive = r[5] == "1"; wolvesTamedRun = r[6].toInt()
+                if (r[7] == "1") relicDelay = 0.01f // a draft was waiting when the app left
+            }
+            nightAmt = when (dayPhase) { 2 -> 1f; 1 -> 0.45f; else -> 0f }
+            rainAmt = if (raining) 1f else 0f
+            if (level > 1) tutorial = TUTO_DONE
             true
         } catch (e: NumberFormatException) {
             reset(); false
@@ -1349,7 +1514,8 @@ class Game {
             updateParticles(dt)
             return
         }
-        if (paused || victoryOpen) return
+        Ach.tick(dtReal, enemies.any { it.active && it.kind == KIND_BOSS })
+        if (paused || victoryOpen || relicOpen) return
         if (transition > 0f) {
             updateTransition(dt)
             updateParticles(dt)
@@ -1367,6 +1533,7 @@ class Game {
             updateBuildings(dt)
             updatePads(dt)
             updateHexes(dt)
+            updateRun(dt)
             if (kChargeCd > 0f) kChargeCd -= dt
             if (abilityCd > 0f) abilityCd -= dt
             if (abilityFlash > 0f) abilityFlash -= dt
@@ -1446,7 +1613,7 @@ class Game {
             val l = hypot(mx, my)
             if (l > 1f) { mx /= l; my /= l }
         }
-        val speed = (if (World.theme(level) == World.TH_STORM) 0.85f else 1f) * (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED]) * (if (unlocked[U_STABLE]) 1.2f else 1f)
+        val speed = (if (World.theme(level) == World.TH_STORM) 0.85f else 1f) * (if (kBoost > 0f) 351f else 270f) * (1f + 0.04f * tal[TAL_KING_SPEED]) * (if (unlocked[U_STABLE]) 1.2f else 1f) * (if (relics[R_BOOTS]) 1.2f else 1f)
         val tvx = mx * speed
         val tvy = my * speed
         val acc = min(1f, dt * 14f)
@@ -1536,7 +1703,6 @@ class Game {
             if (abs(kvx) > 15f) kFaceRight = kvx > 0f
             if (sp > 40f) { kDir = dirIndex(kvx, kvy); kFaceX = kvx / sp; kFaceY = kvy / sp }
         }
-        sway += (-kvx * 0.0016f - sway) * min(1f, dt * 6f)
 
         if (kHurtTimer > 0f) kHurtTimer -= dt
         else if (kHp < kMaxHp && hypot(kx - World.CASTLE_X, ky - World.CASTLE_Y) < 320f) // heals only by the keep
@@ -1564,6 +1730,7 @@ class Game {
                 val t = nearestEnemy(kx, ky, range)
                 if (t >= 0) {
                     fire(kx, ky - 6f, 52f, t, (if (heroClass == CLASS_RANGER) 20f else 18f) * dmgMult * heroPower)
+                    kFireCd /= rateMul
                     Audio.playVaried(Sfx.SHOOT, 0.55f, 0.1f, rnd)
                     kFaceRight = enemies[t].x > kx
                     if (sp <= 40f) kDir = dirIndex(enemies[t].x - kx, enemies[t].y - ky)
@@ -1593,14 +1760,19 @@ class Game {
             if (kDead) continue
             acd[i] -= dt
             if (acd[i] <= 0f) {
-                val t = nearestEnemy(ax[i], ay[i], 280f)
+                if (aWolf[i]) { // tamed wolf: bites what is next to it
+                    val w = nearestEnemy(ax[i], ay[i], 70f)
+                    if (w >= 0) { hitEnemy(w, 20f * dmgMult); aDir[i] = dirIndex(enemies[w].x - ax[i], enemies[w].y - ay[i]); aShoot[i] = 0.2f; acd[i] = 0.8f } else acd[i] = 0.15f
+                    continue
+                }
+                val t = nearestEnemy(ax[i], ay[i], 280f * torchRange(ax[i], ay[i]))
                 if (t >= 0) {
-                    fire(ax[i], ay[i], 30f, t, 20f * dmgMult)
+                    fire(ax[i], ay[i], 30f, t, 20f * dmgMult * archerMult)
                     Audio.playVaried(Sfx.SHOOT, 0.35f, 0.1f, rnd)
                     aFaceRight[i] = enemies[t].x > ax[i]
                     aDir[i] = dirIndex(enemies[t].x - ax[i], enemies[t].y - ay[i])
                     aShoot[i] = 0.32f
-                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f) / (if (grid.stateAt(ax[i], ay[i]) == HEX_OURS) 1.1f else 1f)
+                    acd[i] = (0.85f + rnd.nextFloat() * 0.25f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f) / (if (grid.stateAt(ax[i], ay[i]) == HEX_OURS) 1.1f else 1f) / rateMul
                 } else acd[i] = 0.08f + rnd.nextFloat() * 0.1f
             }
         }
@@ -1614,14 +1786,14 @@ class Game {
                 t.cd[a] -= dt
                 if (t.cd[a] <= 0f) {
                     val ox = t.x + (a - 1) * 20f
-                    val target = nearestEnemy(ox, t.y, if (age >= 2) 456f else 380f)
+                    val target = nearestEnemy(ox, t.y, (if (age >= 2) 456f else 380f) * torchRange(ox, t.y))
                     if (target >= 0) {
                         fire(ox, t.y, 128f, target, 26f * dmgMult * (if (age >= 3) 1.5f else 1f) * (if (t.elite) 2.5f else 1f))
                         Audio.playVaried(Sfx.SHOOT, 0.35f, 0.1f, rnd)
                         t.faceRight[a] = enemies[target].x > ox
                         t.dir[a] = dirIndex(enemies[target].x - ox, enemies[target].y - t.y)
                         t.shoot[a] = 0.32f
-                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f) / (if (grid.stateAt(t.x, t.y) == HEX_OURS) 1.1f else 1f)
+                        t.cd[a] = (0.75f + rnd.nextFloat() * 0.15f) / (if (age >= 2) 1.25f else 1f) * (1f - 0.05f * tal[TAL_FIRE_RATE]) / (if (unlocked[U_BANNER]) 1.2f else 1f) / (if (grid.stateAt(t.x, t.y) == HEX_OURS) 1.1f else 1f) / rateMul
                     } else t.cd[a] = 0.1f
                 }
             }
@@ -1668,7 +1840,7 @@ class Game {
 
     /** Pad the player should go for next (levels 1-3 objective sign), or null. */
     val objective: Pad? get() {
-        if (level > 3 || tutorial < 4) return null
+        if (level > 3 || tutorial < TUTO_DONE) return null
         for (k in intArrayOf(PAD_TOWER, PAD_TOWER_ARCHER, PAD_WALL)) for (p in pads) if (p.visible && p.kind == k) return p
         return null
     }
@@ -1912,10 +2084,23 @@ class Game {
         if (e.kind == 2) { slowMo = 0.8f; Audio.haptic(Haptic.HEAVY) } // boss down: brief slow motion
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 40 else 12, 0xFFD8262BL, 220f * e.scale)
         burst(e.x, e.y, 20f * e.scale, if (e.kind == 2) 20 else 5, 0xFF8A8F99L, 180f)
-        if (e.kind == 2) { rainLeft += if (mine) e.coins * 2 else e.coins; rainX = e.x; rainY = e.y; rainRate = e.coins / 0.8f } // jackpot rain over 0.8 s
+        addCombo()
+        if (e.kind == KIND_WOLF && relics[R_WOLF] && squad < MAX_SQUAD && rnd.nextFloat() < 0.2f) { // tamed: it joins the squad
+            ax[squad] = e.x; ay[squad] = e.y; aDir[squad] = 0; aShoot[squad] = 0f; acd[squad] = 0.3f; aWolf[squad] = true; squad++
+            wolvesTamedRun++
+            if (wolvesTamedRun >= 5) Ach.unlock("wolves_tamed")
+        }
+        if (e.kind == 2) {
+            relicDelay = 1.2f
+            Ach.unlock("boss_1"); if (Stats.bosses + pendBosses >= 10) Ach.unlock("boss_10")
+        }
+        val lootMul = comboMul * (if (relics[R_CURSE]) 2f else 1f)
+        if (e.kind == 2) { val big = ((if (mine) e.coins * 2 else e.coins) * (if (relics[R_RAIN]) 2f else 1f) * lootMul).toInt(); rainLeft += big; rainX = e.x; rainY = e.y; rainRate = big / 0.8f } // jackpot rain over 0.8 s
         else {
             var n = (if (mine) (e.coins * 3 + 1) / 2 else e.coins) * (if (e.elite) 2 else 1)
             if (unlocked[U_STATUE] && rnd.nextFloat() < 0.25f * n) n++
+            val scaled = n * lootMul // combo and Trésor maudit; the fraction is a chance of one more coin
+            n = scaled.toInt() + (if (rnd.nextFloat() < scaled - scaled.toInt()) 1 else 0)
             repeat(n) { dropCoin(e.x, e.y) }
         }
         if (e.kind == 2) shake = 14f
@@ -1942,7 +2127,7 @@ class Game {
     }
 
     private fun updateCoins(dt: Float) {
-        val magnet = (if (heroClass == CLASS_BUILDER) 540f else 360f) * (1f + 0.1f * tal[TAL_MAGNET])
+        val magnet = (if (heroClass == CLASS_BUILDER) 540f else 360f) * (1f + 0.1f * tal[TAL_MAGNET]) * (if (relics[R_GRAPPLE]) 2f else 1f)
         for (c in coinsOnGround) {
             if (!c.active) continue
             c.t += dt
@@ -1973,10 +2158,10 @@ class Game {
                 2 -> {
                     if (kDead) { c.state = 1; c.z = 0f; continue }
                     c.vx += dt * 4500f // used as speed
-                    val tz = 95f + min(coins, 30) * 4.5f // land on the king's head, not the top of a huge column
-                    val dx = kx - c.x
-                    val dy = ky - c.y
-                    val dz = tz - c.z
+                    // picked-up coins fly to the treasure pill of the HUD
+                    val dx = pillWorldX - c.x
+                    val dy = pillWorldY - c.y
+                    val dz = -c.z
                     val d = sqrt(dx * dx + dy * dy + dz * dz)
                     val step = (500f + c.vx) * dt
                     if (d <= step) {
@@ -2009,6 +2194,10 @@ class Game {
         bannersPlanted++
         val h = grid.hexAt(kx, ky)
         grid.plant(h)
+        Ach.unlock("first_banner")
+        val held = grid.owned
+        if (held >= 7) Ach.unlock("seven_hex")
+        if (held >= 40) Ach.unlock("forty_hex")
         Audio.play(Sfx.BANNER)
         Audio.haptic(Haptic.MEDIUM)
         spawnFx(FX_GLOW, h.x, h.y, 0.5f, ABILITY_COLORS[heroClass])?.r1 = 4f
@@ -2017,7 +2206,11 @@ class Game {
 
     private fun updateHexes(dt: Float) {
         for (e in enemies) if (e.active) grid.markEnemy(e.x, e.y)
-        val earned = grid.update(dt, kx, ky, !kDead)
+        val burnDelay = (if (relics[R_IRON]) 6f else BURN_AFTER) * (if (raining) 2f else 1f)
+        // income: +1 per hex every 4 s, capped so territory funds the game without replacing the kills
+        val capPer4s = ((INCOME_CAP + INCOME_CAP_TALENT * tal[TAL_START_COINS]) * INCOME_EVERY).toInt()
+        val earned = (min(capPer4s, grid.update(dt, kx, ky, !kDead, burnDelay)) * (if (relics[R_GUARD]) 0.85f else 1f)).toInt()
+        if (grid.burned > 0) burntSeen = true
         if (earned > 0) { // passive income: small coins rise from a few of our hexes
             coins = min(carryCap, coins + earned)
             var shown = 0
@@ -2040,7 +2233,10 @@ class Game {
         if (state != STATE_PLAY || paused || transition > 0f || kDead || kChargeCd > 0f) return false
         val sp = hypot(kvx, kvy)
         if (sp > 40f) { kChargeX = kvx / sp; kChargeY = kvy / sp } else { kChargeX = kFaceX; kChargeY = kFaceY }
-        kChargeT = 0.35f; kChargeCd = 4f; chargeId++; chargeDust = 0f
+        kChargeT = 0.35f; kChargeCd = 4f; chargeId++; chargeDust = 0f; chargeHits = 0; chargesDone++
+        val total = Storage.loadInt("st_charges") + 1
+        Storage.saveInt("st_charges", total)
+        if (total >= 10) Ach.unlock("charge_10")
         Audio.play(Sfx.CHARGE)
         Audio.haptic(Haptic.MEDIUM)
         return true
@@ -2065,6 +2261,7 @@ class Game {
             hitEnemy(i, 18f * dmgMult * heroPower)
             spawnFx(FX_SPARK, e.x, e.y - 30f * e.scale, 0.25f, ABILITY_COLORS[heroClass])?.a = rnd.nextFloat() * 360f
             impact = true
+            if (++chargeHits >= 5) Ach.unlock("charge_trample")
         }
         if (impact && !Prefs.cap60) hitStop = max(hitStop, 0.04f)
         for (c in coinsOnGround) if (c.active && c.state == 1 && hypot(c.x - kx, c.y - ky) < 90f) { c.state = 2; c.t = 0f; c.vx = 0f }
@@ -2119,7 +2316,7 @@ class Game {
         if (f == null) { onPad.paid += n; if (onPad.paid >= onPad.cost) complete(onPad); return }
         onPad.pending += n
         f.active = true
-        f.sx = kx; f.sy = ky; f.sz = 95f + min(coins, 30) * 4.5f
+        f.sx = pillWorldX; f.sy = pillWorldY; f.sz = 25f // spending: the coins leave the HUD for the site
         f.pad = pads.indexOf(onPad)
         f.t = 0f
         f.value = n
@@ -2143,7 +2340,7 @@ class Game {
 
     internal fun complete(p: Pad) {
         shake = max(shake, 4f) // short punch on every purchase
-        if (p.kind != PAD_TOWER_ARCHER) pendBuilds++
+        if (p.kind != PAD_TOWER_ARCHER) { pendBuilds++; buildsDone++ }
         p.paid = 0
         p.pending = 0
         p.bump = 1f
@@ -2155,6 +2352,7 @@ class Game {
                     ax[squad] = p.x; ay[squad] = p.y
                     aDir[squad] = 0; aShoot[squad] = 0f
                     acd[squad] = 0.3f
+                    aWolf[squad] = false
                     squad++
                     burst(p.x, p.y, 30f, 16, 0xFF6FB7FFL, 200f)
                 }
@@ -2286,6 +2484,7 @@ class Game {
                 if (levelWaves >= goalWaves) levelUpPending = true
             }
             if (wave > 0) {
+                if (dayPhase == 2 && !wallLostThisWave) Ach.unlock("night_wave")
                 kBoost = 2f
                 // wave reward: a shower of coins from the keep, growing with the wave
                 rainLeft += 4 + wave * 2; rainX = World.CASTLE_X; rainY = World.CASTLE_Y + 60f; rainRate = (4 + wave * 2) / 0.8f
@@ -2296,6 +2495,11 @@ class Game {
         if (waveBreak <= 0f) {
             wave++
             Audio.play(Sfx.WAVE_HORN)
+            wallLostThisWave = false
+            raining = wave > 1 && rnd.nextInt(6) == 0
+            if (raining) { rainSeen = true; Audio.play(Sfx.RAIN_START) }
+            if (max(wave - 1, 0) % 6 == 4) Audio.play(Sfx.NIGHT)
+            if (isEndless && wave >= 20) Ach.unlock("endless_20")
             if (unlocked[U_TREASURY] && coins > 0) coins += min(100, coins / 20)
             if (wave > 1) { pendWaves++; pendXp += 5 }
             flushProgress()
@@ -2374,7 +2578,7 @@ class Game {
         if (!ox.isNaN()) { e.x = ox; e.y = oy }
         e.special = 0f; e.mdx = 0f; e.mdy = 0f; e.stun = 0f; e.slam = 0f
         e.elite = isEndless && kind != KIND_BOSS && rnd.nextFloat() < 0.3f // endless mode: golden elites
-        val hpScale = (if (level <= 2) 0.85f else 1.2f) * (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
+        val hpScale = (if (level == 1) 0.7f else if (level == 2) 0.85f else 1.2f) * (1f + (wave - 1) * 0.22f) * (1f + 0.2f * (level - 1)) * (if (e.elite) 2f else 1f) * DIFF_HP[diff]
         when (kind) {
             0 -> { e.maxHp = 50f * hpScale; e.speed = 75f + rnd.nextFloat() * 15f; e.dmg = 8f; e.radius = 16f; e.scale = 1f; e.coins = if (rnd.nextFloat() < 0.2f) 2 else 1 }
             KIND_BRUTE -> { e.maxHp = 170f * hpScale; e.speed = 58f; e.dmg = 18f; e.radius = 22f; e.scale = 1.4f; e.coins = 6 }
@@ -2383,7 +2587,7 @@ class Game {
             KIND_SHIELD -> { e.maxHp = 200f * hpScale; e.speed = 45f; e.dmg = 14f; e.radius = 20f; e.scale = 1.25f; e.coins = 7 }
             KIND_RAM -> { e.maxHp = 500f * hpScale; e.speed = 38f; e.dmg = 60f; e.radius = 30f; e.scale = 1.8f; e.coins = 15 }
             else -> {
-                e.maxHp = (if (level == 1) 650f else 1000f) * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = ((120 + 40 * (level - 1) + 10 * wave / 5) * (1f + 0.15f * tal[TAL_BOSS_LOOT])).toInt()
+                e.maxHp = (if (level == 1) 520f else 1000f) * hpScale; e.speed = 45f; e.dmg = 40f; e.radius = 38f; e.scale = 2.4f; e.coins = ((120 + 40 * (level - 1) + 10 * wave / 5) * (1f + 0.15f * tal[TAL_BOSS_LOOT])).toInt()
                 e.bossType = age - 1
             }
         }
@@ -2465,7 +2669,7 @@ class Game {
                     tx = World.CASTLE_X + e.offX * 1.5f
                     ty = World.CASTLE_Y + 40f + e.offY
                 } else if (hypot(tx - e.x, ty - e.y) < 30f) {
-                    e.s += e.speed * dt
+                    e.s += e.speed * dt * nightFast * tutoSlow
                 }
             }
             val dx = tx - e.x
@@ -2501,7 +2705,7 @@ class Game {
                 val th = World.theme(level)
                 var slow = if (th == World.TH_STORM) 0.85f else if (th == World.TH_FROST) 0.8f else 1f
                 for (c in enemies) if (c.active && c.captain && c !== e && hypot(c.x - e.x, c.y - e.y) < 220f) { slow *= 1.25f; break }
-                val step = min(e.speed * slow * (if (leap) 1.8f else 1f) * dt, d)
+                val step = min(e.speed * slow * nightFast * tutoSlow * (if (leap) 1.8f else 1f) * dt, d)
                 e.x += dx / d * step; e.y += dy / d * step
                 e.mdx = dx / d; e.mdy = dy / d
                 moving = true
@@ -2580,6 +2784,7 @@ class Game {
     }
 
     private fun breakWall(w: Wall) {
+        wallLostThisWave = true
         wallLost = true
         Audio.play(Sfx.WALL_BREAK)
         Audio.haptic(Haptic.HEAVY)

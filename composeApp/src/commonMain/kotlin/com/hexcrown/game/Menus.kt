@@ -1,5 +1,9 @@
 package com.hexcrown.game
 
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.hexcrown.game.resources.allDrawableResources
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -142,6 +146,7 @@ fun MainMenu(
                 Column {
                     RoundButton(Res.drawable.ui_icon_gear, onClick = onSettings)
                     if (Daily.available) RoundButton(Res.drawable.ui_icon_gift, red = true, badge = true, size = 46.dp, onClick = onDaily)
+                    if (Daily.available && Daily.nextStreak > 1) GText(L.f("streak", Daily.nextStreak), 13, Color.White)
                 }
                 Spacer(Modifier.weight(1f))
                 Pill(Res.drawable.ui_icon_coins, "${Meta.treasure}", width = 120.dp)
@@ -408,6 +413,9 @@ fun SettingsPanel(onReset: () -> Unit, onClose: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) { GText(L["lang.$l"], 13, if (L.lang == l) Color.White else Pal.ink, title = true, caps = false, shadow = L.lang == l) }
         }
+        Box(Modifier.fillMaxWidth().height(36.dp).clickable { Audio.play(Sfx.CLICK); Storage.saveInt("tuto_done", 0); tick++ }, contentAlignment = Alignment.Center) {
+            GText(if (Storage.loadInt("tuto_done") == 1) L["tuto.replay"] else L["tuto.replay.set"], 14, Pal.ink, shadow = false)
+        }
         GText(L["difficulty"], 15, Pal.ink, title = true, shadow = false)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             for (d in 0..2) Box(
@@ -502,6 +510,17 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                 }
             }
             else -> {
+                // Stats, Codex and achievements share the tab
+                var sub by remember { mutableIntStateOf(0) }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    for (k in 0..2) Box(
+                        Modifier.weight(1f).height(38.dp).nine(if (sub == k) Res.drawable.ui_tab_on else Res.drawable.ui_tab_off, IN_TAB, 0.26f)
+                            .clickable { Audio.play(Sfx.CLICK); sub = k },
+                        contentAlignment = Alignment.Center,
+                    ) { GText(L["statsub.$k"], 13, Color.White, title = true, caps = false) }
+                }
+                when (sub) {
+                    0 -> {
                 val secs = Stats.playSeconds
                 listOf(
                     L["st.hero"] to "${Hero.level}", L["st.level"] to "${Stats.bestLevel}", L["st.wave"] to "${Storage.loadBest()}",
@@ -513,9 +532,76 @@ fun MetaPanel(which: Int, metaTick: Int, hero: Int, onChange: () -> Unit, onClos
                         GText(v, 15, Color.White, weight = FontWeight.Black)
                     }
                 }
+                    }
+                    1 -> CodexGrid()
+                    else -> AchievementList()
+                }
             }
         }
         KitButton(Res.drawable.ui_button_green, L["close"], icon = Res.drawable.ui_icon_close, width = 200.dp, height = 50.dp, onClick = onClose)
+    }
+}
+
+/** 12 relics, grey until taken once; 12/12 unlocks the Chronicler skin. */
+@Composable
+internal fun CodexGrid() {
+    GText(L.f("codex.count", Relics.codexCount, RELIC_COUNT), 14, Color.White)
+    for (row in 0 until 3) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (col in 0 until 4) {
+            val i = row * 4 + col
+            Column(Modifier.weight(1f).stagger(i), horizontalAlignment = Alignment.CenterHorizontally) {
+                val res = Res.allDrawableResources[Relics.iconName(i)]
+                if (res != null) KitIcon(res, 52.dp, grey = !Relics.seen(i))
+                GText(if (Relics.seen(i)) Relics.name(i) else "?", 11, if (Relics.seen(i)) Color.White else Color(0xFF8A94B0), title = true, caps = false)
+            }
+        }
+    }
+}
+
+@Composable
+internal fun AchievementList() {
+    GText(L.f("ach.count", Ach.count, Ach.ids.size), 14, Color.White)
+    Column(Modifier.fillMaxWidth().heightIn(max = 420.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for (id in Ach.ids) Row(verticalAlignment = Alignment.CenterVertically) {
+            KitIcon(Res.drawable.ui_icon_trophy, 28.dp, grey = !Ach.done(id))
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                GText(L["ach.$id"], 15, if (Ach.done(id)) Color.White else Color(0xFF8A94B0), title = true, caps = false, align = TextAlign.Start)
+                GText(L["ach.$id.how"], 13, Color(0xFFAAB4D2), shadow = false, align = TextAlign.Start)
+            }
+        }
+    }
+}
+
+/** After a boss: choose 1 relic out of 3. Cards arrive 40 ms apart; the rare one has an animated gold edge. */
+@Composable
+fun RelicPanel(game: Game, onTake: (Int) -> Unit) {
+    val glow = rememberInfiniteTransition().animateFloat(0.35f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse))
+    Box(Modifier.fillMaxSize().background(Pal.veil).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Ribbon(L["relic.title"])
+            for (k in 0 until game.relicChoiceCount) {
+                val r = game.relicChoices[k]
+                Row(
+                    Modifier.fillMaxWidth().stagger(k)
+                        .drawBehind {
+                            if (Relics.isRare(r)) drawRoundRect(Color(0xFFFFD65A), Offset(-3.dp.toPx(), -3.dp.toPx()), androidx.compose.ui.geometry.Size(size.width + 6.dp.toPx(), size.height + 6.dp.toPx()), androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()), alpha = glow.value, style = Stroke(3.dp.toPx()))
+                        }
+                        .nine(Res.drawable.ui_panel_dark, IN_PANEL, 0.3f).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val res = Res.allDrawableResources[Relics.iconName(r)]
+                    if (res != null) KitIcon(res, 96.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        GText(Relics.name(r), 22, Color.White, title = true, caps = false)
+                        GText(Relics.desc(r), 15, Color(0xFFE9E2CF), weight = FontWeight.Bold)
+                        Spacer(Modifier.height(6.dp))
+                        KitButton(Res.drawable.ui_button_gold, L["relic.take"], width = 150.dp, height = 44.dp, titleSize = 16, textColor = Pal.ink) { onTake(k) }
+                    }
+                }
+            }
+        }
     }
 }
 

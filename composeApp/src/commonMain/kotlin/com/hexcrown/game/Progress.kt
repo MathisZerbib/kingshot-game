@@ -28,6 +28,7 @@ object Talents {
         if (lv >= TALENT_MAX || Meta.treasure < c) return false
         Meta.treasure -= c
         Storage.saveInt("tal_$t", lv + 1)
+        if (lv + 1 >= 5) Ach.unlock("talents_max")
         return true
     }
 }
@@ -89,6 +90,9 @@ object Missions {
         if (!done(s)) return 0
         val r = reward(s)
         Meta.treasure += r
+        val done = Storage.loadInt("st_missions") + 1
+        Storage.saveInt("st_missions", done)
+        if (done >= 30) Ach.unlock("missions_30")
         var t = (type(s) + 1) % MIS_TARGETS.size
         while ((0 until SLOTS).any { it != s && type(it) == t }) t = (t + 1) % MIS_TARGETS.size
         val nextTier = (Storage.loadInt("mis_next_$t")).coerceAtMost(MIS_TARGETS[t].size - 1)
@@ -103,15 +107,22 @@ object Daily {
     @OptIn(ExperimentalTime::class)
     private fun today() = (Clock.System.now().toEpochMilliseconds() / 86_400_000L).toInt()
     val available get() = Storage.loadInt("daily_day") != today()
-    /** Streak if claimed today (yesterday's claim continues it, otherwise it restarts at 1). */
-    val nextStreak get() = if (Storage.loadInt("daily_day") == today() - 1) Storage.loadInt("daily_streak") + 1 else 1
-    val reward get() = 30 * nextStreak.coerceAtMost(7)
+    /** Yesterday's claim continues the streak; one missed day is forgiven once a week; otherwise it restarts at 1. */
+    val nextStreak: Int get() {
+        val gap = today() - Storage.loadInt("daily_day")
+        val kept = gap == 1 || (gap == 2 && today() - Storage.loadInt("daily_forgiven") >= 7)
+        return if (kept) Storage.loadInt("daily_streak") + 1 else 1
+    }
+    val reward get() = 60 + 20 * nextStreak.coerceAtMost(7)
     fun claim(): Int {
         if (!available) return 0
         val r = reward
-        Storage.saveInt("daily_streak", nextStreak)
+        val n = nextStreak
+        if (today() - Storage.loadInt("daily_day") == 2 && n > 1) Storage.saveInt("daily_forgiven", today())
+        Storage.saveInt("daily_streak", n)
         Storage.saveInt("daily_day", today())
         Meta.treasure += r
+        if (n >= 7) { Ach.unlock("streak_7"); if (n % 7 == 0) Storage.saveInt("free_relic", 1) }
         return r
     }
 }

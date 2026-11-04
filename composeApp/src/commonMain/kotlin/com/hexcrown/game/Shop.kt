@@ -19,6 +19,7 @@ const val UNLOCK_LEVEL10 = 1
 const val UNLOCK_BOSS1 = 2
 const val UNLOCK_WAVE50 = 3
 const val UNLOCK_CHAPTER3STARS = 4
+const val UNLOCK_CODEX = 5
 
 /** [cls] is the hero class for a skin, -1 otherwise; [look] indexes the kind's look table (skin tint, banner colour...). */
 class ShopItem(val id: String, val kind: Int, val cls: Int, private val nameKey: String, private val descKey: String, val price: Int, val unlock: Int, val look: Int, private val shortKey: String = nameKey) {
@@ -31,7 +32,7 @@ class ShopItem(val id: String, val kind: Int, val cls: Int, private val nameKey:
 object Shop {
     private const val KEY = "shop1_" // versioned save keys
     val SKIN_PREFIX = arrayOf("warrior", "ranger", "builder")
-    val SKIN_KEY = arrayOf("base", "gold", "frost", "shadow")
+    val SKIN_KEY = arrayOf("base", "gold", "frost", "shadow", "chronicler")
     private val SKIN_SHORT = arrayOf("skin.gold.short", "skin.frost.short", "skin.shadow.short")
 
 
@@ -46,6 +47,7 @@ object Shop {
         for (c in 0..2) {
             add(ShopItem("${SKIN_PREFIX[c]}_base", SHOP_SKIN, c, "skin.base", "skin.base.desc", 0, UNLOCK_NONE, 0, "skin.base.short"))
             for (k in 0..2) add(ShopItem("${SKIN_PREFIX[c]}_${skins[k].first}", SHOP_SKIN, c, skins[k].second, skins[k].third, skinPrice[k], skinUnlock[k], k + 1, SKIN_SHORT[k]))
+            add(ShopItem("${SKIN_PREFIX[c]}_chronicler", SHOP_SKIN, c, "skin.chronicler", "skin.chronicler.desc", 0, UNLOCK_CODEX, 4)) // art to come: base look until then
         }
         val banners = Array(5) { "banner.$it" }
         val bannerUnlock = intArrayOf(UNLOCK_NONE, UNLOCK_NONE, UNLOCK_NONE, UNLOCK_BOSS1, UNLOCK_NONE)
@@ -65,7 +67,7 @@ object Shop {
     fun items(kind: Int, cls: Int = -1) = items.filter { it.kind == kind && (cls < 0 || it.cls == cls) }
     fun item(id: String) = items.firstOrNull { it.id == id }
 
-    fun owned(id: String): Boolean { val it = item(id) ?: return false; return it.price == 0 || Storage.loadInt("${KEY}own_$id") == 1 }
+    fun owned(id: String): Boolean { val it = item(id) ?: return false; return (it.price == 0 && met(it.unlock)) || Storage.loadInt("${KEY}own_$id") == 1 }
     fun unlocked(id: String): Boolean = item(id)?.let { met(it.unlock) } ?: false
     fun canBuy(id: String): Boolean { val it = item(id) ?: return false; return !comingSoon(it) && !owned(id) && met(it.unlock) && Meta.treasure >= it.price }
 
@@ -77,6 +79,7 @@ object Shop {
         UNLOCK_BOSS1 -> L["lock.boss"]
         UNLOCK_WAVE50 -> L["lock.wave50"]
         UNLOCK_CHAPTER3STARS -> L["lock.stars"]
+        UNLOCK_CODEX -> L["lock.codex"]
         else -> ""
     }
 
@@ -84,6 +87,7 @@ object Shop {
         UNLOCK_LEVEL10 -> Stats.bestLevel >= 10
         UNLOCK_BOSS1 -> Stats.bosses >= 1
         UNLOCK_WAVE50 -> Storage.loadBest() >= 50
+        UNLOCK_CODEX -> Relics.codexCount >= RELIC_COUNT
         UNLOCK_CHAPTER3STARS -> (0..3).any { ch -> (1..5).all { Storage.loadInt("stars_${ch * 5 + it}") >= 3 } }
         else -> true
     }
@@ -93,6 +97,7 @@ object Shop {
         val it = item(id) ?: return false
         if (!canBuy(id)) return false
         Meta.treasure -= it.price
+        if (it.kind == SHOP_SKIN) Ach.unlock("skin_1")
         Storage.saveInt("${KEY}own_$id", 1)
         // remember it for « Annuler l'achat » (10 min), with what was equipped before
         Storage.saveInt("${KEY}last_item", items.indexOf(it) + 1)
