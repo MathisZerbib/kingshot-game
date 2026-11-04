@@ -379,6 +379,43 @@ EFFECTS.update({
 })
 
 
+def sfx_boss_down():
+    """Boss defeated: deep impact, then a bright rising three-note call with a long tail."""
+    d = 0.5
+    thud = osc(np.linspace(120, 35, int(SR * d)), d, "sine") * env(int(SR * d), 0.001, 0.35, 0.0, 0.12)
+    grit = lowpass(noise(0.25), 500) * env(int(SR * 0.25), 0.001, 0.15, 0.0, 0.08) * 0.5
+    out = mix(thud, grit)
+    call = fanfare([659.25, 880.0, 1318.5], 0.16, "tri", 0.7)
+    out = at(out, 0.25, call * 0.8)
+    return norm(reverb(lowpass(out, 6000), 0.4), 0.8)
+
+
+def sfx_star():
+    d = 0.35
+    return norm(reverb((osc(1567.98, d, "tri") + osc(2349.3, d, "sine") * 0.5 + osc(3135.96, d, "sine") * 0.25) * env(int(SR * d), 0.003, 0.25, 0.0, 0.1), 0.3), 0.55)
+
+
+def sfx_crown():
+    """Region crowned: short royal fanfare, brighter and longer than victory's first notes."""
+    out = fanfare([587.33, 783.99, 987.77, 1174.66, 1567.98], 0.12, "square", 0.45)
+    out = at(out, 0.6, (osc(1567.98, 1.0, "square") * 0.6 + osc(2349.3, 1.0, "tri") * 0.5 + osc(1174.66, 1.0, "tri") * 0.4) * env(int(SR * 1.0), 0.01, 0.3, 0.6, 0.5, hold=0.2))
+    shimmer = highpass(noise(1.4), 6000) * env(int(SR * 1.4), 0.4, 0.5, 0.3, 0.5) * 0.12
+    return norm(reverb(lowpass(mix(out, shimmer), 5500), 0.4), 0.8)
+
+
+def sfx_tab():
+    d = 0.06
+    return norm(osc(900, d, "tri") * env(int(SR * d), 0.001, 0.04, 0.0, 0.02) + lowpass(noise(d), 3000) * env(int(SR * d), 0.001, 0.015, 0.0, 0.01) * 0.3, 0.4)
+
+
+def sfx_swipe():
+    d = 0.18
+    return norm(lowpass(highpass(noise(d), 1200), np.linspace(6000, 1500, int(SR * d))) * env(int(SR * d), 0.01, 0.1, 0.0, 0.06), 0.35)
+
+
+EFFECTS.update({"boss_down": sfx_boss_down, "star": sfx_star, "crown": sfx_crown, "tab": sfx_tab, "swipe": sfx_swipe})
+
+
 # ----------------------------------------------------------------------------- music
 
 def midi(n):
@@ -495,7 +532,33 @@ def music_boss():
     return norm(reverb(x[: int(SR * total)], 0.45, (0.061, 0.089, 0.127), 0.55), 0.85)
 
 
-MUSIC = {"menu": music_menu, "battle": music_battle, "boss": music_boss}
+def music_realm():
+    """Exploration, 92 bpm in D dorian: warm pad on Dm C G Am, slow plucked motif, soft bass, light hat on 2 and 4.
+    8 bars = 20.9 s loop, calmer than battle, more forward than the menu."""
+    bpm, beats = 92, 4
+    bar = 60 / bpm * beats
+    b8 = bar / 8
+    chords = [(62, 65, 69), (60, 64, 67), (55, 59, 62), (57, 60, 64)]  # Dm C G Am
+    total = bar * 8
+    x = np.zeros(int(SR * total))
+    motif = [74, 77, 81, 79, 77, 74, 72, 74, 76, 79, 83, 81, 79, 76, 74, 76,
+             71, 74, 78, 76, 74, 71, 69, 71, 72, 76, 79, 77, 76, 72, 69, 72]
+    for rep in range(2):
+        for ci, ch in enumerate(chords):
+            start = (rep * 4 + ci) * bar
+            x = at(x, start, pad([midi(n) for n in ch], bar * 1.05, 0.1, 1100))
+            x = at(x, start, note(midi(ch[0] - 24), bar * 0.5, "tri", 0.2, 0.01, 0.3, 450))
+            x = at(x, start + bar / 2, note(midi(ch[0] - 12), bar * 0.45, "tri", 0.12, 0.01, 0.25, 450))
+            for k in (2, 6):
+                x = at(x, start + k * b8, hat(0.09))
+            for k in range(8):
+                n = motif[(rep * 4 + ci) % 4 * 8 + k] if rep == 0 else motif[((ci + 2) % 4) * 8 + k]
+                if k % 2 == 0 or rep == 1:
+                    x = at(x, start + k * b8, note(midi(n), b8 * 1.6, "tri", 0.13, 0.004, 0.25, 2600, 0.5))
+    return norm(reverb(x[: int(SR * total)], 0.38, (0.047, 0.071, 0.109), 0.5), 0.8)
+
+
+MUSIC = {"menu": music_menu, "battle": music_battle, "boss": music_boss, "realm": music_realm}
 
 
 def save_music(name, x):

@@ -265,10 +265,76 @@ def fx_dot(size=32):
     strip([down(radial(size, 0.15, 1.0, power=1.4), size)], size, "fx_dot", "over")
 
 
+# ------------------------------------------------------------------------------------------------ v1.2 polish sheets
+
+def fx_confetti(size=32, n=6):
+    """Six ribbon shapes (rectangles seen under rotation): white, tinted at draw time with one of 5 colours."""
+    frames = []
+    for i in range(n):
+        im = blank(size)
+        d = ImageDraw.Draw(im)
+        nn = size * SS
+        ang = i * 180 / n
+        w, h = nn * 0.72, nn * (0.14 + 0.18 * abs(math.cos(math.radians(ang * 2))))
+        pts = []
+        for (px, py) in ((-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)):
+            a = math.radians(ang)
+            pts.append((nn / 2 + px * math.cos(a) - py * math.sin(a), nn / 2 + px * math.sin(a) + py * math.cos(a)))
+        d.polygon(pts, fill=(255, 255, 255, 255))
+        frames.append(down(im, size))
+    strip(frames, size, "fx_confetti", "over")
+
+
+def fx_star(size=128, n=6):
+    """Victory star: five-point star growing with a flash, then settled (last frame = resting star, golden)."""
+    frames = []
+    for i in range(n):
+        t = i / (n - 1)
+        k = 1.25 * math.sin(math.pi * min(1.0, t * 1.1)) if t < 0.8 else 1.0
+        k = max(k, 0.2 + t)
+        s = star(size, 5, min(0.95, 0.9 * k), 0.42 * min(0.95, 0.9 * k), 90, color=(255, 214, 64), blur=0.5)
+        edge = star(size, 5, min(0.98, 0.95 * k), 0.44 * min(0.98, 0.95 * k), 90, color=(176, 112, 16), blur=0.5)
+        flash = scale_alpha(radial(size, 0, 0.9, power=2), 0.8 * (1 - t))
+        frames.append(down(composite(flash, edge, s), size))
+    strip(frames, size, "fx_star", "over")
+
+
+def fx_snow(size=32):
+    """Soft six-arm flake (drawn with 'over', white, alpha 0.8)."""
+    im = blank(size)
+    d = ImageDraw.Draw(im)
+    nn = size * SS
+    for k in range(3):
+        a = math.radians(k * 60)
+        x, y = math.cos(a) * nn * 0.42, math.sin(a) * nn * 0.42
+        d.line((nn / 2 - x, nn / 2 - y, nn / 2 + x, nn / 2 + y), fill=(255, 255, 255, 255), width=int(2.2 * SS))
+    im = im.filter(ImageFilter.GaussianBlur(0.8 * SS))
+    core = radial(size, 0.0, 0.5, power=1.5)
+    strip([down(composite(scale_alpha(core, 0.9), im), size)], size, "fx_snow", "over")
+
+
+def fx_rain_splash(size=64, n=4):
+    """Small expanding ellipse ring + two droplets, for rain hitting the ground."""
+    frames = []
+    for i in range(n):
+        t = i / (n - 1)
+        im = blank(size)
+        d = ImageDraw.Draw(im)
+        nn = size * SS
+        rx, ry = nn * (0.15 + 0.35 * t), nn * (0.06 + 0.14 * t)
+        d.ellipse((nn / 2 - rx, nn * 0.62 - ry, nn / 2 + rx, nn * 0.62 + ry), outline=(255, 255, 255, int(255 * (1 - t))), width=int(1.5 * SS))
+        for sx in (-1, 1):
+            dx, dy = sx * nn * 0.22 * t, -nn * (0.25 * math.sin(math.pi * t))
+            r = nn * 0.035
+            d.ellipse((nn / 2 + dx - r, nn * 0.55 + dy - r, nn / 2 + dx + r, nn * 0.55 + dy + r), fill=(255, 255, 255, int(255 * (1 - t))))
+        frames.append(down(im, size))
+    strip(frames, size, "fx_rain_splash", "over")
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     fx_slash(); fx_ring(); fx_spark(); fx_puff(); fx_sparkle(); fx_glow(); fx_shadow(); fx_trail(); fx_reticle(); fx_rune()
-    fx_arrow_stuck(); fx_dot()
+    fx_arrow_stuck(); fx_dot(); fx_confetti(); fx_star(); fx_snow(); fx_rain_splash()
     with open(os.path.join(ROOT, "art/fx/fx.json"), "w") as f:
         json.dump(META, f, indent=1)
     print("ok", list(META))

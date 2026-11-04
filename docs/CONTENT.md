@@ -29,7 +29,7 @@ Codex (onglet dans Stats) : 12 cases, grisées si jamais prises ; 12/12 → skin
 ## Succès (30, locaux, 25 pièces chacun, 100 pour les 3 marqués ★)
 | id | FR | EN | condition |
 |---|---|---|---|
-| first_banner | Première bannière | First Banner | planter 1 bannière |
+| first_banner | Première terre | First Land | prendre 1 hex |
 | seven_hex | Sept terres | Seven Lands | tenir 7 hex à la fois |
 | forty_hex | Seigneur des terres | Land Lord | tenir 40 hex à la fois ★ |
 | no_burn | Pas une flamme | Not a Flame | finir un niveau sans hex brûlé |
@@ -81,8 +81,7 @@ lente. Mouvement réduit : pas de gouttes, voile seulement.
 Bulles verre (max 2 lignes, 16 dp, flèche vers la cible, bouton « OK » seulement pour la dernière) :
 1. « Glisse pour déplacer le roi. » (jusqu'au 1er mouvement)
 2. « Ramasse l'or des ennemis. » (jusqu'à 5 pièces)
-3. « Plante une bannière : la terre devient tienne. » (bouton bannière en surbrillance, jusqu'à la 1re bannière)
+3. « Tes terres grandissent là où tu passes. » (jusqu'au 1er hex pris)
 4. « Construis sur tes terres. » (chantier le plus proche en surbrillance)
-5. « Double-tape : charge ! » (jusqu'à la 1re charge)
-6. « Tiens la ligne. Le boss arrive à la vague 5. » (OK)
+5. « Double-tape : charge ! » (jusqu'à la 1re charge), puis « Tiens la ligne. Le boss arrive à la vague 5. » (OK)
 Jamais de pause forcée ; les ennemis de la vague 1 sont ralentis à 70 % tant que le tutoriel est actif.

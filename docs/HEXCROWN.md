@@ -14,17 +14,18 @@ l'architecture, **zéro plagiat** de Kingshot (Century Games), publication Play 
 - **Logo** : badge hexagonal or (pointe en haut) + couronne blanche (`art/icon/make_icon.py`) ; logotype
   HEXCROWN en Lilita One blanc → or (`art/ui/make_ui_kit_v3.py`). Aucun roi dessiné dans l'icône (Kingshot
   montre son héros ; nous montrons l'hexagone, notre signature).
-- **Ce qu'on ne copie pas** : le nom, le logo, la colonne de pièces empilées sur la tête du héros (chez
-  nous : **bourse** = compteur + sac sur la selle), les écrans de pub (marteau/enclume), les noms
-  de bâtiments. L'inspiration (roi monté + escouade + vagues + chantiers) est un genre, pas un jeu.
+- **Ce qu'on ne copie pas** : le nom, le logo, les écrans de pub (marteau/enclume), les noms de bâtiments.
+  La pile de pièces sur la tête est gardée (demande de Mathis, 04-11 : « c'était mieux ») avec notre version :
+  hauteur plafonnée à 30, ressort dans les virages, pop à l'empilement, dépense depuis le haut de la pile. L'inspiration (roi monté + escouade + vagues + chantiers) est un genre, pas un jeu.
 
 ## 2. Pourquoi on gagne : quatre mécaniques signature
 ### 2.1 Territoire : la grille d'hexagones et les bannières
 - Le sol est une **grille d'hexagones** (rayon 96 px monde, pointe en haut). Chaque hex a un état :
   `neutre`, `à nous` (bannière), `brûlé` (ennemi).
-- **Planter une bannière** (bouton contextuel quand le roi est sur un hex neutre, coût 30 → +10 par
-  bannière) réclame l'hex et ses 6 voisins (fleur de 7). Moment signé : l'anneau d'hex se déplie en
-  120 ms chacun (expoOut), lueur de classe, son BANNER, haptique.
+- **Territoire automatique** (retour de Mathis le 04-11 : le bouton « planter » était pénible) : un hex devient
+  à nous quand le roi y reste 0,6 s (fine barre sous le roi), un chantier construit prend sa fleur de 7 hex, le
+  donjon part avec la sienne. Moment signé : le hex se déplie en 120 ms (expoOut), lueur de classe, son BANNER,
+  haptique. Les bannières se posent seules au centre de chaque groupe de 7 hex (visuel, torche la nuit).
 - **Nos hex** : +1 pièce / 4 s par hex (revenu passif affiché par petites pièces qui montent),
   les **chantiers ne se posent que sur nos hex**, les archers y tirent 10 % plus vite (lueur douce).
 - **Ennemis sur nos hex** pendant 3 s → l'hex **brûle** (plus de revenu, bannière en feu). Le roi qui
