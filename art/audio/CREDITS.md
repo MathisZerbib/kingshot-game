@@ -38,3 +38,7 @@ Converted to mono 22 050 Hz 16-bit WAV, leading silence trimmed, loudness normal
 ## Generated in-house (art/audio/gen_sfx.py)
 
 `shoot.wav`, `coin.wav`, `wave_horn.wav`, `boss_roar.wav`, `ability.wav`: no CC0 equivalent fitted (bow release, coin ping, war horn, roar, magic burst).
+
+## Généré (art/audio/gen_sfx.py)
+
+`files/music/realm.m4a` (exploration du Royaume) et les effets `banner`, `burn`, `extinguish`, `charge`, `relic`, `combo_*`, `achievement`, `night`, `rain_start`, `boss_down`, `star`, `crown`, `tab`, `swipe` sont synthétisés par le script, sans source tierce.

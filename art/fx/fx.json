@@ -58,5 +58,25 @@
   "frame": 32,
   "frames": 1,
   "blend": "over"
+ },
+ "fx_confetti": {
+  "frame": 32,
+  "frames": 6,
+  "blend": "over"
+ },
+ "fx_star": {
+  "frame": 128,
+  "frames": 6,
+  "blend": "over"
+ },
+ "fx_snow": {
+  "frame": 32,
+  "frames": 1,
+  "blend": "over"
+ },
+ "fx_rain_splash": {
+  "frame": 64,
+  "frames": 4,
+  "blend": "over"
  }
 }
