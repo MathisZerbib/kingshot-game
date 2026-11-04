@@ -345,6 +345,7 @@ def build_materials():
     # shop skins (see SKINS)
     M["velvet_purple"] = mat("velvet_purple", (0.3, 0.04, 0.42), rough=0.85)
     M["velvet_ice"] = mat("velvet_ice", (0.72, 0.86, 1.0), rough=0.8)
+    M["velvet_ink"] = mat("velvet_ink", (0.08, 0.1, 0.24), rough=0.85)
     M["velvet_black"] = mat("velvet_black", (0.035, 0.03, 0.045), rough=0.9)
     M["silver"] = mat("silver", (0.86, 0.88, 0.92), rough=0.25, metal=1.0)
     M["obsidian"] = mat("obsidian", (0.07, 0.06, 0.09), rough=0.3, metal=0.8)
@@ -701,6 +702,8 @@ SKINS = {
     "gold": dict(armor=(1.0, 0.82, 0.3), cloth=(0.36, 0.05, 0.48), mantle="velvet_purple", metal="gold"),
     "frost": dict(armor=(0.8, 0.88, 0.97), cloth=(0.3, 0.58, 0.95), mantle="velvet_ice", metal="silver"),
     "shadow": dict(armor=(0.1, 0.09, 0.12), cloth=(0.5, 0.04, 0.07), mantle="velvet_black", metal="gold_dark"),
+    # Chronicler: Codex 12/12 reward — ink-blue steel, parchment cloth, silver trim
+    "chronicler": dict(armor=(0.16, 0.2, 0.34), cloth=(0.93, 0.87, 0.7), mantle="velvet_ink", metal="silver"),
 }
 
 
@@ -1298,8 +1301,8 @@ def v5_sprites():
 V4_NAMES = ("king_warrior", "king_ranger", "king_builder", "portrait_warrior", "portrait_ranger", "portrait_builder",
             "wall_wood", "wall_wood_v", "gate_wood_closed", "gate_wood_open", "gate_wood_closed_v", "gate_wood_open_v")
 SKIN_NAMES = tuple("%s_%s_%s" % (kind, cls, skin) for kind in ("king", "portrait") for cls in ("warrior", "ranger", "builder")
-                   for skin in ("gold", "frost", "shadow"))
-CAST_NAMES = tuple("king_%s%s_cast" % (cls, sk) for cls in ("warrior", "ranger", "builder") for sk in ("", "_gold", "_frost", "_shadow"))
+                   for skin in ("gold", "frost", "shadow", "chronicler"))
+CAST_NAMES = tuple("king_%s%s_cast" % (cls, sk) for cls in ("warrior", "ranger", "builder") for sk in ("", "_gold", "_frost", "_shadow", "_chronicler"))
 
 
 def v4_sprites():

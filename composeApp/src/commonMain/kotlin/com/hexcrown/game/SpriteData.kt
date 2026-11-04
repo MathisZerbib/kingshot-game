@@ -111,4 +111,13 @@ object SpriteData {
     val kingBuilderGoldCast = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 1, 8)
     val kingBuilderFrostCast = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 1, 8)
     val kingBuilderShadowCast = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 1, 8)
+    val kingWarriorChroniclerCast = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 1, 8)
+    val kingWarriorChronicler = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val portraitWarriorChronicler = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val kingRangerChroniclerCast = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 1, 8)
+    val kingRangerChronicler = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val portraitRangerChronicler = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
+    val kingBuilderChroniclerCast = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 1, 8)
+    val kingBuilderChronicler = SpriteInfo(200, 200, 100.0f, 178.7f, 3.0f, 7, 8)
+    val portraitBuilderChronicler = SpriteInfo(256, 256, 128.0f, 128.0f, 1.0f, 1, 1)
 }
